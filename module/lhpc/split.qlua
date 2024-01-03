@@ -1,0 +1,63 @@
+require 'strict'
+require 'stdlib'
+require 'iter'
+split = rawget(_G, 'split') or {}
+
+function split.assert_check_split_geom(sg, L)
+  if (#sg ~= #L) then error("dim mismatch") end
+  local net = L:network()
+  for mu = 1, #L do 
+    if (net[mu] % sg[mu] ~= 0) then 
+      error(string.format("net[%d] indivisible", mu-1)) 
+    end
+    local snet = math.floor(net[mu] / sg[mu])
+  end
+  return true
+end
+
+function split.nrhs_split_geom(sg)
+  local nrhs = 1
+  for mu = 1, #split_geom do nrhs = nrhs * split_geom[mu] end
+  return nrhs
+end
+
+-- old version: solve for len(list of rhs)<=nrhs
+function split.wrapsolver_list_pad(nrhs, solver_list)
+  return function(xt, ...)
+    local nrhs_in = #xt
+    assert(0 < nrhs_in)
+    if nrhs_in < nrhs then 
+      print_warn("pad rhs %d->%d", nrhs_in, nrhs)
+      xt = list_copy(xt)
+      list_pad(xt, nrhs, xt[1])
+    end
+    return list_islice(solver_list(xt, ...), 1, 1+nrhs_in)
+  end
+end
+
+-- new version: solve any len(list of rhs) by splitting into len=nrhs and padding if necessary
+function split.wrapsolver_list_chop_pad(nrhs, solver_list)
+  return function(xt, ...)
+    local nrhs_in = #xt
+    assert(0 < nrhs_in)
+    if (0 ~= nrhs_in %  nrhs) then 
+      print_warn("pad rhs %d+=%d", nrhs_in, nrhs - nrhs_in % nrhs)
+    end
+    local yt = {}
+    for xt_i in iter.lchop_pad(nrhs, xt) do
+      list_extend(yt, solver_list(xt_i, ...))
+    end
+    return list_islice(yt, 1, 1+nrhs_in)
+  end
+end
+
+-- make a "list" solver from a regular one (e.g., for testing)
+function split.wrapsolver_fakesplit(nrhs, solver)
+  return function(xt, ...)
+    local yt = {}
+    for i, x in ipairs(xt) do -- XXX no nonindex keys that can have rank-dependent order
+      yt[i] = solver(x, ...)
+    end
+    return res
+  end
+end

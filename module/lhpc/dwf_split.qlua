@@ -1,0 +1,543 @@
+require 'strict'
+require 'stdlib'
+require 'iter'
+require 'latvec'
+require 'dwf'
+require 'split'
+
+dwf = rawget(_G, 'dwf') or {}
+
+-- aux functions
+function dwf.print_norm2_arr(v, fmt, ...)
+  local tt = timer('madwf:print_norm2_arr')
+  local tit = string.format(fmt, ...)
+  for i, vi in ipairs(v) do 
+    printf("norm2(%s[%d])=%e\n", tit, i, latvec.norm2(vi))
+  end
+  tt('done')
+end
+
+-- splitsolver wrapper for list(split) dirferm 5d solver
+-- param
+--    nrhs_max    the exact number of rhs to pass to solver_dirferm5d_split
+--    solver_dirferm5d_split    solver 
+-- the wrapper will process xt according to its type(xt), n=#xt
+--    dp          split-solve over Nc*Ns components as 4d sources
+--    {dp}[n]     split-solve over array and Nc*Ns components as 4d sources
+--    {df}[n]     split-solve over array of 4d sources
+--    {df[L5]}[n] split-solve over array of 5d sources
+--    NOTE solver_dirferm5d_split will only be called with exactly nrhs_max 5-d dirferm rhs's:
+--      * n will be split into nrhs_max batches if necessary
+--      * the last batch will be padded to nrhs_max if necessary ; warning will be printed
+function dwf.wrapsolver_dirferm5d_list(nrhs_max, solver_dirferm5d_split, L5)
+  assert(0 < nrhs_max)
+  assert(0 < L5)
+
+  -- padded solver
+  solver_dirferm5d_split = split.wrapsolver_list_pad(nrhs_max, solver_dirferm5d_split)
+
+  local Nc, Ns  = 3, 4
+  local Ncs     = Nc * Ns
+
+  local df_zero   -- constant zero dirferm, will be initialized at first call
+
+  -- XXX all solvers take #2+ extra parameters and pass them on
+  local function solver_dirferm5d_list(rhs5l, ...)
+    local sol5l = {}
+    for df5l in iter.lchop(nrhs_max, rhs5l) do
+      assert(dwf.is_dirferm5d(df5l, L5))
+      list_extend(sol5l, solver_dirferm5d_split(df5l, ...))
+    end
+    return sol5l
+  end
+
+  local function solver_dirferm4d_list(rhs4l, ...)
+    local sol4l = {}
+    for df4l in iter.lchop(nrhs_max, rhs4l) do
+      local df5l = iter.lmap_list(
+          function(x)return dwf.src_4to5(x, L5, {zero=df_zero})end, df4l)
+      df5l = solver_dirferm5d_split(df5l, ...)      ; force_gc()
+      list_extend(sol4l, iter.lmap_list(
+            function(x)return dwf.sol_5to4(x, L5)end, df5l))
+    end
+    return sol4l
+  end
+
+  local function solver_dirprop4d_list(rhs4lp, ...)
+    local df4l = {}
+    for i, xi in ipairs(rhs4lp) do 
+      if type(xi) ~= 'lattice.dirac.propagator' then
+        error(string.format('bad rhs argument [%d]: expect dirprop[:] array', 
+              i-1))
+      end
+      list_extend(df4l, latvec.dp2dfl(xi, {Nc=Nc, Ns=Ns}))
+    end
+    local df4l = solver_dirferm4d_list(df4l, ...)
+    local sol4lp = iter.imap_list(
+        function(x)return latvec.dfl2dp(x, {Nc=Nc, Ns=Ns})end, 
+        iter.lchop(Ncs, df4l))
+    return sol4lp
+  end
+
+  return function(xt, ...)
+    local L = latvec.lattice(xt)
+    if df_zero then assert(df_zero.lattice == L) 
+    else df_zero = L:DiracFermion() end  -- on first call
+
+    local xt_s = type(xt)
+    if     'table' == xt_s then
+      local xt_s1 = type(xt[1])
+      if     'table' == xt_s1 then  -- {{df[L5]}...}
+        for i,xi in ipairs(xt) do
+          if not dwf.is_dirferm5d(xi) then
+            error(string.format(
+                  'bad rhs argument [%d]: expect dirferm[:,L5] array', i-1))
+          end
+        end
+        return solver_dirferm5d_list(xt, ...)
+      elseif 'lattice.dirac.propagator' == xt_s1 then
+        for i,xi in ipairs(xt) do 
+          if type(xi) ~= 'lattice.dirac.propagator' then
+            error(string.format('bad rhs argument [%d]: expect dirprop', i-1))
+          end
+        end
+        return solver_dirprop4d_list(xt, ...)
+      elseif 'lattice.dirac.fermion' == xt_s1 then
+        for i,xi in ipairs(xt) do 
+          if type(xi) ~= 'lattice.dirac.fermion' then
+            error(string.format('bad rhs argument [%d]: expect dirferm', i-1))
+          end
+        end
+        return solver_dirferm4d_list(xt, ...)
+      else error(string.format("bad rhs argument [0]: '%s'", xt_s1)) end
+    elseif 'lattice.dirac.propagator' == xt_s then
+      printf("WARN: using nrhs=%d split solver to invert 1 dirprop(%d rhs)\n", 
+          nrhs_max, Ncs)
+      return latvec.dfl2dp(solver_dirferm4d_list(latvec.dp2dfl(xt), ...))
+    elseif 'lattice.dirac.fermion' == xt_s then
+      printf("WARN: using nrhs=%d split solver to invert 1 dirferm(1 rhs)\n", 
+          nrhs_max)
+      return solver_dirferm4d_list({xt}, ...)
+    else 
+      error(string.format("bad argument to MADCG split-solver: %s", xt_s)) 
+    end
+  end
+end -- dwf.wrapsolver_dirferm5d_list
+
+
+-- splitsolver wrapper with mdminus factor to ensure g5-hermiticity
+-- NOTE padding of rhs_list to nrhs_max is done by dwf.wrapsolver_dirferm5d_list
+-- params:
+--    nrhs_max    the exact number of rhs to pass to solver_dirferm5d_split
+--    solver_dirferm5d_split    5D zMobius split-solver 
+--    gauge_u     gauge field
+--    ferm_bc     boundary conditions
+--    L5          5th dim len
+--    M5          zMobius Wilson mass; (typical value M5=1.8)
+--                NOTE: the sign is opposite to Wilson operator 
+--    b5,c5       zMobius params
+function dwf.wrapsolver_mdwf_g5herm_list(nrhs_max, split_solver5d, 
+    gauge_u, ferm_bc, L5, M5, b5, c5)
+  local gauge_u_bc = gauge_copy(gauge_u)
+  gauge_apply_boundary(gauge_u_bc, ferm_bc)
+
+ local split_solver5d_g5herm = function(xt, ...)
+    assert(#xt <= nrhs_max)
+    local yt = {}
+    for i, xi in ipairs(xt) do 
+      assert(dwf.is_dirferm5d(xi, L5))
+      yt[i] = latvec.op_mdwf_mdminus(xi, gauge_u_bc, M5, c5)
+    end
+    return split_solver5d(yt, ...)
+  end
+
+  return dwf.wrapsolver_dirferm5d_list(nrhs_max, split_solver5d_g5herm, L5)
+end -- dwf.wrapsolver_mdwf_g5herm_list
+make_split_calc_mdwf_prop = depr_warn(dwf.wrapsolver_mdwf_g5herm_list)
+
+
+-- madcg split solver iteration
+-- takes {dirferm5d}[==nrhs]
+function dwf.madcg_split_solver5d(
+    nrhs,
+    sp_solver_i, sp_solver_f,   -- init and fini split-solvers (on nrhs* df5)
+    L5_c,                       -- l5 short,
+    DW_c_pv_D,                  -- dslash5d_pv short (act on 1* df5)
+    sp_solver_moeb,             -- split-solver5d_mf_sh short (on nrhs* df5)
+    L5_f,                       -- l5 full
+    DW_f_mf_D,                  -- dslash5d_mf full (act on 1* df5)
+    sp_solver_pv,               -- spsolver5d_pv full (act on nrhs* df5)
+    madcg_maxiter,                 -- maxiter
+    opt   -- optional table
+          --  verbose
+          --  print_residual
+    )
+  -- timing funcs
+  local opt = opt or {}
+  if (0 < #warn_opt_extra(opt, {
+        'verbose', 'print_residual', 
+        })) then
+    error("unrecognized options")
+  end
+  assert(nil == opt.mdminus_f)    -- this solver does no longer apply mDminus 
+  local verbose = opt.verbose
+  local print_residual = opt.print_residual
+
+  local print_norm2 = function()end
+  if verbose then print_norm2 = dwf.print_norm2_arr end
+
+  local mytimer = function()return function()end end
+  if 'full' == verbose then mytimer=timer end
+  local tt_
+  local x_name = 'dwf.madcg_split_solver5d'
+  local tB_ = function(s) 
+    local x = debug.getinfo(2, "nl")
+    tt_ = mytimer(string.format("%-8s[%s:%d]", s, x_name, x.currentline)) 
+  end
+  local tE_ = function() 
+    local x = debug.getinfo(2,"nl")
+    tt_(string.format("%d", x.currentline)) 
+  end
+
+  local df_zero -- zero dirferm, initialized on first call of split_solver_5d
+  local function sp_DW_c_pv_D(xl) return iter.lmap_list(DW_c_pv_D, xl) end
+  local function sp_DW_f_mf_D(xl) return iter.lmap_list(DW_f_mf_D, xl) end
+  local function sp_proj_wall(xl, L5_x) 
+    return iter.lmap_list(
+        function(x) return dwf.proj_wall(x, L5_x, {zero=df_zero})end, xl) 
+  end
+
+
+  -- create solvers
+  local function split_solver_5d(rhs, ...)
+                      local L = latvec.lattice(rhs)
+                      if df_zero then assert(df_zero.lattice == L)
+                      else df_zero = L:DiracFermion() end
+
+local ttot_ = mytimer(x_name)
+                      -- profiling
+                      local prof_tab  = {}
+                      local function mytimeit(f, n) return timeit(f, {name=n, tab=prof_tab, verbose='each'})end
+                      local sp_DW_c_pv_D    = mytimeit(sp_DW_c_pv_D,    'sp_DW_c_pv_D'  )
+                      local sp_DW_f_mf_D    = mytimeit(sp_DW_f_mf_D,    'sp_DW_f_mf_D'  )
+                      local sp_solver_i     = mytimeit(sp_solver_i,     'sp_solver_i'   )
+                      local sp_solver_f     = mytimeit(sp_solver_f,     'sp_solver_f'   )
+                      local sp_solver_moeb  = mytimeit(sp_solver_moeb,  'sp_solver_moeb')
+                      local sp_solver_pv    = mytimeit(sp_solver_pv,    'sp_solver_pv'  )
+                      local sp_proj_wall    = mytimeit(sp_proj_wall,    'sp_proj_wall'  )
+
+                      printf("MADCG solver: L5_f=%d L5_c=%d; Mobius iterations = %d\n", L5_f, L5_c, madcg_maxiter)
+                      local madcg_timer = timer("MADCG")
+                      local print_res = function(rhs)end
+                      if print_residual then
+tB_("vnrm"    );        local s_n2 = iter.lmap_list(latvec.norm2, rhs)                          ;tE_()
+                        print_res = function(rhs)
+tB_("vnrm"    );          local d_n2 = iter.lmap_list(latvec.norm2, rhs)                        ;tE_()
+                          for i=1, nrhs do 
+                            printf("norm2(resid5d)/norm2(src5d)[%d] = %25.15e\n", i, d_n2[i]/s_n2[i]) 
+                          end
+                        end
+                      end
+
+                      -- initial solve                                                                
+tB_("sol_fI"  );      local sol = sp_solver_i(rhs, ...)                                         ;tE_()
+                      do                                                                              
+tB_("DWf_D"   );        local Dx = sp_DW_f_mf_D(sol)                                            ;tE_()
+tB_("vsub"    );        rhs = latvec.sub(rhs, Dx)       ; Dx = nil ; force_gc()                 ;tE_()
+                      end
+                      print_res(rhs)
+
+                      -- MADCG iteration
+                      for i = 1, madcg_maxiter do
+                        local af, Rcf, ac, bc, bf, apf
+local tt_i  =  mytimer("madcg iter")
+tB_("gc"      );        force_gc()                                                              ;tE_()
+tB_("sol_pv"  );        af  = sp_solver_pv(rhs, ...)                                            ;tE_()    ;print_norm2(af,  "madwf:af[%d]", i)
+                        Rcf = af
+tB_("proj_w"  );        ac  = sp_proj_wall(af, L5_c)    ; af = nil  ; force_gc()                ;tE_()    ;print_norm2(ac,  "madwf:ac[%d]", i)
+tB_("DWc_pv_D");        ac  = sp_DW_c_pv_D(ac)                      ; force_gc()                ;tE_()
+tB_("sol_mo"  );        bc  = sp_solver_moeb(ac, ...)   ; ac = nil  ; force_gc()                ;tE_()    ;print_norm2(bc,  "madwf:bc[%d]", i)
+tB_("proj_w"  );        bf  = sp_proj_wall(bc, L5_f)    ; bc  = nil ; force_gc()                ;tE_()
+tB_("vadd"    );        Rcf = latvec.add(Rcf, bf)                   ; force_gc()                ;tE_()    ;print_norm2(Rcf, "madwf:Rc[%d]", i)
+tB_("DWf_D"   );        bf  = sp_DW_f_mf_D(bf)                      ; force_gc()                ;tE_()    
+tB_("sol_pv"  );        apf = sp_solver_pv(bf, ...)     ; bf  = nil ; force_gc()                ;tE_()
+tB_("vsub"    );        apf = latvec.sub(Rcf, apf)      ; Rcf = nil ; force_gc()                ;tE_()    ;print_norm2(apf, "madwf:Af[%d]", i)
+tB_("vadd"    );        sol = latvec.add(sol, apf)                  ; force_gc()                ;tE_()    ;print_norm2(sol, "madwf:Xf[%d]", i)
+tB_("DWf_D"   );        apf = sp_DW_f_mf_D(apf)                     ; force_gc()                ;tE_()    ;print_norm2(apf, "madwf:Da[%d]", i)
+tB_("vsub"    );        rhs = latvec.sub(rhs, apf)      ; apf = nil ; force_gc()                ;tE_()    ;print_norm2(rhs, "madwf:Yf[%d]", i)
+
+                        print_res(rhs)
+                        force_gc()
+tt_i("done")
+                      end
+
+                      -- final solve
+                      do
+tB_("sol_fF"  );        local x = sp_solver_f(rhs, ...)                                         ;tE_()
+tB_("vadd"    );        sol = latvec.add(sol, x)                                                ;tE_()
+                        if print_residual then 
+tB_("DWf_D"   );          x = sp_DW_f_mf_D(x)                                                   ;tE_()
+tB_("vsub"    );          rhs = latvec.sub(rhs, x)                                              ;tE_()
+                          print_res(rhs)
+                        end
+tB_("gc"      );        x = nil ; force_gc()                                                    ;tE_()
+                      end
+                
+                      madcg_timer("done")
+tB_(""        );      rhs = nil ; force_gc()                                                    ;tE_()
+ttot_("done")
+
+                    timeit_report({tab=prof_tab})
+
+                    return sol
+  end
+  return split_solver_5d
+end -- dwf.madcg_split_solver5d
+make_split_solver_MADCG = depr_warn(dwf.madcg_split_solver5d)
+
+-- mdwf madcg split solver with g5-hermiticity
+function dwf.mdwf_g5herm_madcg_split_solver(
+    split_geom,
+    gauge_u, ferm_bc, 
+    M5, mf,       -- sic! old order of parameters
+    L5_c, b5_c, c5_c,
+    L5_f, b5_f, c5_f,
+    madcg_maxiter,
+    opt   -- optional table
+          --  backend
+          --  mdwf_opt              params for qcd.MDWF
+          --  verbose
+          --  tol_1,maixter_1       single-prec restart
+          --  solver_i              initial solver OR
+          --  tol_i,maxiter_i       params for ini solver if no opt.solver_i
+          --  solver_f              final solver OR
+          --  tol_f,maxiter_f       params for fin solver if no opt.solver_f
+          --  solver_pv             M5=1 solver OR
+          --  tol_pv,maxiter_pv     params for M5=1 solver if no opt.solver_pv
+    )
+  assert(1. < M5)   -- sanity check for mf<->M5 confusion
+  local opt = opt or {}
+  if (0 < #warn_opt_extra(opt, {
+        'verbose', 'print_residual', 
+        'backend', 'mdwf_opt', 'tol_1', 'maxiter_1',
+        'solver_i', 'tol_i', 'maxiter_i',
+        'solver_f', 'tol_f', 'maxiter_f',
+        'solver_m1','tol_m1','maxiter_m1',
+        'solver_pv','tol_pv','maxiter_pv',
+        'solver_moeb','tol_moeb','maxiter_moeb',
+        })) then
+    error("unrecognized options")
+  end
+  local L = latvec.lattice(gauge_u)
+  assert(split.assert_check_split_geom(split_geom, L))
+  local nrhs = split.nrhs_split_geom(split_geom)
+  local L = latvec.lattice(gauge_u)
+  assert(split.assert_check_split_geom(split_geom, L))
+  local nrhs = split.nrhs_split_geom(split_geom)
+
+  local verbose     = opt.verbose
+  local backend     = (opt.backend
+                    or rcparam.get('rcparam.dwf_dslash_solver') 
+                    or 'cpu-grid-lib')   -- reserved
+  local mdwf_opt    = opt.mdwf_opt or {}
+--      { 
+--        pctype=mdwf_opt.pctype, parity=mdwf_opt.parity,
+--        split_geom=test_split_geom,
+--        defl = {mdwf_qlmx, mdwf_eval},
+--        tol_restart=test_tol_restart, maxiter_restart=test_maxiter_restart,
+--        --verbose=1,
+--        })
+  local tol_1       = opt.tol_1         or 1e-5
+  local maxiter_1   = opt.maxiter_1     or 10000
+  local tol_moeb    = opt.tol_moeb      or 1.3e-4
+  local maxiter_moeb= opt.maxiter_moeb  or 10000
+  local tol_m1      = opt.tol_m1        or opt.tol_pv       or 1.3e-4
+  local maxiter_m1  = opt.maxiter_m1    or opt.maxiter_pv   or 1000
+  local tol_i       = opt.tol_i                     -- no init solver by default
+  local maxiter_i   = opt.maxiter_i     or 1000
+  local tol_f       = opt.tol_f                     -- no fini solver by default
+  local maxiter_f   = opt.maxiter_f     or 1000
+
+  local b5_c        = latvec.asarray1d(b5_c, L5_c, {func=complex})
+  local c5_c        = latvec.asarray1d(c5_c, L5_c, {func=complex})
+  local b5_f        = latvec.asarray1d(b5_f, L5_f, {func=complex})
+  local c5_f        = latvec.asarray1d(c5_f, L5_f, {func=complex})
+
+  local gauge_u_bc  = gauge_copy(gauge_u)
+  gauge_apply_boundary(gauge_u_bc, ferm_bc)
+
+  -- simple operators (no *nrhs)
+  local DW_c_pv_D = function(x) 
+    return latvec.dslash_moebius(x, gauge_u_bc, M5, 1., b5_c, c5_c) 
+  end
+  local DW_f_D = function(x)
+    return latvec.dslash_moebius(x, gauge_u_bc, M5, mf, b5_f, c5_f)
+  end
+  local function verb_printf(...) 
+    if verbose then
+      printf("dwf.mdwf_g5herm_madcg_split_solver: ")
+      printf(...)
+    end 
+  end
+
+  -- solvers : default
+  local solver_moeb = opt.solver_moeb 
+  local solver_m1   = opt.solver_m1 or opt.solver_pv
+  local solver_i    = opt.solver_i 
+  local solver_f    = opt.solver_f 
+
+  -- solvers : backend-dependent
+  if nil == backend then
+    error("splitCG not implemented for generic MDWF solver")
+  elseif ('cpu-grid-lib' == backend) then
+    -- short-moebius solver
+    if nil == solver_moeb then
+      verb_printf("DEFAULT Moebius mixed_solver(%.1e,%d,%.1e,%d)\n",
+                  tol_1, maxiter_1, tol_moeb, maxiter_moeb) 
+      if maxiter_1 < maxiter_moeb or tol_1 > tol_moeb then
+        verb_printf("WARN: restarted short-Moebius solver\n")
+      end
+      local mdwf_opt_c = table_join(mdwf_opt, 
+          { split_geom=split_geom, 
+            tol_restart=tol_1, maxiter_restart=maxiter_1 })
+      local gsobj_c = _grid.init_solver(gauge_u, ferm_bc, L5_c, M5, mf, 
+            b5_c, c5_c, tol_moeb, maxiter_moeb, mdwf_opt_c)
+      solver_moeb = function(x, ...) return gsobj_c:solve(x, ...) end
+    end
+
+    -- long-DW options: no deflation
+    local mdwf_opt_f  = table_join(mdwf_opt, 
+        { split_geom=split_geom, 
+          tol_restart=tol_1, maxiter_restart=maxiter_1})
+    mdwf_opt_f.defl = nil
+    -- long-PV solver
+    if nil == solver_pv then
+      verb_printf("DEFAULT M=1 mixed_solver(%.1e,%d,%.1e,%d)\n",
+                    tol_1, maxiter_1, tol_pv, maxiter_pv)
+      if maxiter_1 < maxiter_pv or tol_1 > tol_pv then
+        verb_printf("WARN: restarted long-PV solver\n")
+      end
+      local gsobj_f_pv = _grid.init_solver(gauge_u, ferm_bc, L5_f, M5, 1., 
+          b5_f, c5_f, tol_pv, maxiter_pv, mdwf_opt_f)
+      solver_pv = function(x, ...) return gsobj_f_pv:solve(x, ...) end
+    end
+    -- initial&final solver
+    local need_solver_i = (nil == solver_i and nil ~= tol_i)
+    local need_solver_f = (nil == solver_f and nil ~= tol_f)
+    if need_solver_i or need_solver_f then
+      local gsobj_f = _grid.init_solver(gauge_u, ferm_bc, L5_f, M5, mf, 
+          b5_f, c5_f, tol_i, maxiter_i, mdwf_opt_f)
+      if need_solver_i then
+        verb_printf("INITIAL mixed_solver(%.1e,%d,%.1e,%d)\n",
+                  tol_1, maxiter_1, tol_i, maxiter_i) 
+        solver_i  = function(x, ...) return gsobj_f:solve(x, ...) end 
+      end
+      if need_solver_f then 
+        verb_printf("FINAL mixed_solver(%.1e,%d,%.1e,%d)\n",
+                    tol_1, maxiter_1, tol_f, maxiter_f)
+        solver_f  = function(x, opt1) 
+          opt1 = table_join(opt1 or {}, {tol=tol_i, maxiter=maxiter_i})
+          return gsobj_f:solve(x, opt1)
+        end 
+      end
+    end
+  else  -- TODO implement for other backends
+    error(string.format("unsupported backend='%s'", backend))
+  end
+
+  -- fall back to trivial initial&final solver
+  if nil == solver_i then 
+    solver_i = latvec.zero_like
+    verb_printf("WARN: no INITIAL solver\n")
+  end
+  if nil == solver_f then
+    solver_f = latvec.zero_like
+    verb_printf("WARN: no FINAL solver\n")
+  end
+
+  local split_solver5d = dwf.madcg_split_solver5d(
+      nrhs, solver_i, solver_f,
+      L5_c, DW_c_pv_D, solver_moeb,
+      L5_f, DW_f_D, solver_pv,
+      madcg_maxiter,
+      { verbose   = opt.verbose,
+        print_residual = opt.print_residual }
+      )
+
+  return dwf.wrapsolver_mdwf_g5herm_list(nrhs, split_solver5d, 
+      gauge_u, ferm_bc, L5_f, M5, b5_f, c5_f)
+end -- dwf.mdwf_g5herm_madcg_split_solver
+-- stub for the old version
+make_split_solver_MADCG_g5herm = depr_warn(function(
+        gauge_u, ferm_bc, 
+        mf, M5, -- sic! old order of parameters
+        L5_c, b5_c, c5_c,
+        L5_f, b5_f, c5_f,
+        madcg_maxiter, opt) 
+    local opt1 = table_copy(opt)
+    table_delete_keys(opt1, {'eps2_i', 'eps2_f', 'eps2_moeb',
+        'eps2_m1', 'maxiter_m1', 'solver_m1'})
+    if opt.eps2_i     then opt1.tol_i    = math.sqrt(opt.eps2_i)     end
+    if opt.eps2_f     then opt1.tol_f    = math.sqrt(opt.eps2_f)     end
+    if opt.eps2_moeb  then opt1.tol_moeb = math.sqrt(opt.eps2_moeb)  end
+    if opt.eps2_m1    then opt1.tol_pv   = math.sqrt(opt.eps2_m1)    end
+    if opt.maxiter_m1 then opt1.maxiter_pv = opt.maxiter_m1          end
+    if opt.solver_m1  then opt1.solver_pv = opt.solver_m1            end
+    return dwf.mdwf_g5herm_madcg_split_solver(gauge_u, ferm_bc, 
+        M5, mf, -- sic! switch M5<>mf order
+        L5_c, b5_c, c5_c, L5_f, b5_f, c5_f, madcg_maxiter, opt1)
+  end,
+  {replace='dwf.mdwf_g5herm_madcg_split_solver with mf<->M5, eps2_X->tol_X=math.sqrt(eps2_X)'})
+
+-- mdwf solver with g5-hermiticity
+function dwf.mdwf_g5herm_split_solver(
+    split_geom, gauge_u, ferm_bc,
+    L5, M5, mf, b5, c5,
+    opt   -- optional table
+          --  backend
+          --  mdwf_opt              params for solver creation
+          --  verbose
+          --  tol, maxiter          stopping criteria
+          --  tol_1,maixter_1       single-prec restart
+    )
+  local opt = opt or {}
+  if (0 < #warn_opt_extra(opt, {
+        'verbose', 'backend', 'mdwf_opt', 
+        'tol', 'maxiter', 'tol_1', 'maxiter_1' })) then
+    error("unrecognized options")
+  end
+  local L = latvec.lattice(gauge_u)
+  assert(split.assert_check_split_geom(split_geom, L))
+  local nrhs = split.nrhs_split_geom(split_geom)
+  
+  local verbose   = opt.verbose
+  local backend     = (opt.backend
+                    or rcparam.get('rcparam.dwf_dslash_solver') 
+                    or 'cpu-grid-lib')   -- reserved
+  local mdwf_opt  = opt.mdwf_opt      or {}
+  local tol       = opt.tol           or 1e-8
+  local maxiter   = opt.maxiter       or 10000
+  local tol_1     = opt.tol_1         or opt.tol or 1e-5
+  local maxiter_1 = opt.maxiter_1     or opt.maxiter or 10000
+
+  local b5        = latvec.asarray1d(b5, L5, {func=complex})
+  local c5        = latvec.asarray1d(c5, L5, {func=complex})
+
+  -- solvers : backend-dependent
+  local split_solver5d
+  if nil == backend then
+    error("splitCG not implemented for generic MDWF solver")
+  elseif ('cpu-grid-lib' == backend) then
+    local mdwf_opt_s = table_join(mdwf_opt, 
+        { split_geom=split_geom, 
+          tol_restart=tol_1, maxiter_restart=maxiter_1 })
+    local gsobj = _grid.init_solver(gauge_u, ferm_bc, L5, M5, mf, 
+          b5, c5, tol, maxiter, mdwf_opt_s)
+    split_solver5d = function(xt, ...) return gsobj:solve(xt, ...) end
+  else  -- TODO implement for other backends
+    error(string.format("unsupported backend='%s'", backend))
+  end
+
+  return dwf.wrapsolver_mdwf_g5herm_list(nrhs, split_solver5d,
+      gauge_u, ferm_bc, L5, M5, b5, c5)
+end -- dwf.mdwf_g5herm_split_solver

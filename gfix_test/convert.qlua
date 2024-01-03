@@ -1,0 +1,20 @@
+package.path = package.path .. ';../module/qlib/?.qlua;../module/lhpc/?.qlua'
+require "strict"
+require "gaugefix"
+require "stdlib"
+require "lhpc-std"
+require "qdpc_io"
+require "rcparams"
+
+
+latsize = {4,4,4,8}
+gauge_file = "gauge_disord_4c8.NERSC"
+
+L   = qcd.lattice(latsize)
+Nd  = #L
+u   = qcd.nersc.read_gauge(L, "gauge_disord_4c8.NERSC")
+
+save_qdpc_colmat(L, u, 'try.MILC', 'test1', 'test2', "single")
+
+u_re = qcd.milc.read_gauge(L, 'try.MILC')
+u_re:print()

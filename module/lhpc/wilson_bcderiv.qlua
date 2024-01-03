@@ -1,0 +1,236 @@
+require 'bcderiv'
+-- parse/encode bcderiv key
+bcderiv = rawget(_G, 'bcderiv') or {}
+
+
+-- Wilson bcderiv solver for (list of) fermions: aux local function for both single and split-solver
+-- UNIFIED: can return solution for single or list of fermions
+-- XXX solver_wilson must be compatible with the xt_ddmap: single/single or split/split
+--    solver_wilson   solver for (list of) fermion
+--    gauge_u_bc      gauge field with BC applied, reqd for bcderiv
+--    ddlist          depth-ordered list of deriv specs
+--    xt_ddmap[dd]    bc-deriv[dd] of rhs, (list of) dirferm
+local function bcderiv_solver_wilson_dirferm(
+    solver_wilson, gauge_u_bc, ddlist, xt_ddmap, ...)
+  -- 
+  local funcname_ = 'bcderiv_solver_wilson_dirferm'
+  -- ops & derivatives operating on a list of 5-d fermions
+  local function lv_wilson_d1(mu, x)
+    return latvec.dslash_wilson_bcderiv1(mu, x, gauge_u_bc) 
+  end
+  local function lv_wilson_d2(mu, x)
+    return latvec.dslash_wilson_bcderiv2(mu, x, gauge_u_bc) 
+  end
+  local yt_ddmap = {}
+  for i_dd, dd in ipairs(ddlist) do
+    local n_dd = #dd
+    local src = nil
+    if     0 == n_dd then
+      -- y = Dslash^{-1} . x
+      src = xt_ddmap[dd]
+    elseif 1 == n_dd then 
+      -- y^{;mu} = Dslash^{-1} . (-Dslash^{;mu} . y + x^{;mu})
+      local mu = unpack(bcderiv.dir_list(dd))
+      src = latvec.scalsum_left(
+          -1., lv_wilson_d1(mu, yt_ddmap['']),
+           1., xt_ddmap[dd])
+    elseif 2 == n_dd then 
+      -- y^{;mu1,mu2} = Dslash^{-1} . (-Dslash^{;mu1,mu2} . y -Dslash^{;mu1} . y^{;mu2} 
+      --                               -Dslash^{;mu2} . y^{;mu1} + x^{;mu1,mu2})
+      local mu1, mu2 = unpack(bcderiv.dir_list(dd))
+      local src1
+--      printf("%s:mu1,2={%d,%d}\n", funcname_, mu1, mu2)
+--      printf("%s:bcderiv.dir_str(mu1,2)='%s','%s'\n", funcname_, bcderiv.dir_str(mu1), bcderiv.dir_str(mu2))
+      if mu1 == mu2 then
+        src   = latvec.scalsum_left(
+            -1., lv_wilson_d2(mu1, yt_ddmap['']),
+            -2., lv_wilson_d1(mu1, yt_ddmap[bcderiv.dir_str(mu1)]),
+             1., xt_ddmap[dd])
+      else 
+        src   = latvec.scalsum_left(
+            -1., lv_wilson_d1(mu1, yt_ddmap[bcderiv.dir_str(mu2)]),
+            -1., lv_wilson_d1(mu2, yt_ddmap[bcderiv.dir_str(mu1)]),
+             1., xt_ddmap[dd])
+      end
+    else error(string.format("%s: unsupported bc-derivative '%s'", funcname_, dd)) end
+    yt_ddmap[dd] = solver_wilson(src, ...)
+  end
+  return yt_ddmap
+end
+
+
+function bcderiv.wrapsolver_wilson(
+    solver_wilson, gauge_u, ferm_bc, opt)
+  opt = opt or {}
+  local verbose = opt.verbose
+
+  local gauge_u_bc = gauge_copy(gauge_u)
+  gauge_apply_boundary(gauge_u_bc, ferm_bc)
+
+  local Nc, Ns  = 3, 4
+  local Ncs     = Nc * Ns
+  -- iterate over 4d propagators : Hermitian solver with bc-derivative
+  --    rhs4l_ddmap[dd] bcderiv[dd] of rhs dirprop
+  local function solver_dirprop(ddlist, rhs_dp_ddmap, ...)
+    local funcname_ = 'bcderiv.wrapsolver_wilson:solver_dirprop'
+    local sol_dp_ddmap = iter.ordered_tmap_table(latvec.zero_like, rhs_dp_ddmap) 
+    for ic = 0, Nc-1 do
+      for is = 0, Ns-1 do
+        local rhs_df_ddmap = iter.ordered_tmap_table(table_elem({c=ic, d=is}), rhs_dp_ddmap)
+        local sol_df_ddmap = bcderiv_solver_wilson_dirferm(
+            solver_wilson, gauge_u_bc, ddlist, rhs_df_ddmap, ...)
+        for dd, sol_dp in iter.ordered_titems(sol_dp_ddmap) do 
+          sol_dp[{c=ic, d=is}] = sol_df_ddmap[dd]
+        end
+        rhs_df_ddmap, sol_df_ddmap = nil, nil
+      end
+    end 
+    return sol_dp_ddmap
+  end
+  -- TODO finish bcderiv.wrapsolver_wilson; 
+  -- TODO rewrite bcderiv.wrapsolver_wilson_split with solver_wilson_dirferm
+
+  -- main function
+  return function(xt_ddmap, ...)
+    local funcname_ = 'bcderiv.wrapsolver_wilson'
+    local ddlist = bcderiv.make_ddlist(xt_ddmap)
+    assert('' == ddlist[1])
+    if not bcderiv.check_ddlist(ddlist) then 
+      error(string.format("%s: bad ddlist=[%s]", funcname_, list_tostring(ddlist, "'%s'")))
+    end
+
+    local xt0 = assert(xt_ddmap[''])
+    local xt_s = type(xt0)
+    if     'lattice.dirac.propagator' == xt_s then
+      table_assert_type(xt_ddmap, 'lattice.dirac.propagator', string.format("%s: bad rhs", funcname_))
+      return solver_dirprop(ddlist, xt_ddmap, ...)
+    elseif 'lattice.dirac.fermion' == xt_s then
+      table_assert_type(xt_ddmap, 'lattice.dirac.fermion', string.format("%s: bad rhs", funcname_))
+      return solver_dirferm(ddlist, xt_ddmap, ...)
+    else 
+      error(string.format("%s: bad argument to MADCG split-solver: %s", 
+            funcname_, xt_s)) 
+    end
+  end
+end -- bcderiv.wrapsolver_wilson
+
+
+function bcderiv.wrapsolver_wilson_list( -- XXX maybe generic?
+    nrhs_max, solver_wilson_list, gauge_u, ferm_bc, opt)
+  opt = opt or {}
+  error('untested')
+  local verbose = opt.verbose
+
+  -- padded solver
+  solver_dirferm4d_split = split.wrapsolver_list_chop_pad(nrhs_max, solver_dirferm5d_split)
+
+  local gauge_u_bc = gauge_copy(gauge_u)
+  gauge_apply_boundary(gauge_u_bc, ferm_bc)
+
+  local Nc, Ns  = 3, 4
+  local Ncs     = Nc * Ns
+
+  local function solver_dirferm_iter(ddlist, rhs_dfi_ddmap, ...)
+    -- make iterator to return solutions sol_dfi_chop_ddmap
+    local funcname_ = 'bcderiv.wrapsolver_wilson_list:solver_dirferm_list'
+    assert(0 < #ddlist)
+    -- iterators over batches=lists[<=nrhs_max]
+    local rhs_dfi_chop_ddmap = iter.lmap_list( 
+        function(dfi) return iter.ichop(nrhs_max, rhs_dfi_ddmap[dd]) end, ddlist)
+
+    -- function to iterate over batches
+    -- exit when iterators are exhausted
+    while true do
+      local dfl_ddmap = {}
+      local nrhs_ddmap = {}
+      for dd in iter.litems(ddlist) do 
+        dfl_ddmap[dd]   = rhs_dfi_chop_ddmap[dd]() or {} -- simplify handling nils
+        nrhs_ddmap[dd]  = #dfl_ddmap[dd]
+      end
+      local rhs_len = nrhs_ddmap[ddlist[1]]
+      table_assert_const(nrhs_ddmap, nrhs_ddmap[ddlist[1]], 
+          string.format("%s: inconsistent #nrhs_ddmap", funcname_))
+
+      if 0 == rhs_len then break end
+      
+      dfl_ddmap = bcderiv_solver_wilson_dirferm(
+          solver_wilson_list, gauge_u_bc, dlist, dfl_ddmap, ...)
+      local sol_dfl_ddmap = {} --result
+      for dd in iter.litems(ddlist) do
+        sol_dfl_ddmap[dd] = sol_dfl_ddmap[dd] or {}
+        list_extend(sol_dfl_ddmap[dd], x_dfl_ddmap[dd])
+      end
+      return sol_dfl_ddmap
+    end
+
+  end
+
+  local function solver_dirprop_list(ddlist, rhs_dpl_ddmap, ...)
+    local funcname_ = 'bcderiv.wrapsolver_wilson_list:solver_dirprop_list'
+
+    -- convert dirprops into dirferm lists, chain into one iter
+    local dfi_ddmap = {}
+    for dd in iter.litems(ddlist) do 
+      dfi_ddmap[dd] = iter.ichain(iter.lmap(
+          function(dp)return latvec.dp2dfl(dp)end, 
+          dfi_ddmap[dd]))
+    end
+
+    -- FIXME inefficient mem.usage: +sizeof(dfl_ddmap)=sizeof(rhs_dpl_ddmap)
+    -- instead, pull dirferms to pack into dirprops as needed 
+    -- (map complicates things; may need to split down to 1-elem lists)
+    local dfl_ddmap = solver_dirferm_iter(ddlist, dfi_ddmap, ...) 
+
+    -- split 
+    local sol_dpl_ddmap = {}
+    for dd in iter.litems(ddlist) do
+      sol_dpl_ddmap[dd] = sol_dpl_ddmap[dd] or {}
+      list_extend(sol_dpl_ddmap[dd], iter.imap_list(
+          function(x)return latvec.dfl2dp(x, {Nc=Nc, Ns=Ns})end,
+          iter.lchop(Ncs, df4l_ddmap[dd])))
+    end
+    return sol_dpl_ddmap
+  end
+
+  -- main function
+  return function(xt_ddmap, ...)
+    local funcname_ = 'bcderiv.wrapsolver_wilson_list'
+    local xt0 = assert(xt_ddmap[''])
+    local L = latvec.lattice(xt0)
+
+    local ddlist = bcderiv.make_ddlist(xt_ddmap)
+    if not bcderiv.check_ddlist(ddlist) then 
+      error(string.format("%s: bad ddlist=[%s]", funcname_, list_tostring(ddlist, "'%s'")))
+    end
+    local xt_s = type(xt0)
+    if     'table' == xt_s then
+      local xt_s1 = type(xt0[1])
+      if     'lattice.dirac.propagator' == xt_s1 then
+        table_assert_type(xt_ddmap, 'table', string.format("%s: bad rhs", funcname_))
+        for dd, xt in pairs(xt_ddmap) do 
+          table_assert_type(xt, 'lattice.dirac.propagator', string.format("%s: bad rhs[%s]", funcname_, dd))
+        end
+        return solver_dirprop_list(ddlist, xt_ddmap, ...)
+      elseif 'lattice.dirac.fermion' == xt_s1 then
+        table_assert_type(xt_ddmap, 'table', string.format("%s: bad rhs", funcname_))
+        for dd, xt in pairs(xt_ddmap) do 
+          table_assert_type(xt, 'lattice.dirac.fermion', string.format("%s: bad rhs[%s]", funcname_, dd))
+        end
+        return solver_dirferm_list(ddlist, xt_ddmap, ...)
+      else error(string.format("%s:bad rhs argument [][1]: '%s'", xt_s1, funcname_)) end
+    elseif 'lattice.dirac.propagator' == xt_s then
+      table_assert_type(xt_ddmap, 'lattice.dirac.propagator', string.format("%s: bad rhs", funcname_))
+      local yt_ddmap = iter.ordered_tmap_pair_table(function(dd, xt) return dd, {xt} end, xt_ddmap)
+      yt_ddmap = solver_dirprop_list(ddlist, yt_ddmap, ...)
+      return iter.ordered_tmap_table(function(yt) return yt[1] end, yt_ddmap)
+    elseif 'lattice.dirac.fermion' == xt_s then
+      table_assert_type(xt_ddmap, 'lattice.dirac.fermion', string.format("%s: bad rhs", funcname_))
+      local yt_ddmap = iter.ordered_tmap_pair_table(function(dd, xt) return dd, {xt} end, xt_ddmap)
+      yt_ddmap = solver_dirferm_list(ddlist, yt_ddmap, ...)
+      return iter.ordered_tmap_table(function(yt) return yt[1] end, yt_ddmap)
+    else 
+      error(string.format("%s: bad rhs argument: %s", funcname_, xt_s)) 
+    end
+  end
+end -- bcderiv.wrapsolver_wilson_list
+

@@ -1,0 +1,29 @@
+require 'latvec'
+require 'wuppertal-smear'
+
+function wuppertal_smear_fast_dp(U, alpha, N, G, axis, t0)
+  -- FIXME can break down further into ColorVector's
+  -- FIXME assuming that G is DiracPropagator; modify to deal with any latvec
+  -- (break down into cv -> flatten -> cut into L[axis] segments -> spread 
+  --    -> smear -> gather -> unflatten -> wrap into original types
+  assert('lattice.dirac.propagator' == type(G))
+  local Nc, Ns = 3, 4
+  local L = latvec.lattice(U)
+  latvec.lattice(G, L)
+  local n_spread = Ns^2
+  if (n_spread <= L[axis]) and nil ~= t0 then
+    printf("DO fast smear\n")
+    local U_dup = {}
+    for i = 1, n_spread do U_dup[i] = U end
+--    print_obj(U_dup)
+    local U_spread = scatter_axis(axis, t0, U_dup)
+--    print_obj(U_spread)
+    local cml_spread = scatter_axis(axis, t0, latvec.dp2cml(G))
+--    print_obj(cml_spread)
+    return latvec.cml2dp(gather_axis(axis, t0, n_spread, 
+            wuppertal_smear(U_spread, alpha, N, cml_spread, axis)))
+  else 
+    printf("DO regular smear\n")
+    return wuppertal_smear(U, alpha, N, G, axis)
+  end
+end

@@ -1,0 +1,123 @@
+function index_strlen(n, nmax)
+  -- number of decimal places needed 
+  if n <= 1 then return 1 end
+  return math.min(#(string.format("%d", n - 1)), nmax)
+end
+function index_strfmt(n, nmax)
+  -- format for r-aligned index
+  return string.format("%%%dd", index_strlen(n, nmax))
+end
+function list_concat_multiline(list, sep, per_line)
+  local res = {}
+  local len = #list
+  local ifmt = index_strfmt(len, 4)
+  for i = 0, len-1, per_line do
+    res[1+#res] = string.format("%s: %s", string.format(ifmt, i), 
+              table.concat(list, sep, i+1, i+per_line))
+  end
+  return res
+end
+
+function print_vector_aligned(vec, fmt, sep, val_per_line, title)
+  local m = #vec
+  local mfmt = index_strfmt(m, 4)
+  local ri = {}
+  for i = 0, m - 1 do ri[1+i] = fmt(vec[i]) end
+  for i = 0, m - 1, val_per_line do
+    local rstr = table.concat(ri, sep, i+1, math.min(i+val_per_line, m))
+    printf("%s[%s]  %s\n", title, string.format(mfmt, i), rstr)
+  end
+end
+function print_vector(vec, title)
+  if 'vector.real' == type(vec) then
+    print_vector_aligned(vec, 
+        function(x)return string.format("%+13.8E", x)end,
+        "  ", 8, title)
+  elseif 'vector.complex' == type(vec) then
+    print_vector_aligned(vec, 
+        function(x)return string.format("(%+12.7E %+12.7E*I)", x:real(), x:imag())end,
+        "  ", 4, title)
+  else error(string.format("type(vec)='%s' not supported", type(vec))) end
+end
+function print_matrix_aligned(mat, fmt, sep, val_per_line, title)
+  title = title or ""
+--  local val_per_line = 8
+--  local fmt = function(x) return string.format("%16.7e", x) end
+  local m, n = mat:dims()
+  local mfmt = index_strfmt(m, 4)
+  local nfmt = index_strfmt(n, 4)
+  for i = 0, m - 1 do
+    local ri = {}
+    for j = 0, n - 1 do ri[1+j] = fmt(mat[{i,j}]) end
+    for j = 0, n - 1, val_per_line do
+      local rstr = table.concat(ri, sep, j+1, math.min(j+val_per_line, n))
+      printf("%s[%s,%s]  %s\n", title, 
+          string.format(mfmt, i), string.format(nfmt, j), rstr)
+    end
+  end
+end
+function print_matrix(mat, title)
+  if 'matrix.real' == type(mat) then
+    print_matrix_aligned(mat, 
+        function(x)return string.format("%+13.8E", x)end,
+        "  ", 8, title)
+  elseif 'matrix.complex' == type(mat) then
+    print_matrix_aligned(mat, 
+        function(x)return string.format("(%+12.7E %+12.7E*I)", x:real(), x:imag())end,
+        "  ", 4, title)
+  else error(string.format("type(mat)='%s' not supported", type(mat))) end
+end
+function print_cmatrix(mat, title, flags)
+  title = title or ""
+  local m, n = mat:dims()
+  for j = 0, n-1 do for i = 0, j do
+    printf("%s[%2d,%2d]=%f+I*%f\n", title, i, j, mat[{i,j}]:real(), mat[{i,j}]:imag())
+  end end
+end
+function matrix_vdot(a, b)
+  if 'matrix.real' == type(a) then
+    return math.sqrt((a:transpose() * b):trace())
+  elseif 'matrix.complex' == type(a) then
+    return math.sqrt((a:adjoin() * b):trace():real())
+  else error(type(a)) end
+end
+function matrix_nrm(a)
+  if 'matrix.real' == type(a) then
+    return math.sqrt((a * a:transpose()):trace())
+  elseif 'matrix.complex' == type(a) then
+    return math.sqrt((a * a:adjoin()):trace():real())
+  else error(type(a)) end 
+end
+function matrix_rdiff(a, b)
+  local a_nrm   = matrix_nrm(a)
+  local b_nrm   = matrix_nrm(b)
+  local amb_nrm = matrix_nrm(a - b)
+  if 0. == a_nrm and 0. == b_nrm then return 0.
+  else return 2.*amb_nrm / (a_nrm + b_nrm) end
+end
+-- TODO move to library
+function narg(x)
+  if nil == x then return nil end
+  if type(x) == 'number' then
+    if x < 0 then return math.pi
+    else return 0. end
+  else return math.atan2(x:imag(), x:real()) end
+end
+-- TODO move to library
+function nabs(x)
+  if nil == x then return nil end
+  if type(x) == 'number' then return math.abs(x)
+  else return x:abs() end
+end
+-- TODO move to library; add rmatrix for real
+function print_cmatrix_cmp(a, b, title)
+  title = title or ''
+  local a_nrm   = matrix_nrm(a)
+  local b_nrm   = matrix_nrm(b)
+  local amb_nrm = matrix_nrm(a - b)
+  local axb     = matrix_vdot(a, b) / (a_nrm * b_nrm)
+  printf("print_cmatrix_cmp: %s: |a/b|=%e  a^b=polar(%.10f,%.10f)\n", title, 
+                (a_nrm / b_nrm), nabs(axb), narg(axb))
+
+end
+

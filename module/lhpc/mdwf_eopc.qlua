@@ -1,0 +1,691 @@
+require "strict"
+require "stdlib"
+require "latvec"
+require "lhpc-std"
+
+do
+  -- functions for testing preconditioners
+  -- FIXME possible overflows or divbyzeros ; rewrite without unnecessary divisions by sigma
+  -- apply and invert upper 2-diagonal (cyclic) matrix
+  --    | r1 s1    .    |
+  --    |    r2 s2 .    |
+  --    | .  .  .  .    | . X  = Y
+  --    | sN         rN | 
+  function latvec_mdwf_upper(x, rho, sigma)
+    local y = {}
+    local L5 = #x
+    assert (#rho == L5)
+    assert (#sigma == L5)
+    for s = 1, L5-1 do
+      y[s] = latvec.scalsum_left(rho[s], x[s], sigma[s], x[s+1])
+    end
+    y[L5] = latvec.scalsum_left(rho[L5], x[L5], sigma[L5], x[1])
+    return y
+  end
+
+  -- FIXME there is a problem of blowing up norms if off-diag sigma ends up in denom.
+  function latvec_inv_mdwf_upper_v1verybadlyconditionedrunawayoverflowingwayofdoingthis(y, rho, sigma)
+    local L5 = #y
+    assert (#rho == L5)
+    assert (#sigma == L5)
+    local prod_mR2S = complex(1.,0)
+    local ysum = latvec.zero_like(y[1])
+    for s = 1, L5 do
+      local mR2S = (-1.) * rho[s] / sigma[s]
+      prod_mR2S  = prod_mR2S * mR2S
+      ysum = latvec.scalsum_left(mR2S, ysum, 1. / sigma[s], y[s])
+      printf("%2d  |ysum|2=%e  |prod_mR2S|=%e\n", s, latvec.norm2(ysum), prod_mR2S:abs())
+    end
+    local x = {}
+    x[1] = latvec.copy(ysum, 1./(1. - prod_mR2S))
+    local xprev = x[1]
+    for s = 1, L5-1 do
+      x[s+1] = latvec.scalsum_left(
+                  1. / sigma[s],              y[s],
+                  (-1.) * rho[s] / sigma[s],  xprev)
+      xprev = x[s+1]
+    end
+    local x1new = latvec.scalsum_left(
+                  1. / sigma[L5],              y[L5],
+                  (-1.) * rho[L5] / sigma[L5], xprev)
+    latvec.print_cmp(x[1], x1new, "latvec_inv_mdwf_upper_v2: x1<->x1new")
+    return x
+  end 
+
+  -- XXX diagonal rho >~ 1 is in denom
+  function latvec_inv_mdwf_upper_v2(y, rho, sigma) -- rewrite
+    local L5 = #y
+    assert (#rho == L5)
+    assert (#sigma == L5)
+    local prod_mS2R = complex(1., 0)
+    local ysum = latvec.zero_like(y[1])
+    for s = L5, 1, -1 do
+      local mS2R = (-1.) * sigma[s] / rho[s]
+      ysum = latvec.scalsum_left(mS2R, ysum, 1./rho[s], y[s])
+      prod_mS2R  = prod_mS2R * mS2R
+--      printf("%2d  |ysum|2=%e  |prod_mS2R|=%e\n", s, latvec.norm2(ysum), prod_mS2R:abs())
+    end
+    local x = {}
+    x[1] = latvec.scal_left(1. / (1. - prod_mS2R), ysum)
+    local xprev = x[1]
+    for s = L5, 2, -1 do
+      x[s] = latvec.scalsum_left(
+                  1. / rho[s],          y[s],
+                  (-sigma[s]) / rho[s], xprev)
+      xprev = x[s]
+    end
+    local x1new = latvec.scalsum_left(
+                  1. / rho[1],          y[1],
+                  (-sigma[1]) / rho[1], xprev)
+--    latvec.print_cmp(x[1], x1new, "latvec_inv_mdwf_upper_v2: x1<->x1new")
+    return x
+  end 
+  latvec_inv_mdwf_upper = latvec_inv_mdwf_upper_v2
+
+  -- apply and invert lower 2-diagonal (cyclic) matrix
+  --    | r1       . s1 |
+  --    | s2 r2    .    |
+  --    | .  .  .  .    | . X  = Y
+  --    |         sN rN | 
+  function reverse_table(x)
+    -- invert the order in the table in-place
+    local aux
+    for i = 1, #x/2 do
+      aux = x[i]
+      x[i] = x[#x+1-i]
+      x[#x+1-i] = aux
+    end
+  end
+
+  function latvec_mdwf_lower(x, rho, sigma)
+    local y = {}
+    local L5 = #x
+    assert (#rho == L5)
+    assert (#sigma == L5)
+    y[1] = latvec.scalsum_left(rho[1], x[1], sigma[1], x[L5])
+    for s = 2, L5 do
+      y[s] = latvec.scalsum_left(rho[s], x[s], sigma[s], x[s-1])
+    end
+    return y
+  end
+
+  function latvec_inv_mdwf_lower(y, rho, sigma)
+    -- XXX implemented thru reversal
+    local rhoR  = copy_table(rho)  ; reverse_table(rhoR)
+    local sigmaR= copy_table(sigma); reverse_table(sigmaR)
+    local yR    = latvec.copy(y)   ; reverse_table(yR)
+    local x     = latvec_inv_mdwf_upper(yR, rhoR, sigmaR, yR)
+    reverse_table(x)
+    return x
+  end
+
+  function scal_conj(x)
+    -- complex conjugate for scalar values
+    if 'complex'==type(x) then return x:conj()
+    elseif 'number'==type(x) then return x end
+  end
+
+  -- general function to represent a+b*x5 operator as separate 2-diag ops for L,R
+  local function mdwf_apbX5_coeff(L5, mf, b5_s, c5_s, is_dag)
+    local rho = {}
+    local sigL = {}
+    local sigR = {}
+    if 'table' == type(b5_s) then assert(#b5_s == L5) end
+    if 'table' == type(c5_s) then assert(#c5_s == L5) end
+    local b5, c5
+    for s = 1, L5 do
+      if 'table' == type(b5_s) then rho[s] = b5_s[s] else rho[s] = b5_s end
+      if 'table' == type(c5_s) then sigL[s]= c5_s[s] else sigL[s]= c5_s end
+      sigR[s] = sigL[s]
+    end
+    sigL[L5] = (-mf) * sigL[L5]
+    sigR[1]  = (-mf) * sigR[1]
+    if is_dag then
+      local sigL_ = sigL
+      local sigR_ = sigR
+      sigL = {}
+      sigR = {}
+      sigL[1] = scal_conj(sigL_[L5])
+      for s = 1, L5 - 1 do
+        rho[s]      = scal_conj(rho[s])
+        sigL[s+1]   = scal_conj(sigL_[s])
+        sigR[s]     = scal_conj(sigR_[s+1])
+      end
+      rho[L5]   = scal_conj(rho[L5])
+      sigR[L5]  = scal_conj(sigR_[1])
+    end
+    return rho, sigL, sigR
+  end
+
+  local function latvec_op_apbx5(d, rho, sigL, sigR, is_dag)
+    local L5 = #d
+    local dL = latvec.scal_left((1. - gamma{n=15})/2., d)
+    local dR = latvec.scal_left((1. + gamma{n=15})/2., d)
+    if not is_dag then
+      return latvec.sum(latvec_mdwf_upper(dL, rho, sigL),
+                        latvec_mdwf_lower(dR, rho, sigR))
+    else
+      return latvec.sum(latvec_mdwf_lower(dL, rho, sigL),
+                        latvec_mdwf_upper(dR, rho, sigR))
+    end
+  end
+
+  local function latvec_op_inv_apbx5(d, rho, sigL, sigR, is_dag)
+    local L5 = #d
+    local dL = latvec.scal_left((1. - gamma{n=15})/2., d)
+    local dR = latvec.scal_left((1. + gamma{n=15})/2., d)
+    if not is_dag then
+      return latvec.sum(latvec_inv_mdwf_upper(dL, rho, sigL),
+                        latvec_inv_mdwf_lower(dR, rho, sigR))
+    else
+      return latvec.sum(latvec_inv_mdwf_lower(dL, rho, sigL),
+                        latvec_inv_mdwf_upper(dR, rho, sigR))
+    end
+  end
+
+
+  -- apply and invert matrix A = (b5*(4-M5)+1) + (c5*(4-M5)-1)*X5
+  -- with current conventions, A is upper 2-diag for L, lower 2-diag for R
+  --  (opposite for A^\dag)
+  local function mdwfA_coeff(L5, M5, mf, b5_s, c5_s, is_dag)
+    local b5_A = {}
+    local c5_A = {}
+    for s = 1, L5 do 
+      b5_A[s] = b5_s[s] * (4 - M5) + 1.
+      c5_A[s] = c5_s[s] * (4 - M5) - 1.
+    end
+    return mdwf_apbX5_coeff(L5, mf, b5_A, c5_A, is_dag)
+  end
+
+  function latvec_mdwfA(d, M5, mf, b5_s, c5_s, is_dag)
+    local L5 = #d
+    local rho, sigL, sigR = mdwfA_coeff(L5, M5, mf, 
+        latvec.asarray1d(b5_s, L5), latvec.asarray1d(c5_s, L5), is_dag)
+    return latvec_op_apbx5(d, rho, sigL, sigR, is_dag)
+  end
+
+  function latvec_inv_mdwfA(d, M5, mf, b5_s, c5_s, is_dag)
+    local L5 = #d
+    local rho, sigL, sigR = mdwfA_coeff(L5, M5, mf, 
+        latvec.asarray1d(b5_s, L5), latvec.asarray1d(c5_s, L5), is_dag)
+    return latvec_op_inv_apbx5(d, rho, sigL, sigR, is_dag)
+  end
+
+
+  -- apply and invert matrix B = b5 + c5*X5
+  -- with current conventions, A is upper 2-diag for L, lower 2-diag for R
+  --  (opposite for A^\dag)
+  local function mdwfB_coeff(L5, mf, b5_s, c5_s, is_dag)
+    return mdwf_apbX5_coeff(L5, mf, b5_s, c5_s, is_dag)
+  end
+
+  function latvec_mdwfB(d, mf, b5_s, c5_s, is_dag)
+    local L5 = #d
+    local rho, sigL, sigR = mdwfB_coeff(L5, mf, 
+        latvec.asarray1d(b5_s, L5), latvec.asarray1d(c5_s, L5), is_dag)
+    return latvec_op_apbx5(d, rho, sigL, sigR, is_dag)
+  end
+
+  function latvec_inv_mdwfB(d, mf, b5_s, c5_s, is_dag)
+    local L5 = #d
+    local rho, sigL, sigR = mdwfB_coeff(L5, mf, 
+        latvec.asarray1d(b5_s, L5), latvec.asarray1d(c5_s, L5), is_dag)
+    return latvec_op_inv_apbx5(d, rho, sigL, sigR, is_dag)
+  end
+
+  function latvec_mdwfF(d, u, is_dag)
+    return latvec.scal_left(-1, latvec.op_xwilson(d, u, is_dag))
+  end
+
+  function latvec_mdwfK(d, M5, b5_s, is_dag)
+    -- multiply by (\kappa_b) 
+    -- note : it is s-dependent (a diag matrix in s5-space)
+    local L5 = #d
+    if is_dag then b5_s = latvec.conj(b5_s) end
+    b5_s = latvec.asarray1d(b5_s, L5)
+    local y = {}
+    for s = 1, L5 do
+      y[s] = d[s] / 2. / (b5_s[s] * (4 - M5) + 1)
+    end
+    return y
+  end
+
+  function latvec_inv_mdwfK(d, M5, b5_s, is_dag)
+    -- divide by (2\kappa_b) 
+    -- note : it is s-dependent (a diag matrix in s5-space)
+    local L5 = #d
+    if is_dag then b5_s = latvec.conj(b5_s) end
+    b5_s = latvec.asarray1d(b5_s, L5)
+    local y = {}
+    for s = 1, L5 do
+      y[s] = d[s] * 2 * (b5_s[s] * (4 - M5) + 1)
+    end
+    return y
+  end
+
+  function mdwf_eopc_pc0(d, u, M5, mf, b5_s, c5_s, is_dag)
+    error("fixme")
+    -- sym2 : 1 - F.B.A^{-1} . F.B.A^{-1}
+    local L5 = #d
+    local y
+    if is_dag then
+      y = {}
+      for s = 1, L5 do
+        y[s] = latvec.scal_left(1. / (scal_conj(b5_s[s]) * (4 - M5) + 1), d[s])
+      end
+    else
+      y = d
+    end
+
+    local A_y = latvec_mdwfA(y, M5, mf, b5_s, c5_s, is_dag)
+    if not is_dag then
+      y = latvec_mdwfB(y, mf, b5_s, c5_s, is_dag)
+      y = latvec_mdwfF(y, u, is_dag)
+      y = latvec_inv_mdwfA(y, M5, mf, b5_s, c5_s, is_dag)
+      y = latvec_mdwfB(y, mf, b5_s, c5_s, is_dag)
+      y = latvec_mdwfF(y, u, is_dag)
+    else
+      y = latvec_mdwfF(y, u, is_dag)
+      y = latvec_mdwfB(y, mf, b5_s, c5_s, is_dag)
+      y = latvec_inv_mdwfA(y, M5, mf, b5_s, c5_s, is_dag)
+      y = latvec_mdwfF(y, u, is_dag)
+      y = latvec_mdwfB(y, mf, b5_s, c5_s, is_dag)
+    end
+    y = latvec.sub(A_y, y)
+    if not is_dag then
+      for s = 1, L5 do
+        y[s] = latvec.scal_left(1. / (b5_s[s] * (4 - M5) + 1), y[s])
+      end
+    end
+    return y
+  end
+
+  -- eopc2    -- used by mdwf(orig), grid, bfm@clusters(??)
+  function mdwf_eopc_sym2(d, u, M5, mf, b5_s, c5_s, is_dag)
+    -- sym2 : 1 - (2*kappa_b).F.B.A^{-1} . F.B.A^{-1}.(2*kappa_b)^{-1}
+    local y = d
+    if not is_dag then
+      y = latvec_inv_mdwfK(y, M5, b5_s, is_dag)
+      y = latvec_inv_mdwfA(y, M5, mf, b5_s, c5_s, is_dag)
+      y = latvec_mdwfB(y, mf, b5_s, c5_s, is_dag)
+      y = latvec_mdwfF(y, u, is_dag)
+      y = latvec_inv_mdwfA(y, M5, mf, b5_s, c5_s, is_dag)
+      y = latvec_mdwfB(y, mf, b5_s, c5_s, is_dag)
+      y = latvec_mdwfF(y, u, is_dag)
+      y = latvec_mdwfK(y, M5, b5_s, is_dag)
+    else 
+      y = latvec_mdwfK(y, M5, b5_s, is_dag)
+      y = latvec_mdwfF(y, u, is_dag)
+      y = latvec_mdwfB(y, mf, b5_s, c5_s, is_dag)
+      y = latvec_inv_mdwfA(y, M5, mf, b5_s, c5_s, is_dag)
+      y = latvec_mdwfF(y, u, is_dag)
+      y = latvec_mdwfB(y, mf, b5_s, c5_s, is_dag)
+      y = latvec_inv_mdwfA(y, M5, mf, b5_s, c5_s, is_dag)
+      y = latvec_inv_mdwfK(y, M5, b5_s, is_dag)
+    end
+    return latvec.sub(d, y)
+  end
+  mdwf_eopc_pc2=mdwf_eopc_sym2
+  
+  function mdwf_precond_sym2(y, u, M5, mf, b5_s, c5_s)
+    local y1
+    y1= latvec_inv_mdwfA(y, M5, mf, b5_s, c5_s, false)
+    y1= latvec_mdwfB(y1, mf, b5_s, c5_s, false)
+    y1= latvec.scalsum_left(
+           1., y,
+          -1., latvec_mdwfF(y1, u, false))
+    y1= latvec_mdwfK(y1, M5, b5_s, false)
+    y1= mdwf_eopc_sym2(y1, u, M5, mf, b5_s, c5_s, true)
+    return y1
+  end
+  
+  function mdwf_unprecond_sym2(y, u, M5, mf, b5_s, c5_s)
+    y = mdwf_eopc_sym2(y, u, M5, mf, b5_s, c5_s, false)
+    return latvec_inv_mdwfK(y, M5, b5_s, false)
+  end
+
+  function mdwf_inflate_sym2(t, y, u, M5, mf, b5_s, c5_s)
+    -- t = precond.solution, y = orig.rhs
+    local t1
+    t = latvec_inv_mdwfK(t, M5, b5_s, false)
+    t1= latvec_inv_mdwfA(t, M5, mf, b5_s, c5_s, false)
+    t1= latvec_mdwfB(t1, mf, b5_s, c5_s, false)
+    t1= latvec.scalsum_left(
+           1., y,
+           1., t,
+          -1., latvec_mdwfF(t1, u, false))
+    t1= latvec_inv_mdwfA(t1, M5, mf, b5_s, c5_s, false)
+    return t1
+  end
+
+  -- eopc2p -- used by bfm@BGQ
+  function mdwf_eopc_sym2p(d, u, M5, mf, b5_s, c5_s, is_dag)
+    -- sym2 : 1 - (2*kappa_b).F.B.A^{-1} . F.B.A^{-1}.(2*kappa_b)^{-1}
+    local y = d
+    if not is_dag then
+      y = latvec_inv_mdwfA(y, M5, mf, b5_s, c5_s, is_dag)
+      y = latvec_mdwfB(y, mf, b5_s, c5_s, is_dag)
+      y = latvec_mdwfF(y, u, is_dag)
+      y = latvec_inv_mdwfA(y, M5, mf, b5_s, c5_s, is_dag)
+      y = latvec_mdwfB(y, mf, b5_s, c5_s, is_dag)
+      y = latvec_mdwfF(y, u, is_dag)
+    else 
+      y = latvec_mdwfF(y, u, is_dag)
+      y = latvec_mdwfB(y, mf, b5_s, c5_s, is_dag)
+      y = latvec_inv_mdwfA(y, M5, mf, b5_s, c5_s, is_dag)
+      y = latvec_mdwfF(y, u, is_dag)
+      y = latvec_mdwfB(y, mf, b5_s, c5_s, is_dag)
+      y = latvec_inv_mdwfA(y, M5, mf, b5_s, c5_s, is_dag)
+    end
+    return latvec.sub(d, y)
+  end
+  mdwf_eopc_pc2p=mdwf_eopc_sym2p
+
+  function mdwf_precond_sym2p(y, u, M5, mf, b5_s, c5_s)
+    local y1
+    y1= latvec_inv_mdwfA(y, M5, mf, b5_s, c5_s, false)
+    y1= latvec_mdwfB(y1, mf, b5_s, c5_s, false)
+    y1= latvec.scalsum_left(
+           1., y,
+          -1., latvec_mdwfF(y1, u, false))
+    y1= mdwf_eopc_sym2p(y1, u, M5, mf, b5_s, c5_s, true)
+    return y1
+  end
+
+  function mdwf_unprecond_sym2p(y, u, M5, mf, b5_s, c5_s)
+    return mdwf_eopc_sym2p(y, u, M5, mf, b5_s, c5_s, false)
+  end
+
+  function mdwf_inflate_sym2p(t, y, u, M5, mf, b5_s, c5_s)
+    -- t = precond.solution, y = orig.rhs
+    local t1
+    t1= latvec_inv_mdwfA(t, M5, mf, b5_s, c5_s, false)
+    t1= latvec_mdwfB(t1, mf, b5_s, c5_s, false)
+    t1= latvec.scalsum_left(
+           1., y,
+           1., t,
+          -1., latvec_mdwfF(t1, u, false))
+    t1= latvec_inv_mdwfA(t1, M5, mf, b5_s, c5_s, false)
+    return t1
+  end
+
+  -- eopc_sym1
+  function mdwf_eopc_sym1(d, u, M5, mf, b5_s, c5_s, is_dag)
+    -- sym2 : 1 - F.B.A^{-1} . F.B.A^{-1}
+    error("fixme")
+    local y = d
+    if not is_dag then
+      y = latvec_mdwfB(y, mf, b5_s, c5_s, is_dag)
+      y = latvec_mdwfF(y, u, is_dag)
+      y = latvec_inv_mdwfA(y, M5, mf, b5_s, c5_s, is_dag)
+      y = latvec_mdwfB(y, mf, b5_s, c5_s, is_dag)
+      y = latvec_mdwfF(y, u, is_dag)
+      y = latvec_inv_mdwfA(y, M5, mf, b5_s, c5_s, is_dag)
+    else 
+      y = latvec_inv_mdwfA(y, M5, mf, b5_s, c5_s, is_dag)
+      y = latvec_mdwfF(y, u, is_dag)
+      y = latvec_mdwfB(y, mf, b5_s, c5_s, is_dag)
+      y = latvec_inv_mdwfA(y, M5, mf, b5_s, c5_s, is_dag)
+      y = latvec_mdwfF(y, u, is_dag)
+      y = latvec_mdwfB(y, mf, b5_s, c5_s, is_dag)
+    end
+    return latvec.sub(d, y)
+  end
+
+  -- eopc_sym1mit(??)
+  function mdwf_eopc_sym1mit(d, u, M5, mf, b5_s, c5_s, is_dag)
+    -- sym1MIT : 1 - B.A^{-1}.F . B.A^{-1}.F
+    local y = d
+    if not is_dag then
+      y = latvec_mdwfF(y, u, is_dag)
+      y = latvec_inv_mdwfA(y, M5, mf, b5_s, c5_s, is_dag)
+      y = latvec_mdwfB(y, mf, b5_s, c5_s, is_dag)
+      y = latvec_mdwfF(y, u, is_dag)
+      y = latvec_inv_mdwfA(y, M5, mf, b5_s, c5_s, is_dag)
+      y = latvec_mdwfB(y, mf, b5_s, c5_s, is_dag)
+    else 
+      y = latvec_mdwfB(y, mf, b5_s, c5_s, is_dag)
+      y = latvec_inv_mdwfA(y, M5, mf, b5_s, c5_s, is_dag)
+      y = latvec_mdwfF(y, u, is_dag)
+      y = latvec_mdwfB(y, mf, b5_s, c5_s, is_dag)
+      y = latvec_inv_mdwfA(y, M5, mf, b5_s, c5_s, is_dag)
+      y = latvec_mdwfF(y, u, is_dag)
+    end
+    return latvec.sub(d, y)
+  end
+
+  mdwf_ref = {
+    eopc2  = {  -- used by mdwf(orig), grid, bfm@clusters(??)
+      M        = mdwf_eopc_sym2,    -- also Mx with last arg is_dag==true
+      precond  = mdwf_precond_sym2,
+      unprecond= mdwf_unprecond_sym2,
+      inflate  = mdwf_inflate_sym2 },
+    eopc2p = {  -- used by bfm@BGQ
+      M        = mdwf_eopc_sym2p,    -- also Mx with last arg is_dag==true
+      precond  = mdwf_precond_sym2p,
+      unprecond= mdwf_unprecond_sym2p,
+      inflate  = mdwf_inflate_sym2p 
+    },
+    eopc_sym1 = {
+      M        = mdwf_eopc_sym1, 
+    },
+    eopc_sym1mit = {
+      M        = mdwf_eopc_sym1mit,
+      precond  = nil,
+      inflate  = nil 
+    },
+  }
+end
+
+
+function make_mdwf_op_ref(bc_U, L5, M5, mf, b5, c5, pctype)
+  local lv_K  = latvec_mdwfK
+  local lv_K1 = latvec_inv_mdwfK
+  local lv_A  = latvec_mdwfA
+  local lv_A1 = latvec_inv_mdwfA
+  local lv_B  = latvec_mdwfB
+  local lv_B1 = latvec_inv_mdwfB
+  local lv_F  = latvec_mdwfF
+  
+  local ref_op = mdwf_ref[pctype]
+  if nil == ref_op then 
+    error(string.format("unknown pctype='%s'", pctype))
+  end
+  local op = {}
+
+  function op.op_dslash(x, is_dag)
+    assert(not L5 or #x == L5)
+    return latvec.dslash_moebius(x, bc_U, M5, mf, b5, c5, is_dag)
+  end
+
+  function op.op_M(x)
+    assert(not L5 or #x == L5)
+    return ref_op.M(x, bc_U, M5, mf, b5, c5, false)
+  end
+
+  function op.op_Mx(x)
+    assert(not L5 or #x == L5)
+    return ref_op.M(x, bc_U, M5, mf, b5, c5, true)
+  end
+
+  function op.op_MxM(x)
+    return op.op_Mx(op.op_M(x))
+  end
+
+  function op.op_precond(x)
+    assert(not L5 or #x == L5)
+    return ref_op.precond(x, bc_U, M5, mf, b5, c5)
+  end
+
+  function op.op_unprecond(x)
+    assert(not L5 or #x == L5)
+    return ref_op.unprecond(x, bc_U, M5, mf, b5, c5)
+  end
+
+  function op.op_inflate(t, y)
+    assert(not L5 or #t == L5)
+    y = y or latvec.zero_like(t)
+    assert(not L5 or #y == L5)
+    return ref_op.inflate(t, y, bc_U, M5, mf, b5, c5)
+  end
+
+  function op.op_A(x)
+    assert(not L5 or #x == L5)
+    return lv_A(x, M5, mf, b5, c5)
+  end
+
+  function op.op_Ax(x)
+    assert(not L5 or #x == L5)
+    return lv_A(x, M5, mf, b5, c5, true)
+  end
+
+  function op.op_A1(x)
+    assert(not L5 or #x == L5)
+    return lv_A1(x, M5, mf, b5, c5)
+  end
+
+  function op.op_A1x(x)
+    assert(not L5 or #x == L5)
+    return lv_A1(x, M5, mf, b5, c5, true)
+  end
+
+  -- B
+  function op.op_B(x)
+    assert(not L5 or #x == L5)
+    return lv_B(x, mf, b5, c5)
+  end
+
+  function op.op_Bx(x)
+    assert(not L5 or #x == L5)
+    return lv_B(x, mf, b5, c5, true)
+  end
+
+  function op.op_B1(x)
+    assert(not L5 or #x == L5)
+    return lv_B1(x, mf, b5, c5)
+  end
+
+  function op.op_B1x(x)
+    assert(not L5 or #x == L5)
+    return lv_B1(x, mf, b5, c5, true)
+  end
+
+  -- F
+  function op.op_F(x)
+    assert(not L5 or #x == L5)
+    return lv_F(x, bc_U)
+  end
+
+  function op.op_Fx(x)
+    assert(not L5 or #x == L5)
+    return lv_F(x, bc_U, true)
+  end
+
+  -- K
+  function op.op_K(x)
+    assert(not L5 or #x == L5)
+    return lv_K(x, M5, b5)
+  end
+
+  function op.op_Kx(x)
+    assert(not L5 or #x == L5)
+    return lv_K(x, M5, b5, true)
+  end
+
+  function op.op_K1(x)
+    assert(not L5 or #x == L5)
+    return lv_K1(x, M5, b5)
+  end
+
+  function op.op_K1x(x)
+    assert(not L5 or #x == L5)
+    return lv_K1(x, M5, b5, true)
+  end
+
+  -- composites
+  function op.op_BA1(x)
+    assert(not L5 or #x == L5)
+    return lv_B(lv_A1(x,
+                      M5, mf, b5, c5),
+                mf, b5, c5)
+  end
+
+  function op.op_BA1F(x)
+    assert(not L5 or #x == L5)
+    return lv_B(lv_A1(lv_F(x,
+                           bc_U), 
+                      M5, mf, b5, c5),
+                mf, b5, c5)
+  end
+
+  function op.op_BA1K1(x)
+    assert(not L5 or #x == L5)
+    return lv_B(lv_A1(lv_K1(x,
+                            M5, b5),
+                      M5, mf, b5, c5),
+                mf, b5, c5)
+  end
+
+  function op.op_A1xBxFx(x)
+    assert(not L5 or #x == L5)
+    return lv_A1(lv_B(lv_F(x,
+                           bc_U, true), 
+                      mf, b5, c5, true),
+                 M5, mf, b5, c5, true)
+  end
+
+  function op.op_A1xBx(x)
+    assert(not L5 or #x == L5)
+    return lv_A1(lv_B(x,
+                      mf, b5, c5, true),
+                 M5, mf, b5, c5, true)
+  end
+
+  function op.op_1mBA1F(x)
+    assert(not L5 or #x == L5)
+    return latvec.scalsum_left(
+            1.,   x,
+            -1.,  lv_B(lv_A1(lv_F(x,
+                                  bc_U), 
+                             M5, mf, b5, c5),
+                       mf, b5, c5))
+  end
+
+  function op.op_1mF(x)
+    assert(not L5 or #x == L5)
+    return latvec.scalsum_left(
+            1.,   x,
+            -1.,  lv_F(x, bc_U))
+  end
+
+  function op.op_1mFx(x)
+    assert(not L5 or #x == L5)
+    return latvec.scalsum_left(
+            1.,   x,
+            -1.,  lv_F(x, bc_U, true))
+  end
+
+  function op.op_1mKF(x)
+    assert(not L5 or #x == L5)
+    return latvec.scalsum_left(
+            1.,   x,
+            -1.,  lv_K(lv_F(x, 
+                            bc_U),
+                       M5, b5))
+  end
+
+  function op.op_1mK1xA1xBxFx(x)
+    assert(not L5 or #x == L5)
+    return latvec.scalsum_left(
+            1.,   x,
+            -1.,  lv_K1(lv_A1(lv_B(lv_F(x, 
+                                        bc_U, true),
+                                   mf, b5, c5, true),
+                              M5, mf, b5, c5, true),
+                        M5, b5, true))
+  end
+
+  return op
+end
+
+

@@ -1,0 +1,96 @@
+package.path = package.path .. ';qlib/?.qlua;lhpc/?.qlua;qlua-production/?.qlua'
+require "strict"
+require "gaugefix"
+require "stdlib"
+require "lhpc-std"
+require "qdpc_io"
+require "gauge/gfix"
+require "rcparams"
+
+function report_gauge(u)
+    local L = u[1].lattice
+    local Nc = u[1]:colors()
+    local Nd = #L
+    local vol = L:volume()
+    printf("# [mu]  Sum(|U.U+|)/Nc/V  Sum(Re Tr(U))/Nc/V\n")
+    for mu = 0, Nd - 1 do
+        printf("# [%d]\t%f\t%f\n", mu, u[1 + mu]:norm2() / (Nc * vol),
+               u[1 + mu]:trace():real():sum() / (Nc * vol))
+    end
+    printf("# [mu, nu]  Sum(Re Tr(U_P))/Nc/V")
+    for mu = 0, Nd - 2 do
+        for nu = 1 + mu, Nd - 1 do
+            printf("# [%d,%d]\t%f\n", mu, nu,
+                   gauge_plaquette(u, mu, nu):trace():real():sum() / (Nc * vol))
+        end
+    end
+end
+
+tot_timer = timer("total")
+
+print_network_settings()
+L = qcd.lattice(latsize, {network = network_geom})
+S = rnd_init(L, rnd_seed)
+print_subgrid_settings(L)
+printf("loaded lattice\n")
+
+
+cur_timer = timer("read gauge")
+print(get_gauge_file(cfg_key))
+
+
+u = qcd.milc.read_gauge(L, get_gauge_file(cfg_key))
+
+
+print("DONE")
+cur_timer("done")
+
+report_gauge(u)
+
+
+gfix_type = job_gfix -- "coulomb"
+
+cur_timer = timer(string.format("gaugefix %s", gfix_type))
+gfix_wgt_dir = {}
+if gfix_type == "coulomb" then
+    for mu = 0, #L - 1 do gfix_wgt_dir[1 + mu] = 1. end
+    gfix_wgt_dir[#L] = 0.
+elseif gfix_type == "landau" then
+    for mu = 0, #L - 1 do gfix_wgt_dir[1 + mu] = 1. end
+    gfix_wgt_dir[#L] = 1.
+else
+    printf("Bad gfix_type: %s\n", gfix_type)
+    os.exit()
+end
+
+gfix_func, gfix_grad = mk_gaugefix_genlandau_func(gfix_wgt_dir)
+
+tol_switch_fletcher = gfix_param.tol_switch_fletcher or 1e-6
+printf("### gfix=%s  gf_tol=%f  gf_maxiter=%d  tol_switch_fletcher=%e\n",
+       gfix_type, gfix_param.tol, gfix_param.maxiter, tol_switch_fletcher)
+g, iter, tol = gaugefix_facg(u, gfix_func, gfix_grad, gfix_param.tol,
+                             gfix_param.maxiter, true, tol_switch_fletcher)
+printf("### tol_final=%e  iter_final=%d\n", tol, iter)
+cur_timer("done")
+
+
+
+colmat_str = string.format("colmat_%s_fix", gfix_type)
+cur_timer = timer("save_" .. colmat_str)
+colmat_gfix_file = get_colmat_gfix_file(cfg_key, gfix_type)
+os.mkdir_path(dirname(colmat_gfix_file))
+save_qdpc_colmat(L, g, colmat_gfix_file, colmat_str, colmat_str, "single")
+cur_timer("done")
+
+ufix = gauge_transform_U(g, u)
+
+-- report_gauge(ufix)
+
+gauge_str = string.format("gauge_%s_fix", gfix_type)
+cur_timer = timer("save_" .. gauge_str)
+gauge_gfix_file = get_gauge_gfix_file(cfg_key, gfix_type)
+os.mkdir_path(dirname(gauge_gfix_file))
+save_qdpc_colmat(L, ufix, gauge_gfix_file, gauge_str, gauge_str, "single")
+cur_timer("done")
+qcd.qprof_print()
+tot_timer("done")

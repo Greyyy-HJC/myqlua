@@ -1,0 +1,1209 @@
+-- IMPLEMENTATION OF FUNCTIONS ACTING ON ARRAYS
+-- such as 
+-- * 5D FERMIONS
+-- 
+-- TODO 
+-- * functions like scale, add, etc should be available for any reasonable arrays 
+--   (vectors, matrices, etc)
+-- * extend latvec functions to operate on tables (non-numeric keys) but check that sets of keys match for all arg
+
+require 'gauge'
+
+latvec = rawget(_G, 'latvec') or {}
+
+-----------------------------------------------------------------------------
+-- conversion between fields and lists
+-----------------------------------------------------------------------------
+function latvec.dp2dfl(dp, opt)
+  opt = opt or {}
+  local Nc = opt.Nc or 3
+  local Ns = opt.Ns or 4
+  assert(dp:colors() == Nc)
+  local dfl = {}
+  for jc = 0, Nc-1 do for js = 0, Ns-1 do 
+    dfl[1 + js + Ns*jc] = dp[{c=jc,d=js}]
+  end end
+  return dfl
+end
+
+function latvec.dfl2dp(dfl, opt)
+  opt = opt or {}
+  local Nc = opt.Nc or 3
+  local Ns = opt.Ns or 4
+  assert(#dfl == Nc * Ns)
+  local dp = dfl[1].lattice:DiracPropagator()
+  assert(dfl[1]:colors() == Nc)
+  for jc = 0, Nc-1 do for js = 0, Ns-1 do 
+    dp[{c=jc,d=js}] = dfl[1 + js + Ns*jc]
+  end end
+  return dp
+end
+
+function latvec.dp2cml(dp, opt)
+  local L = dp.lattice
+  opt = opt or {}
+  local Nc = opt.Nc or 3
+  local Ns = opt.Ns or 4
+  assert(dp:colors() == Nc)
+  local cml = {}
+  for is = 0, Ns-1 do for js = 0, Ns-1 do 
+    cml[1 + Ns*is + js] = L:ColorMatrix()
+  end end
+  for jc = 0, Nc-1 do for js = 0, Ns-1 do
+    local df = dp[{c=jc,d=js}]
+    for ic = 0, Nc-1 do for is = 0, Ns-1 do
+      cml[1 + Ns*is + js][{a=ic,b=jc}] = df[{c=ic,d=is}]
+    end end
+  end end
+  return cml
+end
+
+function latvec.cml2dp(cml, opt)
+  opt = opt or {}
+  local Nc = opt.Nc or 3
+  local Ns = opt.Ns or 4
+  assert(cml[1]:colors() == Nc)
+  assert(Ns^2 == #cml)
+  local L = cml[1].lattice
+  local dp = L:DiracPropagator()
+  for jc = 0, Nc-1 do for js = 0, Ns-1 do
+    local df = L:DiracFermion()
+    for ic = 0, Nc-1 do for is = 0, Ns-1 do
+      df[{c=ic,d=is}] = cml[1 + Ns*is + js][{a=ic,b=jc}]
+    end end
+    dp[{c=jc,d=js}] = df
+  end end
+  return dp
+end
+
+-----------------------------------------------------------------------------
+-- random fields
+-- TODO move elsewhere; setup?
+-----------------------------------------------------------------------------
+function make_random_SUn_gauge(S)
+  local L = S.lattice
+  local gauge_u = {}
+  for mu = 0, #L-1 do
+    gauge_u[1+mu] = toSUn(S:gaussian_ColorMatrix())
+  end
+  return gauge_u
+end
+function make_random_dirprop_5d(S, L5)
+  local dp5 = {}
+  for i = 1, L5 do
+    dp5[i] = S:gaussian_DiracPropagator()
+  end
+  return dp5
+end
+function make_random_dirferm_5d(S, L5)
+  local df5 = {}
+  for i = 1, L5 do
+    df5[i] = S:gaussian_DiracFermion()
+  end
+  return df5
+end
+
+-- another function to create a 5d fermion: this time, normalized
+function dw_random_latdirferm(L5, rnd)
+  local n = 0.
+  local res = {}
+  for i = 0, L5 - 1 do
+    res[1+i] = rnd:gaussian_DiracFermion()
+    n = n + res[1+i]:norm2()
+  end
+  n = math.sqrt(n)
+  for i = 0, L5 - 1 do
+    res[1+i] = res[1+i] / n
+  end
+  return res
+end
+
+function make_solver_general(solver_df, ...)
+  -- make a 4D DiracPropagator solver out of 4d DiracFermion solver
+  -- optional args are added first, then any optional args given 
+  --   to the new solver function
+  local args = {...}
+  local function solver_df_norm(x, ...)
+    local n_x = math.sqrt(x:norm2())
+    return n_x * solver_df(x / n_x, ...)
+  end
+  local gen_func = function(x, ...)
+    local al = {}   -- collect args
+    for _,a in iter.ordered_titems(args)  do al[#al+1] = a end
+    for _,a in iter.ordered_titems({...}) do al[#al+1] = a end
+    if 'lattice.dirac.fermion' == type(x) then 
+      return solver_df_norm(x, unpack(al))
+    elseif 'lattice.dirac.propagator' == type(x) then
+      local res = x.lattice:DiracPropagator()
+      -- TODO rewrite with dp2dfl, dfl2dp
+      for js = 0, 3 do for jc = 0, 2 do
+        res[{d=js, c=jc}] = solver_df_norm(x[{d=js, c=jc}], unpack(al))
+      end end
+      return res
+    else 
+      error(string.format('unknown arg type for solver "%s"', type(x)))
+    end
+    -- TODO add list of props?
+  end
+  return gen_func
+end
+-- TODO similar function for 5d solver
+
+
+-- create a (scaled) copy of anything except string, lattice, ???
+function latvec.scal_nontable_(v, scal)
+  assert('table' ~= type(v))
+  if (   'nil'      == type(v)
+      or 'string'   == type(v) 
+      or 'lattice'  == type(v)) then 
+    if (nil ~= scal) then
+      error(string.format("cannot scale %s", type(v)))
+    end
+    return v 
+  end
+  scal = (scal or 1)
+  if     'lattice.int'             == type(v) then return scal * (v.lattice):Int(v)
+  elseif 'lattice.real'            == type(v) then return scal * (v.lattice):Real(v) 
+  elseif 'lattice.complex'         == type(v) then return scal * (v.lattice):Complex(v)
+  elseif 'lattice.color.vector'    == type(v) then return scal * (v.lattice):ColorVector(v) 
+  elseif 'lattice.color.matrix'    == type(v) then return scal * (v.lattice):ColorMatrix(v)
+  elseif 'lattice.dirac.fermion'   == type(v) then return scal * (v.lattice):DiracFermion(v) 
+  elseif 'lattice.dirac.propagator'== type(v) then return scal * (v.lattice):DiracPropagator(v)
+  elseif('number'                  == type(v) 
+      or 'complex'                 == type(v))then return scal * v
+  else
+    error(string.format("%s : unsupported type", type(v)))
+    return nil
+  end
+end
+
+-- create deep copy of a latvec (of lattice oblects, numbers, etc)
+-- TODO clarify semantics wrt deep-copying of keys; are keys assumed immutable?
+function latvec.copy(obj, scal, seen, scal_nontable_func)
+  if 'table' == type(obj) then
+    -- shamelessly copied from stackoverflow 
+    -- [https://stackoverflow.com/questions/640642/how-do-you-copy-a-lua-table-by-value]
+    if seen and seen[obj] then return seen[obj] end
+    local s = seen or {}
+    local obj_mt = getmetatable(obj)
+    local res = {}
+    setmetatable(res, obj_mt)
+    s[obj] = res
+    for k, v in iter.ordered_titems(obj) do 
+      res[latvec.copy(k, nil, s)] = latvec.copy(v, scal, s, scal_nontable_func)
+    end
+    return res
+  end
+  return (scal_nontable_func or latvec.scal_nontable_)(obj, scal)
+end
+
+function latvec.fromfunction(dim, func, arg_list)
+  -- create N-dim table of shape dim, N=#dim, calling func as
+  --    a[1+i1][1+i2]...[i+iN] = func(arg[1], arg[2], ..., argM, i1,...,iN)
+  if 'number' == type(dim) then 
+    return latvec.fromfunction({dim}, func, arg_list)
+  elseif 'table' == type(dim) then
+    if 0 == #dim then return {} end
+    local cnt = dim[1]
+    if ('number' ~= type(cnt) or 0 ~= cnt%1) then
+      error("dim must be an integer or a table of integers")
+    end
+    local arg_list  = arg_list or {}
+    local na = #arg_list
+    -- copy args and indices in the tail
+    local newarg_list = {}
+    for s = 1, na do newarg_list[s] = arg_list[s] end 
+    local res = {}
+    if 1 < #dim then 
+      local newdim = {}
+      for s = 1, #dim - 1 do newdim[s] = dim[s+1] end -- copy dims except [1]
+      for i = 1, cnt do
+        newarg_list[1 + na] = i - 1  -- enumerating from zero
+        res[i] = latvec.fromfunction(newdim, func, newarg_list)
+      end
+    else
+      assert(1 == #dim)
+      for i = 1, cnt do
+        newarg_list[1 + na] = i - 1  -- enumerating from zero
+        res[i] = func(unpack(newarg_list))
+      end
+    end
+    return res
+  else
+    error("dim must be an integer or a table of integers")
+  end
+end
+
+function latvec.const(dim, a)
+  return latvec.fromfunction(dim, function() return latvec.copy(a) end)
+end
+
+function make_list_const(a, len)
+  printf("make_list_const(a, len): OBSOLETE; use latvec.const(len, a)\n")
+  return latvec.const(len, a)
+end
+
+function latvec.asarray1d(x, x_len, opt)
+  opt   = opt or {}
+  local func  = opt.func
+  -- acts ONLY on lists, stripping all non-index keys
+  -- if table, check length
+  -- if not a table, make a constant table
+  -- NOTE x's are not deep-copied, so changing one element of the result 
+  -- may have side effects; TODO make a deep copy version ; depends on having 
+  -- a function implementing universal deep copy
+  if 'table' == type(x) then
+    if x_len and #x ~= x_len then
+      error(string.format("latvec size mismatch: len(%s) != %d", tostring(x), x_len))
+    end
+    if func then
+      local y = {}
+      for i,xi in ipairs(x) do y[i] = func(xi) end
+      return y
+    else return x end
+  elseif nil ~= x then
+    local y = {}
+    if func then 
+      for s = 1, x_len do y[s] = func(x) end
+    else
+      for s = 1, x_len do y[s] = x end
+    end
+    return y
+  else error('bad argument #1') end
+end
+
+function latvec.lattice(v, L)
+  -- check that all objects in latvec has the same lattice type v
+  -- L is nil, extract it from v
+  -- return the lattice object
+  if 'table' == type(v) then
+    if #v <= 0 then return nil end
+    for i = 0, #v-1 do 
+      -- skip empty sub-tables
+      if 'table' ~= type(v[1+i]) or 0 < #v[1+i] then 
+        local this_L = latvec.lattice(v[1+i], L)
+        L = L or this_L
+        assert(this_L == L)
+      end
+    end
+    return L
+  else
+    return v.lattice
+  end
+end
+
+function latvec.gather(gx, what, v)
+  if 'table' == type(v) then
+    local c = {}
+    for i = 0, #v-1 do
+      c[1+i] = latvec.gather(gx, what, v[1+i])
+    end
+    return c
+  else 
+    if     'add' == what then return gx:add(v)
+    elseif 'mul' == what then return gx:mul(v)
+    elseif 'min' == what then return gx:min(v)
+    elseif 'max' == what then return gx:max(v)
+    elseif 'or'  == what then return gx['or'](v)
+    elseif 'and' == what then return gx['and'](v)
+    elseif 'xor' == what then return gx:xor(v) end
+  end
+end
+
+function latvec.scatter(sx, v) return latvec.apply(sx, v) end
+
+function latvec.zero_nontable_(v)
+  assert('table' ~= type(v))
+  if (   'nil'      == type(v)
+      or 'string'   == type(v) 
+      or 'lattice'  == type(v)) then 
+      error(string.format("cannot have zero %s", type(v)))
+    return nil
+  end
+  if     'number'                  == type(v) then return 0
+  elseif 'complex'                 == type(v) then return complex(0,0)
+  else return v:zero_like() end
+end
+function latvec.zero_like(obj, seen, zero_nontable_func)
+  -- XXX keys are not copied! better not have mutable keys
+  local f_nt = zero_nontable_func or latvec.zero_nontable_
+  if 'table' == type(obj) then
+    -- shamelessly copied from stackoverflow 
+    -- [https://stackoverflow.com/questions/640642/how-do-you-copy-a-lua-table-by-value]
+    if seen and seen[obj] then return seen[obj] end
+    local s = seen or {}
+    local obj_mt = getmetatable(obj)
+    local res = {}
+    setmetatable(res, obj_mt)
+    s[obj] = res
+    for k, v in iter.ordered_titems(obj) do 
+      res[k] = latvec.zero_like(v, s, zero_nontable_func)
+    end
+    return res
+  end
+  return f_nt(obj)
+end
+
+function latvec.random_nontable_(v, rnd)
+  assert('table' ~= type(v))
+  if (   'nil'      == type(v)
+      or 'string'   == type(v) 
+      or 'lattice'  == type(v)) then 
+      error(string.format("cannot have zero %s", type(v)))
+    return nil
+  end
+  if     'number'                  == type(v) then 
+    return 1. - 2.*math.random()
+  elseif 'complex'                 == type(v) then 
+    return complex(1. - 2.*math.random(), 1. - 2.*math.random())
+  elseif 'lattice.real'            == type(v) then return rnd:gaussian_Real() 
+  elseif 'lattice.complex'         == type(v) then return rnd:gaussian_Complex()
+  elseif 'lattice.color.vector'    == type(v) then return rnd:gaussian_ColorVector() 
+  elseif 'lattice.color.matrix'    == type(v) then return rnd:gaussian_ColorMatrix()
+  elseif 'lattice.dirac.fermion'   == type(v) then return rnd:gaussian_DiracFermion() 
+  elseif 'lattice.dirac.propagator'== type(v) then return rnd:gaussian_DiracPropagator()
+  else
+    error(string.format("%s : unsupported type", type(v)))
+    return nil
+  end
+end
+
+function latvec.random_like(obj, rnd, seen)
+  -- XXX keys are not copied! better not have mutable keys
+  if 'table' == type(obj) then
+    -- shamelessly copied from stackoverflow 
+    -- [https://stackoverflow.com/questions/640642/how-do-you-copy-a-lua-table-by-value]
+    if seen and seen[obj] then return seen[obj] end
+    local s = seen or {}
+    local obj_mt = getmetatable(obj)
+    local res = {}
+    setmetatable(res, obj_mt)
+    s[obj] = res
+    for k, v in iter.ordered_titems(obj) do 
+      res[k] = latvec.random_like(v, rnd, s)
+    end
+    return res
+  else 
+    return latvec.random_nontable_(obj, rnd)
+  end
+end
+
+-- generalize standard ops to tables, in which ops are applied to items
+function latvec.norm2(v)
+  if 'table' == type(v) then
+    local nr2 = 0.
+    for i = 0, #v-1 do 
+      nr2 = nr2 + latvec.norm2(v[1+i])
+    end
+    return nr2
+  else
+    return v:norm2()
+  end
+end
+
+function latvec.conj_nontable_(v)
+  assert('table' ~= type(v))
+  if 'number' == type(v) then return v
+  else return v:conj()
+  end
+end
+function latvec.conj(v)
+  if 'table' == type(v) then
+    local c = {}
+    for i = 0, #v-1 do
+      c[1+i] = latvec.conj(v[1+i])
+    end
+    return c
+  else return latvec.conj_nontable_(v) end
+end
+
+function latvec.adjoin(v)
+  if 'table' == type(v) then
+    local c = {}
+    for i = 0, #v-1 do
+      c[1+i] = latvec.adjoin(v[1+i])
+    end
+    return c
+  else return v:adjoin() end
+end
+
+function latvec.shift(v, mu, dir)
+  if 'table' == type(v) then
+    local res = {}
+    for i = 0, #v-1 do
+      res[1+i] = latvec.shift(v[1+i], mu, dir)
+    end
+    return res
+  else return v:shift(mu, dir) end
+end
+function latvec.add(a, b)
+  if 'table' == type(a) then
+    assert ('table' == type(b))
+    assert (#a == #b)
+    local c = {}
+    for i = 0, #a-1 do
+      c[1+i] = latvec.add(a[1+i], b[1+i])
+    end
+    return c
+  else return (a + b) end
+end
+function latvec.sum(...)
+  local ll  = {...}
+  local n   = #ll
+  if n <= 0 then return {} end
+  local c = ll[1]
+  for i = 2, n do
+    c = latvec.add(c, ll[i])
+  end
+  return c
+end
+function latvec.sub(a, b)
+  if 'table' == type(a) then
+    assert ('table' == type(b))
+    assert (#a == #b)
+    local c = {}
+    for i = 0, #a-1 do
+      c[1+i] = latvec.sub(a[1+i], b[1+i])
+    end
+    return c
+  else return (a - b) end
+end
+function latvec.scal_right(a, sc)    -- return a*sc
+  if 'table' == type(a) then
+    local c = {}
+    for i = 0, #a-1 do
+      c[1+i] = latvec.scal_right(a[1+i], sc)
+    end
+    return c
+  else return (a * sc) end
+end
+function latvec.scal_left(sc, a)     -- return sc*a
+  if 'table' == type(a) then
+    local c = {}
+    for i = 0, #a-1 do
+      c[1+i] = latvec.scal_left(sc, a[1+i])
+    end
+    return c
+  else return (sc * a) end
+end
+function latvec.axpy(a, x, y)     -- return a*x + y
+  if 'table' == type(x) then
+    assert ('table' == type(y))
+    assert (#x == #y)
+    local c = {}
+    for i = 0, #x-1 do
+      c[1+i] = latvec.axpy(a, x[1+i], y[1+i])
+    end
+    return c
+  else return (a*x + y) end
+end
+function latvec.scalsum_left(...) -- (a0,x0,a1,x1,...) -> a0*x0+a1*x1+... 
+  local ll = {...}
+  assert (0 == #ll % 2)
+  if #ll <= 0 then return 0 end
+  local res = latvec.scal_left(ll[1], ll[2])
+  for i = 1, #ll / 2 - 1 do
+    res = latvec.axpy(ll[1+2*i], ll[2+2*i], res)
+  end
+  return res
+end
+function latvec.locvdot(x, y)
+  -- compute local scalar product x^H.y (return complex field)
+  if 'table' == type(x) then
+    assert ('table' == type(y))
+    assert (#x == #y)
+    local d = {}
+    for i = 0, #x-1 do
+      d[1+i] = latvec.locvdot(x[1+i], y[1+i])
+    end
+    return d
+  else return qcd.dot(x, y) end
+end
+function latvec.tocomplex(v) 
+  return latvec.apply(function(x) return x.lattice:Complex(x) end, v)
+end
+function latvec.real(v) 
+  return latvec.apply(function(x) return x:real() end, v)
+end
+function latvec.imag(v) 
+  return latvec.apply(function(x) return x:imag() end, v)
+end
+--function latvec.real(x)
+--  if 'table' == type(x) then
+--    local d = {}
+--    for i = 0, #x-1 do
+--      d[1+i] = latvec.real(x[1+i])
+--    end
+--    return d
+--  else return x:real() end
+--end
+--function latvec.imag(x)
+--  if 'table' == type(x) then
+--    local d = {}
+--    for i = 0, #x-1 do
+--      d[1+i] = latvec.imag(x[1+i])
+--    end
+--    return d
+--  else return x:imag() end
+--end
+function latvec.locnorm2(x)
+  return latvec.real(latvec.locvdot(x, x))
+end
+function latvec.vdot(x, y) 
+  -- scalar product (return complex global)
+  if 'table' == type(x) then
+    assert ('table' == type(y))
+    assert (#x == #y)
+    local d = 0.
+    for i = 0, #x-1 do
+      d = d + latvec.vdot(x[1+i], y[1+i])
+    end
+    return d
+  else return qcd.dot(x, y):sum() end
+end
+function latvec.ortho(x, y_b) -- return ||x - (y_b . x)*y_b||
+  local d = latvec.vdot(y_b, x) / latvec.norm2(y_b)
+  local x1= latvec.axpy(-d, y_b, x)
+  return latvec.scal_left(math.sqrt(1. / latvec.norm2(x1)), x1)
+end
+
+-- set functions
+function latvec.set_zero(a)
+  if 'table' == type(a) then
+    for i = 0, #a - 1 do
+      latvec.set_zero(a[1+i])
+    end
+  else a:set_zero() end
+end
+function latvec.set(a, b)   -- set a <- b
+  if 'table' == type(a) then
+    assert ('table' == type(b))
+    assert (#a == #b)
+    for i = 0, #a - 1 do
+      latvec.set(a[1+i], b[1+i])
+    end
+  else a:set(b) end
+end
+function latvec.apply(func, a, ...)
+  -- TODO extend to many 'a' args?
+  if 'table' == type(a) then
+    local res = {}
+    for i = 0, #a - 1 do
+      res[1+i] = latvec.apply(func, a[1+i], ...)
+    end
+    return res
+  else return func(a, ...) end
+end
+
+-- cmp functions
+-- TODO support  one argument to be a global number
+-- TODO (some distant day) cmp of broadcastable nested arrays (similar to NumPy)
+function latvec.eq(a, b)
+  if 'table' == type(a) then
+    assert ('table' == type(b))
+    assert (#a == #b)
+    local c = {}
+    for i = 0, #a-1 do
+      c[1+i] = latvec.eq(a[1+i], b[1+i])
+    end
+    return c
+  else return qcd.eq(a, b) end
+end
+function latvec.ne(a, b)
+  if 'table' == type(a) then
+    assert ('table' == type(b))
+    assert (#a == #b)
+    local c = {}
+    for i = 0, #a-1 do
+      c[1+i] = latvec.ne(a[1+i], b[1+i])
+    end
+    return c
+  else 
+    printf("qcd.ne(%s, %s)\n", tostring(a), tostring(b))
+    return qcd.ne(a, b) 
+  end
+end
+function mask_all(a)
+  return 0 == qcd.eq(a, 0):sum()
+end
+function mask_any(a)
+  return 0 ~= qcd.ne(a, 0):sum()
+end
+function latvec.all(a)
+  -- compute "and" function over a (nested) array of Int(0->false, 1->true)
+  if 'table' == type(a) then
+    local c = true
+    for i = 0, #a-1 do
+      c = c and latvec.all(a[1+i])
+    end
+    return c
+  else return mask_all(a) end
+end
+function latvec.any(a)
+  -- compute "and" function over a (nested) array of Int(0->false, 1->true)
+  if 'table' == type(a) then
+    local c = false
+    for i = 0, #a-1 do
+      -- hopefully summation does not overflow the int type
+      c = c or latvec.any(a[1+i])
+    end
+    return c
+  else return mask_any(a) end
+end
+function field_close(x, y, rtol, atol)
+  if nil == rtol then rtol = 1e-5 end
+  if nil == atol then atol = 1e-8 end
+  local x2py2 = (qcd.dot(x,x) + qcd.dot(y,y)):real()
+  local xmy = x - y
+  local xmy2= qcd.dot(xmy, xmy):real()
+  local aclose = qcd.le(xmy2, atol*atol)
+  local rclose = qcd.le(xmy2, rtol*rtol*x2py2)
+  return qcd.ne(aclose * rclose, 0) -- aclose and rclose
+end
+function field_allclose(x, y, rtol, atol)
+  return mask_all(field_close(x, y, rtol, atol))
+end
+
+function latvec.close(x, y, rtol, atol)
+  -- return latvec.mask
+  if 'table' == type(x) then
+    assert ('table' == type(y))
+    assert (#x == #y)
+    local d = {}
+    for i = 0, #x-1 do
+      d[1+i] = latvec.close(x[1+i], y[1+i], rtol, atol)
+    end
+    return d
+  else return field_close(x, y, rtol, atol) end
+end
+function latvec.allclose(x, y, rtol, atol)
+  -- return global bool
+  return latvec.all(latvec.close(x, y, rtol, atol))
+end
+
+--    ss            subset with meaningful information
+--    ss_v1, ss_v2  precond. vectors defined only on subsets
+--    res[ss] <- ss_v1, res[not ss] <- ss_v2
+
+eopc_shift2nd_mu = 0      -- TODO make external param?
+function latvec.eopc_pair_to_single(ss, ss_v1, ss_v2)
+  local res = latvec.shift(ss_v2, eopc_shift2nd_mu, "from_backward")
+  ss:where(latvec.set, res, ss_v1)
+  return res
+end
+function latvec.eopc_single_to_pair(ss, v12)
+  local ss_v1 = latvec.copy(v12, 0.)
+  ss:where(latvec.set, ss_v1, v12)
+  local ss_v2 = latvec.copy(v12, 0.)
+  local v12_sh = latvec.shift(v12, eopc_shift2nd_mu, "from_forward")
+  ss:where(latvec.set, ss_v2, v12_sh)
+  return ss_v1, ss_v2
+end
+function latvec.print_eo_norm2(v, title)      -- for debug
+  local L = latvec.lattice(v)
+  if nil == title then title = "#" end
+  printf("norm2(%s)=%e = %e[even] + %e[odd]\n", 
+         title, latvec.norm2(v),
+         L:Subset("even"):where(latvec.norm2, v),
+         L:Subset( "odd"):where(latvec.norm2, v))
+end
+
+
+function latvec.cosangle(a, b)
+  local a2 = latvec.norm2(a)
+  local b2 = latvec.norm2(b)
+  if a2 <= 0. or b2 <= 0. then return nil end
+  return latvec.vdot(a, b) / math.sqrt(a2 * b2)
+end
+function latvec.cosangle_abs(a, b)
+  local ca = latvec.cosangle(a,b)
+  if nil == ca then return nil end
+  if type(ca) == 'number' then return math.abs(ca)
+  else return ca:abs() end
+end
+function latvec.cosangle_arg(a, b)
+  local ca = latvec.cosangle(a,b)
+  if nil == ca then return nil end
+  if type(ca) == 'number' then 
+    if ca < 0 then return math.pi
+    else return 0. end
+  else return math.atan2(ca:imag(), ca:real()) end
+end
+function latvec.cosangle_cosarg(a, b)
+  local ca = latvec.cosangle(a,b)
+  if nil == ca then return nil end
+  return ca:real() / ca:abs()
+end
+function latvec.cosangle_sinarg(a, b)
+  local ca = latvec.cosangle(a, b)
+  if nil == ca then return nil end
+  return ca:imag() / ca:abs()
+end
+function latvec.print_cmp(a, b, title)
+  local ca = latvec.cosangle(a, b)
+  if nil == ca then 
+    printf('latvec.print_cmp: %s: nil\n', title)
+  else
+    printf('latvec.print_cmp: %s: |a/b|=%.16e  a^b=polar(%.16f,%.16f)\n',
+           tostring(title), math.sqrt(latvec.norm2(a) / latvec.norm2(b)), 
+           latvec.cosangle_abs(a, b),
+           latvec.cosangle_arg(a, b))
+  end
+end
+function latvec.print_fpclassify(r, opt) 
+  opt = opt or {}
+  local tit = opt.tit or tostring(r)
+  local n_tot     = r.lattice:volume()
+  local n_zero    = qcd.eq(r, 0):sum()
+  local n_nan     = r:isnan():sum()
+  local n_inf     = r:isinf():sum()
+  local n_min_abs = 0
+  local n_max_abs = 0
+  if nil ~= opt.min_abs then n_min_abs = qcd.lt(r, opt.min_abs):sum() end
+  if nil ~= opt.max_abs then n_max_abs = qcd.gt(r, opt.max_abs):sum() end
+  if opt.verbose then
+    if 0 < n_zero then printf("%s: %d/%d Zeros\n", tit, n_zero, n_tot) end
+    if 0 < n_nan  then printf("%s: %d/%d NaNs\n", tit, n_nan, n_tot) end
+    if 0 < n_inf  then printf("%s: %d/%d Infs\n", tit, n_inf, n_tot) end
+    if 0 < n_min_abs then printf("%s: %d/%d below MIN=%e\n", tit, n_min_abs, n_tot, opt.min_abs) end
+    if 0 < n_max_abs then printf("%s: %d/%d above MAX=%e\n", tit, n_max_abs, n_tot, opt.max_abs) end
+  end
+  return ((n_zero < n_tot) and (0 == n_nan) and (0 == n_inf) 
+          and (0 == n_min_abs) and (0 == n_max_abs))
+end
+function latvec.rdiff(a,b) -- compute 2*|a - b| / (|a| + |b|)
+  local a_nrm = math.sqrt(latvec.norm2(a))
+  local b_nrm = math.sqrt(latvec.norm2(b))
+  local amb_nrm  = math.sqrt(latvec.norm2(latvec.axpy(-1., a, b)))
+  if 0. == a_nrm and 0. == b_nrm then return 0.
+  else return 2.*amb_nrm / (a_nrm + b_nrm) end
+end
+  
+
+
+-- operator definitions
+-- site-hopping part of the Wilson operator (mind the sign)
+--    d       fermion
+--    u       gauge field
+function latvec.op_xwilson(d, u, is_dag) 
+  return latvec.apply(
+      function(x)return qcd.xwilson(0., 1., u, x, {dag=is_dag})end, d)
+end
+function latvec.op_xwilson_old(d, u, is_dag)
+  local L = latvec.lattice(d)
+  latvec.lattice(u, L)
+  local res
+  if 'table' == type(d) then
+    res = {}
+    for s = 0, #d - 1 do
+      res[1+s] = latvec.op_xwilson_old(d[1+s], u, is_dag)
+    end
+  else
+    res = nil
+    for mu=0, #L - 1 do
+      local y 
+      if is_dag 
+      then y = (  .5*(1. + gamma{mu=mu}) * (u[1+mu] * d:shift(mu, "from_forward"))
+                + .5*(1. - gamma{mu=mu}) * (u[1+mu]:adjoin() * d):shift(mu, "from_backward"))
+      else y = (  .5*(1. - gamma{mu=mu}) * (u[1+mu] * d:shift(mu, "from_forward"))
+                + .5*(1. + gamma{mu=mu}) * (u[1+mu]:adjoin() * d):shift(mu, "from_backward"))
+      end
+      if nil == res then res = y else res = res + y end
+    end
+  end
+  return res
+end
+-- flavor-hopping part of the domain wall operator
+--    d     5d fermion = table{DiracFermion,...}
+--    mf    chiral fermion mass
+--    dag   if not nil, apply 
+-- TODO write C-function
+function latvec.op_x5(d, mf, is_dag)
+  assert('table' == type(d))
+  local res = {}
+  if is_dag then
+    res[1] = .5*(1 + gamma{mu=5}) * d[2]  - mf * .5*(1 - gamma{mu=5}) * d[#d]
+    for s = 1, #d - 2 do
+      res[1+s] = .5*(1 + gamma{mu=5}) * d[2+s] + .5*(1 - gamma{mu=5}) * d[s]
+    end
+    res[#d] = -mf * .5*(1 + gamma{mu=5}) * d[1]  + .5*(1 - gamma{mu=5}) * d[#d-1]
+  else
+    res[1] = .5*(1 - gamma{mu=5}) * d[2]  - mf * .5*(1 + gamma{mu=5}) * d[#d]
+    for s = 1, #d - 2 do
+      res[1+s] = .5*(1 - gamma{mu=5}) * d[2+s] + .5*(1 + gamma{mu=5}) * d[s]
+    end
+    res[#d] = -mf * .5*(1 - gamma{mu=5}) * d[1]  + .5*(1 + gamma{mu=5}) * d[#d-1]
+  end
+  return res
+end
+
+function latvec.op_clover(d, g_clover, is_dag)
+  -- compute clover term
+  --    = Sum_{mu!=nu} i*gamma{mu}*gamma{nu}*g[mu][nu] 
+  --    = Sum_{mu,nu} sigma_{mu,nu} G_{mu,nu}
+  --  g   table : [mu][nu] -> cloverG{mu,nu}
+
+  local L = latvec.lattice(g_clover)
+  latvec.lattice(d, L)
+  if is_dag then g_clover = latvec.adjoin(g_clover) end
+  local res = latvec.zero_like(d)
+  for i = 0, #L-1 do
+    for j = 0, #L - 1 do
+      if i ~= j then
+        local s_ij = complex(0,1) * gamma({mu=i}) * gamma({mu=j})
+        res = latvec.scalsum_left(
+                      1,    res,
+                      s_ij, latvec.scal_left(g_clover[1+i][1+j], d))
+      end
+    end
+  end
+  return res
+end
+
+-- Wilson Dslash 
+-- XXX check conventions for the Mw sign; 
+-- XXX agree up to a factor with qcd.Clover(..):D (== 2*kappa*latvec.dslash_wilson, 2*kappa=1/(4+Mw) )
+function latvec.dslash_wilson(d, u, Mw, is_dag)
+  return latvec.apply(function(x)return qcd.xwilson(4. + Mw, -1., u, x, {dag=is_dag})end, d)
+end
+function latvec.dslash_wilson_bcderiv1(mu, d, u, is_dag)
+  return latvec.scal_left(-1., latvec.apply(
+        function(x)return qcd.xwilson_bcderiv1(mu, u, x, {dag=is_dag})end, 
+        d))
+end
+function latvec.dslash_wilson_bcderiv2(mu, d, u, is_dag)
+  return latvec.scal_left(-1., latvec.apply(
+        function(x)return qcd.xwilson_bcderiv2(mu, u, x, {dag=is_dag})end,
+        d))
+end
+function latvec.dslash_wilson_old(d, u, Mw, is_dag)
+  return latvec.scalsum_left(
+            4. + Mw,  d,
+            -1.,      latvec.op_xwilson_old(d, u, is_dag))
+end
+
+function latvec.dslash_wilson_clover(d, u, Mw, c_sw, g_clover, is_dag)
+  local L = latvec.lattice(u)
+--  g_clover = g_clover or clover_term_all(u) -- use only provided clover term
+  latvec.lattice(g_clover, L)
+  latvec.lattice(d, L)
+  -- use latvec.op_xwilson in case an array of dirferm is provided
+  return latvec.scalsum_left(
+            4. + Mw,  d,
+            -1.,      latvec.op_xwilson(d, u, is_dag),
+            -c_sw/4., latvec.op_clover(d, g_clover, is_dag))
+end
+
+function latvec.dslash_twisted(d, u, mq, mu, is_dag)
+  local L = latvec.lattice(u)
+  latvec.lattice(d, L)
+  if is_dag then 
+    mq =  complex(mq):conj()
+    mu = -complex(mu):conj()
+  end
+  -- TODO use qcd.xwilson
+  return latvec.scalsum_left(
+            4. + mq + complex(0,1) * mu * gamma{n=15},  d,
+            -1.,      latvec.op_xwilson(d, u, is_dag))
+end
+
+function latvec.op_mdwf_dminus(x, gauge_u, M5, c5, is_dag)
+  -- multiply (array of) fermions with Dminus operator from Moebius definition
+  -- if x is an array, then b5,c5 are 
+  -- TODO add conj version
+  assert(gauge_u and M5 and c5 and x)
+  local xw_x = latvec.op_xwilson(x, gauge_u, is_dag)
+  if 'table' == type(x) then
+    local L5 = #x
+    c5 = latvec.asarray1d(c5, L5)
+    if is_dag then c5 = latvec.conj(c5) end
+    local res = {}
+    for s = 0, L5 - 1 do
+      res[1+s] = latvec.scalsum_left(
+              c5[1+s] * (4. - M5) - 1., x[1+s],
+              -c5[1+s],                 xw_x[1+s])
+    end
+    return res
+  else
+    c5 = complex(c5)
+    if is_dag then c5 = c5:conj() end
+    return latvec.scalsum_left(
+            c5 * (4. - M5) - 1.,  x,
+            -c5,                  xw_x)
+  end
+end
+function latvec.op_mdwf_mdminus(x, gauge_u, M5, c5, is_dag)
+  -- multiply (array of) fermions with (-Dminus) operator from Moebius definition
+  -- optimization: keep ref (do not create/copy) field[s] if c5_s==0 or norm2==0
+  -- if x is an array, then b5,c5 may be too
+  -- TODO add conj version
+  assert(gauge_u and M5 and c5 and x)
+  if 'table' == type(x) then
+    local L5 = #x
+    c5 = latvec.asarray1d(c5, L5, {func=complex})
+    if is_dag then c5 = latvec.conj(c5) end
+    local res = {}
+    for s = 0, L5 - 1 do
+      if 0 == c5[1+s] or 0 == x[1+s]:norm2() then res[1+s] = x[1+s]
+      else res[1+s] = qcd.xwilson(1. - c5[1+s] * (4. - M5), c5[1+s], gauge_u, x[1+s], {dag=is_dag}) end
+    end
+    return res
+  else
+    if 0 == c5 or 0 == x:norm2() then return x
+    else 
+      c5 = complex(c5)
+      if is_dag then c5 = c5:conj() end
+      return qcd.xwilson(1. - c5 * (4. - M5), c5, gauge_u, x, {dag=is_dag}) 
+    end
+  end
+end
+
+
+
+-- DWF Dslash 
+--- XXX M5 sign conventions: Qlua(here and qcd.MDWF) == CPS != MDWF lib
+--    d     5d fermion = table{DiracFermion,...}
+--    u       gauge field
+function latvec.dslash_dwf(d, u, M5, mf, is_dag)
+  return latvec.scalsum_left(
+            5 - M5,   d,
+            -1.,      latvec.op_xwilson(d, u, is_dag),
+            -1.,      latvec.op_x5(d, mf, is_dag))
+end
+
+-- Moebius Dslash
+--- XXX M5 sign conventions: Qlua(here and qcd.MDWF) == CPS != MDWF lib
+--    d     5d fermion = table{DiracFermion,...}
+--    u       gauge field
+-- first index of latvec is DWF 'flavor'
+function latvec.dslash_moebius(d, u, M5, mf, b5_s, c5_s, is_dag)
+  local L5 = #d
+  b5_s = latvec.asarray1d(b5_s, L5, {func=complex})
+  c5_s = latvec.asarray1d(c5_s, L5, {func=complex})
+  if is_dag then
+    b5_s = latvec.conj(b5_s)
+    c5_s = latvec.conj(c5_s)
+    local y1 = {}
+    local y2 = {}
+    for s = 0, L5 - 1 do
+      local b5, c5 = b5_s[1+s], c5_s[1+s]
+      local xw_d = latvec.op_xwilson(d[1+s], u, is_dag)
+      y1[1+s] = latvec.scalsum_left(b5 * (4 - M5) + 1, d[1+s], -b5, xw_d)
+      y2[1+s] = latvec.scalsum_left(c5 * (4 - M5) - 1, d[1+s], -c5, xw_d)
+    end
+    return latvec.add(y1, latvec.op_x5(y2, mf, is_dag))
+  else
+    local x5_d = latvec.op_x5(d, mf, is_dag)
+    local res = {}
+    for s = 0, L5 - 1 do
+      local b5, c5 = b5_s[1+s], c5_s[1+s]
+      local bpcx5_d = latvec.scalsum_left(b5, d[1+s], c5, x5_d[1+s])
+      res[1+s] = latvec.scalsum_left(
+          b5 * (4 - M5) + 1., d[1+s],
+          c5 * (4 - M5) - 1., x5_d[1+s], 
+          -1.,                latvec.op_xwilson(bpcx5_d, u, is_dag))
+    end
+    return res
+  end
+end
+
+
+-------------------------------------------------------------------------------
+-- functions for derivative method 
+-------------------------------------------------------------------------------
+-- xwilson
+-- FIXME replace stubs with efficient functions
+if false then
+function qcd.xwilson_bcderiv1(mu, u, x, opt)
+  opt = opt or {}
+  local umu = u[1+mu]
+  local igp = complex(0,.5) * (1. + gamma{mu=mu})
+  local ign = complex(0,.5) * (1. - gamma{mu=mu})
+  if opt.dag 
+    then return (  igp * (umu * x:shift(mu, "from_forward"))
+                 - ign * (umu:adjoin() * x):shift(mu, "from_backward"))
+    else return (  ign * (umu * x:shift(mu, "from_forward"))
+                 - igp * (umu:adjoin() * x):shift(mu, "from_backward"))
+  end
+end
+function qcd.xwilson_bcderiv2(mu, u, x, opt)
+  opt = opt or {}
+  local umu = u[1+mu]
+  local mgp = -.5 * (1. + gamma{mu=mu})
+  local mgn = -.5 * (1. - gamma{mu=mu})
+  if opt.dag 
+    then return (  mgp * (umu * x:shift(mu, "from_forward"))
+                 + mgn * (umu:adjoin() * x):shift(mu, "from_backward"))
+    else return (  mgn * (umu * x:shift(mu, "from_forward"))
+                 + mgp * (umu:adjoin() * x):shift(mu, "from_backward"))
+  end
+end
+end 
+
+-- mdminus
+function latvec.op_mdwf_mdminus_bcderiv1(mu, x, u, c5, is_dag)
+  -- compute bc derivatlve 
+  --    Dslash^{;\mu}[U] . x = (d/da_\mu) Dslash[e^{i a_\mu} * U_{x,\mu}] . x
+  -- mu = 0..#L-1
+  -- multiply (array of) fermions with (-Dminus) operator from Moebius definition
+  -- optimization: keep ref (do not create/copy) field[s] if c5_s==0 or norm2==0
+  -- if x is an array, then b5,c5 may be too
+  -- TODO add conj version
+  if 'table' == type(x) then
+    local L5 = #x
+    c5 = latvec.asarray1d(c5, L5, {func=complex})
+    if is_dag then c5 = latvec.conj(c5) end
+    local res = {}
+    for s = 0, L5 - 1 do
+      if 0 == c5[1+s] or 0 == x[1+s]:norm2() then res[1+s] = latvec.zero_like(x[1+s])
+      else res[1+s] = c5[1+s] * qcd.xwilson_bcderiv1(mu, u, x[1+s], {dag=is_dag}) end
+    end
+    return res
+  else
+    if 0 == c5 or 0 == x:norm2() then return latvec.zero_like(x)
+    else 
+      c5 = complex(c5)
+      if is_dag then c5 = c5:conj() end
+      return c5 * qcd.xwilson_bcderiv1(mu, u, x, {dag=is_dag})
+    end
+  end
+end
+function latvec.op_mdwf_mdminus_bcderiv2(mu, x, u, c5, is_dag)
+  -- dir1 = 0..#L-1
+  -- multiply (array of) fermions with (-Dminus) operator from Moebius definition
+  -- optimization: keep ref (do not create/copy) field[s] if c5_s==0 or norm2==0
+  -- if x is an array, then b5,c5 may be too
+  -- TODO add conj version
+  if 'table' == type(x) then
+    local L5 = #x
+    c5 = latvec.asarray1d(c5, L5, {func=complex})
+    if is_dag then c5 = latvec.conj(c5) end
+    local res = {}
+    for s = 0, L5 - 1 do
+      if 0 == c5[1+s] or 0 == x[1+s]:norm2() then res[1+s] = latvec.zero_like(x[1+s])
+      else res[1+s] = c5[1+s] * qcd.xwilson_bcderiv2(mu, u, x[1+s], {dag=is_dag}) end
+    end
+    return res
+  else
+    if 0 == c5 or 0 == x:norm2() then return latvec.zero_like(x)
+    else 
+      c5 = complex(c5)
+      if is_dag then c5 = c5:conj() end
+      return c5 * qcd.xwilson_bcderiv2(mu, u, x, {dag=is_dag})
+    end
+  end
+end
+
+-- (z)Mobius 
+function latvec.dslash_moebius_bcderiv1(mu, x, u, mf, b5_s, c5_s, is_dag)
+  local L5 = #x
+  b5_s = latvec.asarray1d(b5_s, L5, {func=complex})
+  c5_s = latvec.asarray1d(c5_s, L5, {func=complex})
+  if is_dag then
+    b5_s = latvec.conj(b5_s)
+    c5_s = latvec.conj(c5_s)
+    local y1, y2 = {}, {}
+    for s = 0, L5 - 1 do
+      local xw_d = qcd.xwilson_bcderiv1(mu, u, x[1+s], {dag=is_dag})
+      y1[1+s] = -b5_s[1+s] * xw_d
+      y2[1+s] = -c5_s[1+s] * xw_d
+    end
+    return latvec.add(y1, latvec.op_x5(y2, mf, is_dag))
+  else
+    local x5_d = latvec.op_x5(x, mf, is_dag)
+    local res = {}
+    for s = 0, L5 - 1 do
+      local mbpcx5_d_s = -b5_s[1+s] * x[1+s] -c5_s[1+s] * x5_d[1+s]
+      res[1+s] = qcd.xwilson_bcderiv1(mu, u, mbpcx5_d_s, {dag=is_dag})
+    end
+    return res
+  end
+end
+function latvec.dslash_moebius_bcderiv2(mu, x, u, mf, b5_s, c5_s, is_dag)
+  local L5 = #x
+  b5_s = latvec.asarray1d(b5_s, L5, {func=complex})
+  c5_s = latvec.asarray1d(c5_s, L5, {func=complex})
+  if is_dag then
+    b5_s = latvec.conj(b5_s)
+    c5_s = latvec.conj(c5_s)
+    local y1, y2 = {}, {}
+    for s = 0, L5 - 1 do
+      local xw_d = qcd.xwilson_bcderiv2(mu, u, x[1+s], {dag=is_dag})
+      y1[1+s] = -b5_s[1+s] * xw_d
+      y2[1+s] = -c5_s[1+s] * xw_d
+    end
+    return latvec.add(y1, latvec.op_x5(y2, mf, is_dag))
+  else
+    local x5_d = latvec.op_x5(x, mf, is_dag)
+    local res = {}
+    for s = 0, L5 - 1 do
+      local mbpcx5_d = -b5_s[1+s] * x[1+s] -c5_s[1+s] * x5_d[1+s]
+      res[1+s] = qcd.xwilson_bcderiv2(mu, u, mbpcx5_d, {dag=is_dag})
+    end
+    return res
+  end
+end
+
+-- old-style aliases
+dp2dfl  = depr_warn(latvec.dp2dfl)
+dfl2dp  = depr_warn(latvec.dfl2dp)
+dp2cml  = depr_warn(latvec.dp2cml)
+cml2dp  = depr_warn(latvec.cml2dp)
+
+latvec_copy                     = depr_warn(latvec.copy)
+latvec_fromfunction             = depr_warn(latvec.fromfunction)
+latvec_const                    = depr_warn(latvec.const)
+latvec_asarray1d                = depr_warn(latvec.asarray1d)
+latvec_as_table                 = depr_warn(latvec.asarray1d)
+latvec_lattice                  = depr_warn(latvec.lattice)
+latvec_gather                   = depr_warn(latvec.gather)
+latvec_scatter                  = depr_warn(latvec.scatter)
+latvec_zeros_like               = depr_warn(latvec.zero_like)
+latvec_norm2                    = depr_warn(latvec.norm2)
+latvec_conj                     = depr_warn(latvec.conj)
+latvec_adjoin                   = depr_warn(latvec.adjoin)
+latvec_shift                    = depr_warn(latvec.shift)
+latvec_add                      = depr_warn(latvec.add)
+latvec_sum                      = depr_warn(latvec.sum)
+latvec_sub                      = depr_warn(latvec.sub)
+latvec_scal_right               = depr_warn(latvec.scal_right)
+latvec_scal_left                = depr_warn(latvec.scal_left)
+latvec_axpy                     = depr_warn(latvec.axpy)
+latvec_scalsum_left             = depr_warn(latvec.scalsum_left)
+latvec_locvdot                  = depr_warn(latvec.locvdot)
+latvec_tocomplex                = depr_warn(latvec.tocomplex)
+latvec_real                     = depr_warn(latvec.real)
+latvec_imag                     = depr_warn(latvec.imag)
+latvec_locnorm2                 = depr_warn(latvec.locnorm2)
+latvec_vdot                     = depr_warn(latvec.vdot)
+latvec_ortho                    = depr_warn(latvec.ortho)
+latvec_setzero                  = depr_warn(latvec.set_zero)
+latvec_set                      = depr_warn(latvec.set)
+latvec_apply                    = depr_warn(latvec.apply)
+latvec_eq                       = depr_warn(latvec.eq)
+latvec_ne                       = depr_warn(latvec.ne)
+latvec_all                      = depr_warn(latvec.all)
+latvec_any                      = depr_warn(latvec.any)
+latvec_close                    = depr_warn(latvec.close)
+latvec_allclose                 = depr_warn(latvec.allclose)
+latvec_eopc_pair_to_single      = depr_warn(latvec.eopc_pair_to_single)
+latvec_eopc_single_to_pair      = depr_warn(latvec.eopc_single_to_pair)
+latvec_cosangle                 = depr_warn(latvec.cosangle)
+latvec_cosangle_abs             = depr_warn(latvec.cosangle_abs)
+latvec_cosangle_arg             = depr_warn(latvec.cosangle_arg)
+latvec_cosangle_cosarg          = depr_warn(latvec.cosangle_cosarg)
+latvec_cosangle_sinarg          = depr_warn(latvec.cosangle_sinarg)
+latvec_rdiff                    = depr_warn(latvec.rdiff)
+print_latvec_cmp                = depr_warn(latvec.print_cmp)
+print_latvec_eo_norm2           = depr_warn(latvec.print_eo_norm2)
+
+latvec_op_xwilson               = depr_warn(latvec.op_xwilson)
+latvec_op_x5                    = depr_warn(latvec.op_x5)
+latvec_op_clover                = depr_warn(latvec.op_clover)
+latvec_op_mdwf_dminus           = depr_warn(latvec.op_mdwf_dminus)
+latvec_op_mdwf_mdminus          = depr_warn(latvec.op_mdwf_mdminus)
+latvec_op_wilson                = depr_warn(latvec.dslash_wilson)
+latvec_op_wilson_clover         = depr_warn(latvec.dslash_wilson_clover)
+latvec_op_twisted               = depr_warn(latvec.dslash_twisted)
+latvec_op_dslash_dwf            = depr_warn(latvec.dslash_dwf)
+latvec_op_dslash_moebius        = depr_warn(latvec.dslash_moebius)

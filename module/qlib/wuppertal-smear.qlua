@@ -1,0 +1,79 @@
+-- perform wuppertal smear of the fermion or propagator
+require 'stdlib'
+require 'bcderiv'
+
+
+function wuppertal_smear_old(U, alpha, N, G, axis)
+  printf("this function is deprecated\n")
+  local dim_smear
+  if axis and (0 <= axis) and (axis < #U) then dim_smear = #U - 1
+  else dim_smear = #U end
+  
+  local v = 1 + 2 * alpha * dim_smear
+  local b = alpha / v
+  local a = 1 / v + 2 * b * dim_smear
+  
+  for k = 1, N do
+    G = qcd.laplacian(a, b, U, G, axis)
+  end
+  return G
+end
+
+function wuppertal_smear_std(U, alpha, N, G, axis)
+  printf("this function is deprecated\n")
+  local dim_smear
+  if axis and (0 <= axis) and (axis < #U) then dim_smear = #U - 1
+  else dim_smear = #U end
+  
+  local v = 1 + 2 * alpha * dim_smear
+  local b = alpha / v
+  local a = 1 / v + 2 * b * dim_smear
+  
+  for k = 1, N do
+    G = qcd.laplacian_std(a, b, U, G, axis)
+  end
+  return G
+end
+  
+function wuppertal_smear(U, alpha, N, G, axis)
+  local dim_smear
+  if axis and (0 <= axis) and (axis < #U) then dim_smear = #U - 1
+  else dim_smear = #U end
+  
+  local v = 1 + 2 * alpha * dim_smear
+  local b = alpha / v
+  local a = 1 / v + 2 * b * dim_smear
+  
+  return qcd.laplacian_opt(a, b, U, G, {iter=N, skip_axis=axis})
+end
+
+function wuppertal_smear_bcderiv(U, alpha, N, G_ddmap, axis)
+  -- FIXME this is stub for 1-derivative only
+  local dim_smear
+  if axis and (0 <= axis) and (axis < #U) then dim_smear = #U - 1
+  else dim_smear = #U end
+  
+  local v = 1 + 2 * alpha * dim_smear
+  local b = alpha / v
+  local a = 1 / v + 2 * b * dim_smear
+
+  local ddlist = bcderiv.make_ddlist(G_ddmap)
+  assert(bcderiv.check_ddlist(ddlist))
+  if 1 == #ddlist then
+    local d0 = ddlist[1]
+    assert('' == d0)
+    local G  = assert(G_ddmap[d0])
+    return {[d0] = qcd.laplacian(a, b, U, G, {iter=N, skip_axis=axis})}
+  elseif 2 == #ddlist then
+    local d0, d1 = unpack(ddlist)
+    assert('' == d0)
+    assert(1 == #d1)
+    local mu_deriv = ({x=0,y=1,z=2,t=3})[d1]
+    local G   = assert(G_ddmap[d0])
+    local dG  = assert(G_ddmap[d1])
+    local sG, dsG = qcd.laplacian_bcderiv1(a, b, mu_deriv, U, G, dG, {iter=N, skip_axis=axis})
+    return {[d0] = sG, [d1] = dsG}
+  else error(string.format("wuppertal_smear_bcderiv: not implemented for ddlist=[%s]",
+        list_tostring(ddlist, "'%s'")))
+  end
+end

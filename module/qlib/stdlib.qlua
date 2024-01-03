@@ -1,0 +1,424 @@
+---- printf() and eprintf() available
+require 'iter'
+
+function printf(fmt, ...)
+  return io.stdout:write(string.format(fmt, ...))
+end
+
+function eprintf(fmt, ...)
+  return io.stderr:write(string.format(fmt, ...))
+end
+
+---- iterators
+-- interval [lo, hi]
+function interval(lo, hi)
+  local function f(_, x)
+    if x < hi then
+      return x + 1
+    else
+      return nil
+    end
+  end
+  return f, nil, lo - 1
+end
+
+-- exclude a value from an iterator
+function skip(excl, ...)
+  local f,fs,k = ...
+  local function g(gs, x)
+    local y = gs[1](gs[2], x)
+    if y == excl then
+      return g(gs, y)
+    else
+      return y
+    end
+  end
+  return g, {f, fs}, k
+end
+
+-- access an element of parsed XML
+function xml.get(x, n, ...)
+  if n == nil then
+     return x
+  end
+  if type(n) == "number" then
+     return x[n]
+  else
+    for i = 1, #x do
+       local y = x[i]
+       if type(y) == "table" and y["$tag"] == n then
+         return xml.get(y, ...)
+       end
+    end
+    return nil    
+  end
+end
+
+-- create an arithmetic sequence [lo ; hi) with `step'
+function range(lo, hi, step)
+  step = step or 1
+  assert(0 ~= step)
+  if nil == hi then lo, hi = 0, lo end
+  local res = {}
+  while (lo < hi) == (0 < step) do -- sic! logical XOR
+    table.insert(res, lo)
+    lo = lo + step
+  end
+  return res
+end
+
+
+require 'verbose'
+require 'pprint'
+require 'rcparam'
+
+
+-------------------------------------------------------------------------------
+-- FILE MANAGEMENT
+-------------------------------------------------------------------------------
+function basename(str)
+  -- XXX need to select only 1st value
+  local bn = str:gsub("/+$", ""):gsub("(.*)/([^/]+)", "%2") 
+  return bn
+end                 
+function dirname(str)
+  local s = str:gsub("/+$", "")
+  if s:match(".-/.-") then 
+    -- XXX need to select only 1st value
+    local dn = s:gsub("/([^/]+)$", "")
+    return dn
+  else return '.' end
+end
+
+
+-------------------------------------------------------------------------------
+-- MISCELLANEOUS FUNCTIONS
+-------------------------------------------------------------------------------
+
+-- complete "spatial" coord to full
+function space2full(c, t_axis, c_t)
+  local cfull = {}
+  if nil == c_t then cfull[1+t_axis] = 0
+  else cfull[1+t_axis] = c_t end
+  for d = 0, #c-1 do -- dimension of space-only is #c
+    if d < t_axis then cfull[1+d] = c[1+d]
+    else cfull[2+d] = c[1+d] end
+  end
+  return cfull
+end
+-- extract "spatial" coords from full
+function full2space(cfull, t_axis)
+  local cspace = {}
+  for d = 0, #cfull - 2 do  -- dimension of space-only is #cfull-1
+    if d < t_axis then cspace[1+d] = cfull[1+d]
+    else cspace[1+d] = cfull[2+d] end
+  end
+  return cspace
+end
+-- compute average and variance of a real field
+function calc_avg_var(f)
+  local L   = f.lattice
+  local avg = f:sum() / L:volume()
+  local var = (f - avg):norm2() / L:volume()
+  return avg, var
+end
+
+
+-------------------------------------------------------------------------------
+-- functions handling tables as Python lists (arrays), ignoring non-index keys
+-------------------------------------------------------------------------------
+function list(...) return {...} end       -- list "constructor"
+function list_copy(src)
+  local res = {}
+  for i,v in ipairs(src) do res[i] = v end
+  return res
+end
+function list_append(res, x) 
+  res[1+#res] = x 
+end
+function list_extend(res, t)
+  for ia, a in ipairs(t) do res[1+#res] = a end
+end
+function list_slice(tab, klist)
+  -- return slice tab[{k1,k2,...}] based on an ordered list of keys
+  local res = {}
+  for i,k in ipairs(klist) do res[1+#res] = tab[k] end
+  return res
+end
+function list_islice(tab, i0,i1,istep)
+  -- return slice tab[{ [i0 : i1 : istep) }]
+  local res = {}
+  for i,k in ipairs(range(i0,i1,istep)) do res[1+#res] = tab[k] end
+  return res
+end
+function list_map(func, list)
+  local res = {}
+  for i,v in pairs(list) do res[i] = func(v) end
+  return res
+end
+function list_equal(a,b)
+  if #a ~= #b then return false end
+  for i,v in ipairs(a) do
+    if v ~= b[i] then return false end
+  end
+  return true
+end
+-- find element in a list by value
+function list_index(clist, cx)
+  for i,c in ipairs(clist) do
+    if cx == c then return i end
+  end
+  return nil
+end
+-- join lists into a single list of values, ignoring keys
+function list_join(...)
+  local res = {}
+  for k, t in ipairs({...}) do list_extend(res, t) end
+  return res
+end
+function list_tostring(tab, fmt, sep)
+  fmt = fmt or '%s'
+  sep = sep or ', '
+  local res = {}
+  for i,v in ipairs(tab) do
+    list_append(res, string.format(fmt, v))
+  end
+  return table.concat(res, sep)
+end
+function list_scal(a, v)
+  local res = {}
+  for i, x in pairs(v) do res[i] = a*x end
+  return res
+end
+function list_reshape2d(l, s12)
+  local s1, s2 = unpack(s12)
+  assert(0 < s1)
+  assert(0 < s2)
+  assert(#l == s1 * s2)
+  local res = {}
+  local i = 1
+  for i1 = 1, s1 do 
+    local res1 = {}
+    for i2 = 1, s2 do 
+      res1[i2] = l[i] 
+      i = i + 1
+    end
+    res[i1] = res1
+  end
+  return res
+end
+function list_pad(l, n, a)
+  assert(nil ~= a) -- otherwise the loop will not stop
+  while #l < n do list_append(l, a) end
+end
+
+-------------------------------------------------------------------------------
+-- functions handling tables similarly to Python dicts
+-------------------------------------------------------------------------------
+table_map = list_map
+table_slice = list_slice
+function table_elem(i) return function(t)return t[i]end end  -- primitive for iterators
+
+function table_count(t)
+  local cnt = 0
+  for k,v in pairs(t) do cnt = cnt + 1 end
+  return cnt
+end
+
+-- deep-copy a table down to `level' 
+-- no non-table elements are duplicated (only copied by reference)
+-- examples : all the following will return a new table (a,b,c,d are tables)
+--    table_copy({a,b,{c,d}}, 0) will return {a,b,{c,d}}
+--    table_copy({a,b,{c,d}}, 1) will return {a1,b1,{c,d}} where a1,b1 are duplicates of a,b
+--    table_copy({a,b,{c,d}}, 2) will return {a1,b1,{c1,d1}} where a1,b1,c1,d1 are duplicates of a,b,c,d
+--    table_copy({a,b,{c,d}}) will complete deep-copy of the argument table
+function table_copy(tab, level)
+  local res = {}
+  for k,v in pairs(tab) do
+    if 'table' == type(v) then
+      if nil == level then res[k] = table_copy(v) 
+      elseif (0 < level) then res[k] = table_copy(v, level - 1)
+      else res[k] = v end
+    else res[k] = v end
+  end
+  return res
+end
+--copy_table = table_copy
+function table_equal(a, b, skip_nil)
+  skip_nil = skip_nil or false
+  for k,v in pairs(a) do
+    if (k ~= b[v] and (nil ~= b[v] or not skip_nil)) then return false end
+  end
+  for k,v in pairs(b) do
+    if (k ~= a[v] and (nil ~= a[v] or not skip_nil)) then return false end
+  end
+  return true
+end
+-- find element in a table by value
+function table_index(clist, cx)
+  for i, c in pairs(clist) do
+    if cx == c then return i end
+  end
+  return nil
+end
+-- update table dst with k,v pairs from t
+-- XXX use with EXTREME care: may modify args and lead to unintended consequences
+-- XXX modifies the 1st arg
+-- XXX may modify subtables of the 2nd arg in subsequent table_update(dst, ..) calls
+function table_update(dst, t)
+  for k,v in pairs(t) do dst[k] = v end
+  return 'table_update_nil'
+end
+-- update table dst with k,v pairs from t, descending into subtables; 
+-- XXX use with EXTREME care: may modify args and lead to unintended consequences
+-- XXX modifies the 1st arg and its subtables
+-- XXX the 2nd arg and subtables arg will not be modified: all subtables are deep-copied
+function table_deepupdate(dst, t)
+  for k,v in pairs(t) do
+    if 'table' == type(v) then
+      if not dst[k] then dst[k] = {} end
+      assert('table' == type(dst[k]))
+      table_deepupdate(dst[k], v)
+    else dst[k] = v end
+  end
+  return 'table_deepupdate_nil'
+end
+-- make a shallow copy of the 1st table table and update it with new k,v from other tables
+-- XXX use with EXTREME care: links 1st level subtables; if modified later, may lead to unintended consequences
+function table_merge(...)
+  local dst = {}
+  for it, t in pairs({...}) do table_update(dst, t) end
+  return dst
+end
+table_join = table_merge
+
+-- make a deep copy of the 1st table and deep-update it with new k,v from other tables
+function table_deepmerge(...)
+  local dst = {}
+  for it, t in pairs({...}) do table_deepupdate(dst, t) end
+  return dst
+end
+table_deepjoin = table_deepmerge
+
+function table_delete_keys(t, klist)
+  for i,k in ipairs(klist) do t[k] = nil end
+end
+
+function table_tostring(tab, fmt, sep)
+  fmt = fmt or "'%s'->'%s'"
+  sep = sep or ', '
+  local res = {}
+  for k,v in pairs(tab) do
+    list_append(res, string.format(fmt, k, v))
+  end
+  return table.concat(res, sep)
+end
+
+function table_setdefault(t, k, v)
+  if nil == t[k] then 
+    t[k] = v
+    return v
+  else return t[k] end
+end
+
+-- check that all elements of a list arg are equal to the same value
+function table_assert_const(ls, v0, msg) 
+  msg = msg or ''
+  for k, v in iter.ordered_titems(ls) do
+    if v ~= v0 then
+      error(string.format("%s[%s]=%s: expect %s", msg, tostring(k), tostring(v), tostring(v0)))
+    end
+  end
+end
+-- check that all elements of a list arg have proper type
+function table_assert_type(ls, tp, msg) 
+  msg = msg or ''
+  for k, v in iter.ordered_titems(ls) do
+    if type(v) ~= tp then
+      error(string.format("%s[%s]: expect %s", msg, tostring(k), tostring(tp)))
+    end
+  end
+end
+
+list_map = depr_warn(function(f, l)
+  local r = {}
+  for i, k in ipairs(l) do r[i] = f(k) end
+  return r
+end)
+table_map = depr_warn(function(f, l)
+  local r = {}
+  for i, k in pairs(l) do r[i] = f(k) end
+  return r
+end)
+seq_map = depr_warn(function(f, ...) return unpack(list_map(f, {...})) end)
+
+-------------------------------------------------------------------------------
+-- functions for strings
+-------------------------------------------------------------------------------
+function string_is_prefix(a, b)
+  -- whether str a is prefix of str b
+  return (nil ~= a and #a <= #b and string.sub(b, 1, #a) == a)
+end
+function string_del_prefix(a, b)
+  -- whether str a is prefix of str b
+  if string.sub(b, 1, #a) == a then 
+    return string.sub(b, 1 + #a)
+  end
+end
+function string_is_postfix(a, b)
+  -- whether str a is prefix of str b
+  return (nil ~= a and #a <= #b and string.sub(b, 1 + #b - #a) == a)
+end
+function string_del_postfix(a, b)
+  -- whether str a is prefix of str b
+  if string.sub(b, 1 + #b - #a) == a then
+    return string.sub(b, 1, #b - #a)
+  end
+end
+function string_split(str, sep)
+  local patt = "([^" .. sep .. "]+)"
+  local res = {}
+  for substr in string.gmatch(str, patt) do
+    table.insert(res, substr)
+  end
+  return res
+end
+
+-------------------------------------------------------------------------------
+-- add functions/operators missing in Lua-5.1
+-------------------------------------------------------------------------------
+function bitwise_and(x, y)
+  x = math.floor(x)
+  y = math.floor(y)
+  assert(0 <= x and 0 <= y)
+  local res  = 0
+  local fact = 1
+  while (0 < x and 0 < y) do
+    if (0 ~= x % 2 and 0 ~= y % 2) then res = res + fact end
+    x = math.floor(x / 2)
+    y = math.floor(y / 2)
+    fact = fact * 2
+  end
+  return res
+end
+function bitwise_or(x, y)
+  x = math.floor(x)
+  y = math.floor(y)
+  assert(0 <= x and 0 <= y)
+  local res  = 0
+  local fact = 1
+  while (0 < x or 0 < y) do
+    if (0 ~= x % 2 or 0 ~= y % 2) then res = res + fact end
+    x = math.floor(x / 2)
+    y = math.floor(y / 2)
+    fact = fact * 2
+  end
+  return res
+end
+
+function ceil_multiple(x, intx)
+  intx = math.abs(intx)
+  assert(0 < intx)
+  return math.ceil(x / intx) * intx
+end
+ceil_int = ceil_multiple

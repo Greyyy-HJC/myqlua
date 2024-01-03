@@ -1,0 +1,46 @@
+package.path = 'qlib/?.qlua;lhpc/?.qlua;qlua-production/?.qlua;' .. package.path
+require 'strict'
+require 'setup_util'
+require 'latvec'
+require 'stdlib'
+require "rcparams"
+
+_rcParam.la = {backend = 'gpu-cublas'}
+
+------------------------------------------------------------------------------
+-- file locations
+------------------------------------------------------------------------------
+ens_top = '.'
+data_top = '.'
+miter = job_max_iter
+
+-- gauge file(s)
+function get_gauge_file(key)
+    return
+        string.format('%s/conf.%s', ens_top, key)
+end
+
+function get_gauge_gfix_file(key, gfix_type)
+    return string.format("%s/ckpoint_lat_a/ckpoint_lat.%s.%s", data_top,
+                         gfix_type, key)
+end
+
+function get_colmat_gfix_file(key, gfix_type)
+    return string.format("%s/colmat_gfix_a/colmat_gfix.%s.%s", data_top,
+                         gfix_type, key)
+end
+
+-------------------------------------------------------------------------------
+-- general
+-------------------------------------------------------------------------------
+assert(job_key)
+cfg_key = job_key -- job# enumerates config#
+
+latsize = {48, 48, 48, 64}
+t_axis = #latsize - 1
+rnd_seed = 1984
+
+------------------------------------------------------------------------------
+-- gauge fixing
+------------------------------------------------------------------------------
+gfix_param = {tol = 1e-8, maxiter = miter, tol_switch_fletcher = 1e-8}

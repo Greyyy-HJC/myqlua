@@ -1,0 +1,47 @@
+-- stubg for run control params table
+rcparams = rawget(_G, '_rcParam') or rawget(_G, 'rcparams') or {}
+rcparam  = rcparams
+-- * default parameters: all done on CPU (no special backend)
+-- * generally, parameters should take effect when the top-level 
+--   function is called (eg wup.smearing calling laplacian)
+-- * suggested format for backending: <arch>-<lib>-<version>
+--   arch = cpu|gpu|etc
+--   lib  = arch-specific library
+--   version = mg|etc
+rcparams.backend = rcparams.backend or {
+  laplacian     = 'cpu',  -- 'cpu' | 'cpu-clover-lib' | 'gpu-quda'
+  dslash_solver = 'cpu',  -- 'cpu' | 'gpu-quda' | 'cpu-grid-lib'
+  qbarq         = 'cpu',  -- 'cpu' | 'gpu-quda'
+}
+rcparams.verbose = rcparams.verbose or {
+  depr_warn     = 'line',
+  timeit        = 'total',
+}
+
+function contract_backend() return rcparams.backend.qbarq end
+
+function rcparams.get(k)
+  local v = rcparams
+  for t in string.gmatch(k, "[^.]+") do
+     if v[t] then v = v[t] else return nil end
+  end
+  return v
+end
+function rcparams.set(k, v)
+  local tl = {}
+  for t in string.gmatch(k, "[^.]+") do tl[1+#tl] = t end
+  local tlast = table.remove(tl)
+
+  local x = rcparams
+  for i_t, t in ipairs(tl) do
+    if x[t] then 
+      x = x[t] 
+    else 
+      x[t] = {}
+      x = x[t]
+    end
+  end
+  x[tlast] = v
+end
+
+  

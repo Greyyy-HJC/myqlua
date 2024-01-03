@@ -1,0 +1,45 @@
+-- parse/encode bcderiv key
+bcderiv = rawget(_G, 'bcderiv') or {}
+
+function bcderiv.dir_list(dd)
+  local funcname_ = 'bcderiv.ldir_list'
+  local ldir_map = {x= 0, y= 1, z= 2, t= 3}
+  local res = {}
+  for i = 1, #dd do 
+    local c   = string.sub(dd, i, i)
+    local mu  = ldir_map[c]
+    if nil == mu then 
+      error(string.format("%s: unknown dir='%s' in bc-derivative '%s'", 
+            funcname_, c, dd)) 
+    end
+    res[1+#res] = mu
+  end
+  return res
+end
+function bcderiv.dir_str(...)
+  local ldir_char= {[0]='x', [1]='y', [2]='z', [3]='t'}
+  local s = {}
+  for i, d in ipairs({...}) do s[i] = ldir_char[d] end
+  return table.concat(s)
+end
+
+
+function bcderiv.make_ddlist(ddmap)
+  local ddlist = {}
+  for k,v in pairs(ddmap) do list_append(ddlist, k) end
+  table.sort(ddlist)
+  return ddlist
+end
+function bcderiv.check_ddlist(ddlist)
+  -- check that for every k=ddlist[i], there are all [k-1] in ddist[1:i-1]
+  -- [k-1] is a set of strings with one char excluded
+  for i, k in ipairs(ddlist) do
+    for j=1, #k do
+      local km1 = string.sub(k, 1, j-1) .. string.sub(k, j+1)
+      local i_km1 = list_index(ddlist, km1)
+      if nil == i_km1 or i <= i_km1 then return false end
+    end
+  end
+  return true
+end
+

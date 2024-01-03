@@ -1,0 +1,425 @@
+module('iter', package.seeall)
+
+-- XXX name conventions 
+-- * iXXX - input is iter(s): imap, islice, ichop, ifirst, ienumerate, irepeat, icycle
+-- * lXXX - input is list(s): litems, lproduct_*
+-- * tXXX - input is table(s): tproduct
+-- * vXXX - inpute is value(s): 
+-- output is always an iterator EXCEPT FOR XXX_list returning list
+
+-- TODO chain islice izip_list 
+--  * ichop/lchop(n,...   
+--    split sequence into lists of at most n elements
+--    XXX "chop" was previously called "tee" due to confusion
+--  * ichop_pad/lchop_pad(n,...) TODO
+--    versions of the above, but with the last list padded to full size=n by repeating the first elem
+--  * ichop_full/lchop_full(n,...) TODO
+--    versions of the above, but with the last list discarded if not full size=n
+--------- predicate/funciton iterators --------
+-- TODO ifilter groupby takewhile
+
+--------- infinite iterators ---------------
+-- endless iterator: collects all values in a list, 
+-- then loops over them indefinitely
+-- return nil only if the init iter is empty
+function irepeat(n, ...)
+  local all   = {}
+  local wrap  = false
+  local f_, s_, var_ = ...
+  local inext = 0
+  local cnt   = 1
+  return function()
+    if nil ~=n and n < cnt then return nil end    -- no repeats left
+    if not wrap then                              -- first repeat
+      local vv = { f_(s_, var_) }
+      var_ = vv[1]
+      if nil == var_ then                         -- start second repeat
+        wrap  = true 
+        inext = 0
+        cnt   = 2
+      else 
+        all[1+#all] = vv
+        return unpack(vv)
+      end
+    end
+    if wrap then                                  -- cnt'th repeat
+      if #all <= 0 then return nil end
+      if n < cnt then return nil end
+      local i = inext
+      inext = (inext + 1) % #all
+      if 0 == inext then cnt = cnt + 1 end        -- start next repeat
+      return unpack(all[1+i])
+    end
+  end
+end
+
+function icycle(...)
+  -- Pythonesque shortcut for infinite repeat_iter
+  return irepeat(nil, ...)
+end
+
+function vrepeat(n, ...)
+  -- return value n times 
+  -- if n is nil, repeat indefinitely
+  local cnt = 0
+  local v = {...}
+  return function()
+    if nil ~= n and n <= cnt then return nil end
+    cnt = cnt + 1
+    return unpack(v)
+  end
+end
+function count(i0, di)
+  di = di or 1
+  local inext = i0
+  return function()
+    local i = inext
+    inext = inext + di
+    return i
+  end
+end
+
+--------- finite iterators ---------------
+function range(i, n, di)
+  if nil == di then di = 1 end
+  if nil == n then i, n = 0, i end
+  i = i - di
+  assert(0 ~= di)
+  return function()
+    i = i + di
+    if (i < n) == (0 < di) then 
+      return i
+    else return nil end
+  end
+end
+
+function ienumerate(...)
+  local f_, s_, var_ = ...
+  local i = 0
+  return function()
+    local vv = { f_(s_, var_) }
+    var_ = vv[1]
+    if nil == var_ then return nil end
+    i = i + 1
+    return i, unpack(vv)
+  end
+end
+
+function imap(mapfunc, ...)
+  local f_, s_, var_ = ...
+  return function()
+    local vv = { f_(s_, var_) }
+    var_ = vv[1]
+    if nil == var_ then return nil
+    else return mapfunc(unpack(vv)) end
+  end
+end
+
+function ichop(n, ...)
+  -- split iterator in lists of at most n-lentgh
+  -- take only the first var of the iterator (use imap(list, iter) to wrap in lists if necessary)
+  assert(0 < n)
+  local f_, s_, var_ = ...
+  return function()
+    local res = {}
+    while #res < n do
+      local vv = { f_(s_, var_) }
+      var_ = vv[1]
+      if nil == var_ then break end
+      res[1+#res] = var_
+    end
+    if 0 < #res then return res
+    else return nil end
+  end
+end
+
+function ichop_pad(n, l)
+-- padded version of iter.lchop : each sublist has exactly n elements; 
+-- if necessary, the last element is padded with x[i][1] (no copying!)
+  local lti = iter.lchop(n, l)
+  return function()
+    local x = lti()
+    if nil == x then return nil end
+    if #x < n then x = list_pad(x, n, x[1]) end
+    return x
+  end
+end
+
+
+function ichain(...)
+  -- iterator over elements of lists successively returned by an iterator: opposite of ichop
+  local f_, s_, var_ = ...
+  local var_  = f_(s_, var_)
+  local li = nil
+  if var_ then 
+    assert('table' == type(var_))           -- must be a list
+    li = litems(var_) 
+  end  
+  return function()
+    if nil == li then return nil end        -- iteration has ended
+    local v = li()
+--    printf("ichain : %s\n", tostring(v))
+    while nil == v do                       -- refresh li
+      var_  = f_(s_, var_)
+      if nil == var_ then 
+        li  = nil                           -- mark end of iteration
+        return nil 
+      else 
+        assert('table' == type(var_))      -- must be a list
+        li  = litems(var_)
+        v   = li()
+      end
+    end
+    return v
+  end
+end
+
+function ifirst(n, ...)
+  -- return first n elements of iter 
+  local f_, s_, var_ = ...
+  local i = 0
+  return function()
+    if n <= i then return nil end
+    local vv = { f_(s_, var_) }
+    var_ = vv[1]
+    if nil == var_ then return nil end
+    i = i + 1
+    return unpack(vv)
+  end
+end
+
+
+--------- combinatoric iterators -------------
+-- list_product_rlex({a0,a1,...}, {b0,b1,...}, ...)
+-- iterator over lists {aI, bJ, ...} (first changes fastest)
+function lproduct_rlex(...)
+  local args = {...}
+  if #args <= 0 then return nil
+  elseif 1 == #args then 
+    local a = args[1]
+    local i = 0
+    return function()
+      i = i + 1
+      if nil == a[i] then return nil
+      else return { a[i] } end
+    end
+  end
+    
+  local a   = table.remove(args, 1)
+  assert('table' == type(a))
+  local n   = #a
+  local i   = 0
+  local b_iter = lproduct_rlex(unpack(args))
+  local b   = b_iter()
+  if nil == b then return nil end
+  table.insert(b, 1, a[1])
+  return function()
+    i = i + 1
+    if n < i then
+      i   = 1
+      b   = b_iter()
+      if nil == b then return nil end
+      table.insert(b, 1, a[1])
+    end
+    b[1] = a[i]
+    return list_copy(b)
+  end
+end
+
+-- same as lproduct_rlex, but the last changes fastest
+function lproduct_lex(...)
+  local args = {...}
+  if #args <= 0 then return nil
+  elseif 1 == #args then 
+    local a = args[1]
+    local i = 0
+    return function()
+      i = i + 1
+      if nil == a[i] then return nil
+      else return { a[i] } end
+    end
+  end
+    
+  local a   = table.remove(args)
+  assert('table' == type(a))
+  local n   = #a
+  local i   = 0
+  local b_iter = lproduct_lex(unpack(args))
+  local b   = b_iter()
+  if nil == b then return nil end
+  table.insert(b, a[1])
+  return function()
+    i = i + 1
+    if n < i then
+      i   = 1
+      b   = b_iter()
+      if nil == b then return nil end
+      table.insert(b, a[1])
+    end
+    b[#b] = a[i]
+    return list_copy(b)
+  end
+end
+
+-- table_product({a={v0,v1,..}, b={w0,w1,...}, ...)
+-- iterate over tables {a=vI, b=wJ,...}
+function tproduct(t)
+  local function table_copy(t)    -- also defined in stdlib
+    local t1 = {}
+    for k,v in pairs(t) do t1[k] = v end
+    return t1
+  end
+
+  local t1 = table_copy(t)
+  local k   = next(t1)
+  if nil == k then return nil end
+  local a   = t1[k]
+  t1[k]     = nil
+  assert('table' == type(a))
+  if nil == next(t1) then
+    local i = nil
+    return function()
+      i = next(a, i)
+      if nil == i then return nil
+      else return { [k] = a[i] } end
+    end
+  end
+
+  local b_iter = tproduct(t1)
+  local b   = b_iter()
+  if nil == b then return nil end
+  local i   = nil
+  return function()
+    i = next(a, i)
+    if nil == i then
+      i   = next(a)
+      b   = b_iter()
+      if nil == b then return nil end
+    end
+    b[k] = a[i]
+    return table_copy(b)
+  end
+end
+
+
+--------- working with lists: iter(list), list(iter) -----
+function litems(l)
+  local i = 0
+  return function()
+    i = i + 1
+    return l[i]
+  end
+end
+function igen_list(...)
+  local res = {}
+  for v in ... do table.insert(res, v) end
+  return res
+end
+-- shorthand 
+l2i = litems
+i2l = igen_list
+
+-- handy function combinations
+function ichop_list(n, ...)  return igen_list(ichop(n, ...))  end
+function lchop(n, l)         return ichop(n, litems(l))       end
+function lchop_list(n, l)    return igen_list(lchop(n, l))    end
+function lchop_pad(n, l)     return ichop_pad(n, litems(l))   end
+
+
+function imap_list(f, ...)  return igen_list(imap(f, ...))  end
+function lmap(f, l)         return imap(f, litems(l))       end
+function lmap_list(f, l)    return igen_list(lmap(f, l))    end
+
+-- map iterator with function that operates on batches of input vectors
+-- (typically for efficiency reasons)
+-- { x1, x2, ...} -> { { x1, x2, ..., xn}, ...} -> 
+--    -> { fbatch({x1, x2, ...}), ...} -> { f(x1), f(x2), ...}
+-- in: iterator for xi; out: iterator for f(xi)
+function imap_batch(nbatch, fbatch, ...)
+  return ichain(imap(fbatch, ichop(nbatch, ...)))
+end
+
+
+--------- working with tables -----
+-- iterators over tables: same as pairs XXX ENFORCE sorted key order to avoid nasty parallel bugs
+-- aux functions
+local function table_keys(t)
+  local kl = {}
+  for k, v in pairs(t) do kl[1+#kl] = k end
+  return kl
+end
+local function table_values(t)
+  local vl = {}
+  for k, v in pairs(t) do vl[1+#vl] = v end
+  return vl
+end
+
+-- function ordered_titems(t) ("table items", === pairs(t)): iterate over k,v in t
+function ordered_titems(t, keysort_func)
+  local klist = table_keys(t)
+  table.sort(klist, keysort_func)
+  local i = 0
+  return function()
+    i = i + 1
+    local k = klist[i]
+    if k then return k, t[k] else return nil end
+  end
+end
+
+-- TODO
+-- function igen_table(...) : create table for each k,v in ...
+-- function ordered_tmap(f, t): iter: return f(k, v) for each k,v in t
+
+function ordered_tmap_table(f, t, keysort_func)
+  local klist = table_keys(t)
+  table.sort(klist, keysort_func)
+  local res = {}
+  for i_k, k in ipairs(klist) do 
+    res[k] = f(t[k])
+  end
+  return res
+end
+
+-- function ordered_tmap_pair_table(f, t): create table {k1:v1} where k1,v1=f(k,v)}
+--  f(k,v)  return k1, v1 - new pair of values
+-- use cases:
+-- * equivalent of ordered_tmap_table : 
+--    t1 = iter.ordered_tmap_pair_table(function(k,v) return k, f(v) end, t0)
+-- * make new table modify keys and values in table : 
+--    t1 = iter.ordered_tmap_pair_table(function(k,v) return fk1(k), fv1(v) end, t0)
+-- * make table from key list: 
+--    t1 = iter.ordered_tmap_pair_table(function(i,k) return k, f(k) end, klist0)
+-- * filter table keys?
+-- NOTE f(k,v) cannot return nil, because it cannot be used as table key
+
+function ordered_tmap_pair_table(f, t, keysort_func)
+  local klist = table_keys(t)
+  table.sort(klist, keysort_func)
+  local res = {}
+  for i_k, k in ipairs(klist) do
+    local k1, v1 = f(k, t[k])
+    res[k1] = v1
+  end
+  return res
+end
+
+function titems(f, t)
+  error("POTENTIAL DIFFERENT ORDER OF ITERATION ORDER IN PARALLEL JOBS; USE ordered_titems INSTEAD")
+end
+function tmap_table(f, t)
+  error("POTENTIAL DIFFERENT ORDER OF ITERATION ORDER IN PARALLEL JOBS; USE ordered_tmap_table INSTEAD")
+end
+function tmap_pair_table(f, t)
+  error("POTENTIAL DIFFERENT ORDER OF ITERATION ORDER IN PARALLEL JOBS; USE ordered_tmap_pair_table INSTEAD")
+end
+
+
+-- OLD aliases TODO clean up in next version of qlua, qlua-production
+
+itee          = ichop
+itee          = ichop
+itee_list     = ichop_list
+ltee          = lchop
+ltee_list     = lchop_list
+iter_lchop_pad= lchop_pad
+iter_ltee_pad = lchop_pad
