@@ -1,4 +1,5 @@
-package.path = package.path .. ';../module/qlib/?.qlua;../module/lhpc/?.qlua;../module/qlua-production/?.qlua'
+package.path = package.path ..
+                   ';../module/qlib/?.qlua;../module/lhpc/?.qlua;../module/qlua-production/?.qlua'
 require "strict"
 require "gaugefix"
 require "stdlib"
@@ -6,8 +7,6 @@ require "lhpc-std"
 require "qdpc_io"
 require "gauge/gfix"
 require "rcparams"
-
-
 
 function report_gauge(u)
     local L = u[1].lattice
@@ -29,45 +28,20 @@ function report_gauge(u)
 end
 
 -- todo 
-job_gfix = 'landau'
+job_gfix = 'coulomb'
 network_geom = {1, 1, 1, 1}
 job_max_iter = 600
-latsize = {4,4,4,8}
+latsize = {4, 4, 4, 8}
 L = qcd.lattice(latsize)
-Nd  = #L
+Nd = #L
 vol = L:volume()
 u = qcd.nersc.read_gauge(L, '../gfix_test/gauge_disord_4c8.NERSC')
-Nc  = u[1]:colors()
+Nc = u[1]:colors()
 
 gfix_param = {tol = 1e-8, maxiter = 600, tol_switch_fletcher = 1e-8}
 tol_switch_fletcher = 1e-6
 
-
-
-tot_timer = timer("total")
-
--- print_network_settings()
--- L = qcd.lattice(latsize, {network = network_geom})
--- -- S = rnd_init(L, rnd_seed)
--- print_subgrid_settings(L)
--- printf("loaded lattice\n")
-
-
--- cur_timer = timer("read gauge")
--- print(get_gauge_file(cfg_key))
-
-
--- u = qcd.milc.read_gauge(L, get_gauge_file(cfg_key))
-
-
--- print("DONE")
--- cur_timer("done")
-
--- report_gauge(u)
-
-
-
-gfix_type = job_gfix -- "coulomb"
+gfix_type = job_gfix
 
 cur_timer = timer(string.format("gaugefix %s", gfix_type))
 gfix_wgt_dir = {}
@@ -84,37 +58,14 @@ end
 
 gfix_func, gfix_grad = mk_gaugefix_genlandau_func(gfix_wgt_dir)
 
--- tol_switch_fletcher = gfix_param.tol_switch_fletcher or 1e-6
--- printf("### gfix=%s  gf_tol=%f  gf_maxiter=%d  tol_switch_fletcher=%e\n",
---        gfix_type, gfix_param.tol, gfix_param.maxiter, tol_switch_fletcher)
 g, iter, tol = gaugefix_facg(u, gfix_func, gfix_grad, gfix_param.tol,
                              gfix_param.maxiter, true, tol_switch_fletcher)
 printf("### tol_final=%e  iter_final=%d\n", tol, iter)
 cur_timer("done")
 
-
-
--- colmat_str = string.format("colmat_%s_fix", gfix_type)
--- cur_timer = timer("save_" .. colmat_str)
--- colmat_gfix_file = get_colmat_gfix_file(cfg_key, gfix_type)
--- os.mkdir_path(dirname(colmat_gfix_file))
--- save_qdpc_colmat(L, g, colmat_gfix_file, colmat_str, colmat_str, "single")
--- cur_timer("done")
-
 ufix = gauge_transform_U(g, u)
 
 for mu = 0, Nd - 1 do
-  printf("# [%d]\t%e\t%e\n", 
-         mu, ufix[1+mu]:norm2() /(Nc * vol), ufix[1+mu]:trace():real():sum() /(Nc * vol))
+    printf("# [%d]\t%e\t%e\n", mu, ufix[1 + mu]:norm2() / (Nc * vol),
+           ufix[1 + mu]:trace():real():sum() / (Nc * vol))
 end
-
--- report_gauge(ufix)
-
--- gauge_str = string.format("gauge_%s_fix", gfix_type)
--- cur_timer = timer("save_" .. gauge_str)
--- gauge_gfix_file = get_gauge_gfix_file(cfg_key, gfix_type)
--- os.mkdir_path(dirname(gauge_gfix_file))
--- save_qdpc_colmat(L, ufix, gauge_gfix_file, gauge_str, gauge_str, "single")
--- cur_timer("done")
--- qcd.qprof_print()
--- tot_timer("done")

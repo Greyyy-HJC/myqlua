@@ -7,14 +7,14 @@ require "qdpc_io"
 require "rcparams"
 
 
-latsize = {4,4,4,8}
-gauge_file = "gauge_disord_4c8.NERSC"
+latsize = {48,48,48,64}
+gauge_file = "../config/MILC/l4864f21b7373m00125m0250a.4314"
 
 L   = qcd.lattice(latsize)
 Nd  = #L
-u   = qcd.nersc.read_gauge(L, "gauge_disord_4c8.NERSC")
+-- u   = qcd.milc.read_gauge(L, gauge_file)
 
-save_qdpc_colmat(L, u, 'try.MILC', 'test1', 'test2', "single")
+-- save_qdpc_colmat(L, u, 'try.NERSC', 'test1', 'test2', "single")
 
-u_re = qcd.milc.read_gauge(L, 'try.MILC')
-u_re:print()
+u_re = qcd.nersc.read_gauge(L, 'try.NERSC')
+u_re = qcd.milc.read_gauge(L, 'try.NERSC')
