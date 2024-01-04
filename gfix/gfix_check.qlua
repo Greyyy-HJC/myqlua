@@ -8,6 +8,8 @@ require "qdpc_io"
 require "gauge/gfix"
 require "rcparams"
 
+_rcParam.la = {backend = 'gpu-cublas'}
+
 function report_gauge(u)
     local L = u[1].lattice
     local Nc = u[1]:colors()
@@ -28,7 +30,7 @@ function report_gauge(u)
 end
 
 -- todo 
-job_gfix = 'coulomb'
+job_gfix = 'landau'
 network_geom = {1, 1, 1, 1}
 job_max_iter = 600
 latsize = {4, 4, 4, 8}
@@ -38,8 +40,13 @@ vol = L:volume()
 u = qcd.nersc.read_gauge(L, '../gfix_test/gauge_disord_4c8.NERSC')
 Nc = u[1]:colors()
 
+for mu = 0, Nd - 1 do
+    printf("# [%d]\t%e\t%e\n", mu, u[1 + mu]:norm2() / (Nc * vol),
+           u[1 + mu]:trace():real():sum() / (Nc * vol))
+end
+
 gfix_param = {tol = 1e-8, maxiter = 600, tol_switch_fletcher = 1e-8}
-tol_switch_fletcher = 1e-6
+tol_switch_fletcher = 1e-8
 
 gfix_type = job_gfix
 

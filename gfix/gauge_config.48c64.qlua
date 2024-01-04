@@ -1,4 +1,4 @@
-package.path = 'qlib/?.qlua;lhpc/?.qlua;qlua-production/?.qlua;' .. package.path
+package.path = '../module/qlib/?.qlua;../module/lhpc/?.qlua;../module/qlua-production/?.qlua;' .. package.path
 require 'strict'
 require 'setup_util'
 require 'latvec'

@@ -1,0 +1,2724 @@
+# [0]	1.000000e+00	1.285425e-01
+# [1]	1.000000e+00	1.157944e-01
+# [2]	1.000000e+00	1.069522e-01
+# [3]	1.000000e+00	1.061596e-01
+fourier_acc_coeff[@../module/lhpc/gaugefix.qlua:334]	0.003s
+grad_func[@../module/lhpc/gaugefix.qlua:337]	0.003s
+field_fa[@../module/lhpc/gaugefix.qlua:339]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:342]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:343]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:343]	0.001s
+# <1.iter>  <2.func/vol/Nd/Nc>  <3.|acc.grad1|^2/vol/Nadj)>  <4.|grad|^2/vol/Nadj>  <5.conver>
+1	2.54989384e-01	7.16863858e+00	1.47519320e+00	0.00000000e+00	#gaugefix_facg : beta1=0.000000e+00  aopt=0.000000e+00  f0p/vol/Nd/Nc=0.00000000e+00 final=
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.83263301e-01	8.14560257e+03	8.14130518e+02	3.69308867e+02
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+2	3.89662693e-01	4.85171299e+00	9.87519240e-01	3.45615096e-01	#gaugefix_facg : beta1=0.000000e+00  aopt=1.832633e-01  f0p/vol/Nd/Nc=1.32578167e+00 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.09259843e-01	4.41359529e+03	2.09693923e+02	-5.76142638e+02
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+3	4.31559772e-01	3.22703865e+00	5.68588326e-01	9.70829113e-02	#gaugefix_facg : beta1=7.526179e-01  aopt=1.092598e-01  f0p/vol/Nd/Nc=7.18358609e-01 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.25316601e-01	4.57438222e+03	2.80356715e+02	-3.27575387e+02
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+4	4.79926669e-01	2.86891215e+00	5.57353678e-01	1.00779765e-01	#gaugefix_facg : beta1=3.775024e-01  aopt=1.253166e-01  f0p/vol/Nd/Nc=7.44528355e-01 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.41981471e-01	2.17931376e+03	1.62108523e+02	-8.05445558e+01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+5	5.06464570e-01	1.45575092e+00	2.61943824e-01	5.23983365e-02	#gaugefix_facg : beta1=4.135728e-01  aopt=1.419815e-01  f0p/vol/Nd/Nc=3.54706016e-01 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.45607589e-01	1.54426082e+03	1.18714749e+02	-4.44538712e+01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+6	5.25821999e-01	1.02230769e+00	1.83651536e-01	3.68136539e-02	#gaugefix_facg : beta1=5.080555e-01  aopt=1.456076e-01  f0p/vol/Nd/Nc=2.51344535e-01 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.53630906e-01	1.09263241e+03	8.83034579e+01	-7.53662562e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+7	5.40197631e-01	6.91537362e-01	1.28382446e-01	2.66118023e-02	#gaugefix_facg : beta1=4.607555e-01  aopt=1.536309e-01  f0p/vol/Nd/Nc=1.77837306e-01 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.54651250e-01	6.90139629e+02	5.60958320e+01	-2.99570354e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+8	5.49334519e-01	4.48869616e-01	7.98557086e-02	1.66326473e-02	#gaugefix_facg : beta1=5.401128e-01  aopt=1.546512e-01  f0p/vol/Nd/Nc=1.12327414e-01 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.70595083e-01	4.76233874e+02	4.15730817e+01	1.46762701e+01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+9	5.56206149e-01	3.07675272e-01	5.52174602e-02	1.23544662e-02	#gaugefix_facg : beta1=4.753921e-01  aopt=1.705951e-01  f0p/vol/Nd/Nc=7.75120237e-02 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.83490531e-01	3.26256777e+02	3.01637326e+01	1.68928386e+01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+10	5.61297656e-01	2.09769889e-01	3.79790807e-02	9.07095721e-03	#gaugefix_facg : beta1=5.409744e-01  aopt=1.834905e-01  f0p/vol/Nd/Nc=5.31016890e-02 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.89313640e-01	2.44940674e+02	2.32465713e+01	1.47517627e+01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.002s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+11	5.65268987e-01	1.66224377e-01	2.80329815e-02	7.02555937e-03	#gaugefix_facg : beta1=6.573561e-01  aopt=1.893136e-01  f0p/vol/Nd/Nc=3.98666461e-02 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.99083210e-01	2.00876027e+02	1.95018525e+01	1.48308536e+01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+12	5.68665014e-01	1.31604827e-01	2.32272073e-02	5.97192907e-03	#gaugefix_facg : beta1=5.697042e-01  aopt=1.990832e-01  f0p/vol/Nd/Nc=3.26946659e-02 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.91634423e-01	1.56326153e+02	1.49351530e+01	9.94673899e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+13	5.71228548e-01	1.07204742e-01	1.74753118e-02	4.48775659e-03	#gaugefix_facg : beta1=6.984988e-01  aopt=1.916344e-01  f0p/vol/Nd/Nc=2.54437098e-02 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.97074366e-01	1.22682827e+02	1.17737317e+01	8.74626044e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+14	5.73269052e-01	8.35747340e-02	1.36885544e-02	3.55941750e-03	#gaugefix_facg : beta1=6.215977e-01  aopt=1.970744e-01  f0p/vol/Nd/Nc=1.99679081e-02 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.01686267e-01	9.77037722e+01	9.43433200e+00	7.52674929e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+15	5.74918581e-01	6.40603439e-02	1.09575979e-02	2.86915133e-03	#gaugefix_facg : beta1=6.176849e-01  aopt=2.016863e-01  f0p/vol/Nd/Nc=1.59023067e-02 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.80116326e-01	7.71555311e+01	7.01927545e+00	3.60710616e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+16	5.76097416e-01	5.66962557e-02	8.32672018e-03	2.04624259e-03	#gaugefix_facg : beta1=8.296893e-01  aopt=1.801163e-01  f0p/vol/Nd/Nc=1.25578664e-02 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.08508284e-01	6.32778029e+01	6.24354207e+00	5.37887068e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+17	5.77205698e-01	4.37958052e-02	7.01519004e-03	1.92008255e-03	#gaugefix_facg : beta1=5.843460e-01  aopt=2.085083e-01  f0p/vol/Nd/Nc=1.02991216e-02 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.044s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.01162288e-01	5.35664687e+01	5.17016358e+00	4.09313832e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.008s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+18	5.78108959e-01	3.87840595e-02	5.88381405e-03	1.56243980e-03	#gaugefix_facg : beta1=7.539500e-01  aopt=2.011623e-01  f0p/vol/Nd/Nc=8.71850077e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.03210514e-01	4.67047289e+01	4.51576354e+00	3.68078519e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.002s
+19	5.78900859e-01	3.25681478e-02	5.10497012e-03	1.36793791e-03	#gaugefix_facg : beta1=7.494130e-01  aopt=2.032105e-01  f0p/vol/Nd/Nc=7.60168114e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.002s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.005s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.002s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.85277878e-01	4.05716004e+01	3.73072337e+00	2.24260631e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+20	5.79532831e-01	3.10033268e-02	4.26676530e-03	1.09048542e-03	#gaugefix_facg : beta1=8.955726e-01  aopt=1.852779e-01  f0p/vol/Nd/Nc=6.60345058e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.003s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.16262203e-01	3.29231964e+01	3.27031297e+00	3.05117595e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+21	5.80122023e-01	2.29281391e-02	3.63609586e-03	1.01563409e-03	#gaugefix_facg : beta1=5.626843e-01  aopt=2.162622e-01  f0p/vol/Nd/Nc=5.35859317e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.003s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.002s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.002s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.93305670e-01	2.65137569e+01	2.46812225e+00	1.77215056e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+22	5.80545774e-01	1.92767521e-02	2.88090375e-03	7.29918911e-04	#gaugefix_facg : beta1=7.817587e-01  aopt=1.933057e-01  f0p/vol/Nd/Nc=4.31539013e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.96431769e-01	2.11230093e+01	1.99401243e+00	1.49266535e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+23	5.80890481e-01	1.61077041e-02	2.26112985e-03	5.93409730e-04	#gaugefix_facg : beta1=8.101296e-01  aopt=1.964318e-01  f0p/vol/Nd/Nc=3.43798980e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.004s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.18177924e-01	1.86685880e+01	1.88357621e+00	1.77835506e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+24	5.81232129e-01	1.42955705e-02	1.99732709e-03	5.87800025e-04	#gaugefix_facg : beta1=7.563013e-01  aopt=2.181779e-01  f0p/vol/Nd/Nc=3.03850716e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.16466547e-01	1.77784095e+01	1.78738273e+00	1.66288451e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+25	5.81555051e-01	1.29453627e-02	1.92095300e-03	5.55272943e-04	#gaugefix_facg : beta1=7.682068e-01  aopt=2.164665e-01  f0p/vol/Nd/Nc=2.89362134e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.82771971e-01	1.73387017e+01	1.59026556e+00	8.85475235e-01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+26	5.81823365e-01	1.41535946e-02	1.81685452e-03	4.61161829e-04	#gaugefix_facg : beta1=1.043755e+00  aopt=1.827720e-01  f0p/vol/Nd/Nc=2.82205431e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.33240558e-01	1.46870527e+01	1.50412035e+00	1.58193621e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+27	5.82104473e-01	1.09535843e-02	1.60642130e-03	4.82916169e-04	#gaugefix_facg : beta1=5.679840e-01  aopt=2.332406e-01  f0p/vol/Nd/Nc=2.39047081e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.003s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.99907975e-01	1.37569626e+01	1.29850229e+00	1.03031362e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+28	5.82330174e-01	1.01120566e-02	1.49366829e-03	3.87583070e-04	#gaugefix_facg : beta1=8.387090e-01  aopt=1.999080e-01  f0p/vol/Nd/Nc=2.23908897e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.87366850e-01	1.18327983e+01	1.08990366e+00	6.93225945e-01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+29	5.82515532e-01	1.04142993e-02	1.21717227e-03	3.18201464e-04	#gaugefix_facg : beta1=1.089852e+00  aopt=1.873669e-01  f0p/vol/Nd/Nc=1.92591118e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.30056484e-01	1.15670843e+01	1.17457928e+00	1.21232482e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+30	5.82733372e-01	7.96038054e-03	1.29255199e-03	3.73824506e-04	#gaugefix_facg : beta1=5.102423e-01  aopt=2.300565e-01  f0p/vol/Nd/Nc=1.88266346e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.24368933e-01	1.17636991e+01	1.18898886e+00	1.18093940e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+31	5.82951484e-01	7.71328851e-03	1.33757254e-03	3.74151025e-04	#gaugefix_facg : beta1=9.198203e-01  aopt=2.243689e-01  f0p/vol/Nd/Nc=1.91466456e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.56341851e-01	1.02221016e+01	1.11051129e+00	1.30937877e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+32	5.83171803e-01	7.37204354e-03	1.11985374e-03	3.77795100e-04	#gaugefix_facg : beta1=9.659570e-01  aopt=2.563419e-01  f0p/vol/Nd/Nc=1.66375352e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.01046924e-01	1.37145720e+01	1.38034328e+00	1.04841579e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+33	5.83414738e-01	1.04519473e-02	1.50050125e-03	4.16402575e-04	#gaugefix_facg : beta1=1.275621e+00  aopt=2.010469e-01  f0p/vol/Nd/Nc=2.23218946e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.28590863e-01	1.58978570e+01	1.66523428e+00	1.69572829e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+34	5.83725314e-01	1.17641137e-02	1.71966920e-03	5.32057235e-04	#gaugefix_facg : beta1=7.586576e-01  aopt=2.285909e-01  f0p/vol/Nd/Nc=2.58754182e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.17228781e-01	1.72694246e+01	1.75183971e+00	1.63617761e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+35	5.84042979e-01	1.25651301e-02	1.87614308e-03	5.43906893e-04	#gaugefix_facg : beta1=8.731342e-01  aopt=2.172288e-01  f0p/vol/Nd/Nc=2.81077874e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.90193189e-01	1.59185628e+01	1.49984620e+00	9.85878406e-01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+36	5.84299657e-01	1.28149449e-02	1.66447041e-03	4.39292352e-04	#gaugefix_facg : beta1=9.151663e-01  aopt=1.901932e-01  f0p/vol/Nd/Nc=2.59091191e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.30437075e-01	1.38129526e+01	1.41959207e+00	1.46701321e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+37	5.84563927e-01	1.10372024e-02	1.47983083e-03	4.52080331e-04	#gaugefix_facg : beta1=6.444817e-01  aopt=2.304371e-01  f0p/vol/Nd/Nc=2.24820192e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.002s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.95349102e-01	1.41860456e+01	1.33986016e+00	9.82319282e-01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+38	5.84795191e-01	1.19365470e-02	1.50540102e-03	3.95461695e-04	#gaugefix_facg : beta1=9.887772e-01  aopt=1.953491e-01  f0p/vol/Nd/Nc=2.30892669e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.10284180e-01	1.31914212e+01	1.31956275e+00	1.15188716e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+39	5.85030988e-01	1.13694776e-02	1.37088705e-03	4.03050668e-04	#gaugefix_facg : beta1=9.179876e-01  aopt=2.102842e-01  f0p/vol/Nd/Nc=2.14704121e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.31738203e-01	1.42281808e+01	1.51573593e+00	1.57516857e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+40	5.85316558e-01	1.09474786e-02	1.54845807e-03	4.87888932e-04	#gaugefix_facg : beta1=7.918946e-01  aopt=2.317382e-01  f0p/vol/Nd/Nc=2.31578464e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.00068235e-01	1.57721178e+01	1.56791977e+00	1.18436185e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+41	5.85591169e-01	1.27523818e-02	1.66519044e-03	4.68947155e-04	#gaugefix_facg : beta1=9.418394e-01  aopt=2.000682e-01  f0p/vol/Nd/Nc=2.56707647e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.76937235e-01	1.64585190e+01	1.84103731e+00	2.33423851e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+42	5.85974244e-01	1.35679003e-02	1.72019726e-03	6.53740599e-04	#gaugefix_facg : beta1=6.837902e-01  aopt=2.769372e-01  f0p/vol/Nd/Nc=2.67879541e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.53981023e-01	2.10449238e+01	1.71005225e+00	-1.46659029e-01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+43	5.86252875e-01	1.99052074e-02	2.16222012e-03	4.75274387e-04	#gaugefix_facg : beta1=1.436966e+00  aopt=1.539810e-01  f0p/vol/Nd/Nc=3.42528057e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.47419136e-01	1.79741783e+01	1.89290463e+00	2.14123426e+00
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+44	5.86618427e-01	1.31355559e-02	1.93016946e-03	6.23150960e-04	#gaugefix_facg : beta1=4.190450e-01  aopt=2.474191e-01  f0p/vol/Nd/Nc=2.92548475e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.003s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.76304882e-01	1.53880483e+01	1.34004675e+00	6.71695345e-01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+45	5.86841656e-01	1.15888100e-02	1.68977515e-03	3.80390566e-04	#gaugefix_facg : beta1=8.608920e-01  aopt=1.763049e-01  f0p/vol/Nd/Nc=2.50456515e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.79184775e-01	1.05140702e+01	9.28515096e-01	5.01627868e-01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+46	5.86997055e-01	8.61882835e-03	1.09821197e-03	2.64736408e-04	#gaugefix_facg : beta1=7.866927e-01  aopt=1.791848e-01  f0p/vol/Nd/Nc=1.71127445e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.99874152e-01	8.08901035e+00	7.60883549e-01	6.05515580e-01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+47	5.87129201e-01	5.87091685e-03	8.97593440e-04	2.25070499e-04	#gaugefix_facg : beta1=5.608342e-01  aopt=1.998742e-01  f0p/vol/Nd/Nc=1.31657069e-03 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.03560757e-01	6.00577760e+00	5.71313666e-01	4.74395683e-01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+48	5.87229174e-01	4.23587327e-03	6.65041725e-04	1.70245537e-04	#gaugefix_facg : beta1=6.790885e-01  aopt=2.035608e-01  f0p/vol/Nd/Nc=9.77502864e-04 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.97283613e-01	4.42683722e+00	4.14089316e-01	3.18018958e-01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+49	5.87300742e-01	3.37036503e-03	4.80495699e-04	1.21858474e-04	#gaugefix_facg : beta1=8.172617e-01  aopt=1.972836e-01  f0p/vol/Nd/Nc=7.20513870e-04 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.08701524e-01	3.42696722e+00	3.30722560e-01	2.89621742e-01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+50	5.87359240e-01	2.43082950e-03	3.81983623e-04	9.95954435e-05	#gaugefix_facg : beta1=6.621323e-01  aopt=2.087015e-01  f0p/vol/Nd/Nc=5.57774612e-04 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.74498053e-01	2.78662931e+00	2.39972365e-01	1.15128760e-01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+51	5.87399100e-01	2.25619282e-03	2.99106532e-04	6.78581056e-05	#gaugefix_facg : beta1=9.653986e-01  aopt=1.744981e-01  f0p/vol/Nd/Nc=4.53552947e-04 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.96400105e-01	1.91987462e+00	1.78198528e-01	1.36044475e-01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+52	5.87429823e-01	1.36421826e-03	2.13985257e-04	5.23008731e-05	#gaugefix_facg : beta1=4.842622e-01  aopt=1.964001e-01  f0p/vol/Nd/Nc=3.12479592e-04 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.25341253e-01	1.53654182e+00	1.53878233e-01	1.54206667e-01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.002s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.002s
+53	5.87458027e-01	1.16456891e-03	1.70231583e-04	4.80109512e-05	#gaugefix_facg : beta1=8.106423e-01  aopt=2.253413e-01  f0p/vol/Nd/Nc=2.50088187e-04 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.19508303e-01	1.36159716e+00	1.34617420e-01	1.29451866e-01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+54	5.87482390e-01	1.08060923e-03	1.46649165e-04	4.14692840e-05	#gaugefix_facg : beta1=9.376003e-01  aopt=2.195083e-01  f0p/vol/Nd/Nc=2.21614120e-04 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.19971950e-01	1.37431120e+00	1.36300282e-01	1.31441290e-01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+55	5.87507095e-01	1.09074747e-03	1.49159132e-04	4.20506230e-05	#gaugefix_facg : beta1=9.674082e-01  aopt=2.199720e-01  f0p/vol/Nd/Nc=2.23683463e-04 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.31595700e-01	1.30071683e+00	1.32778987e-01	1.38301652e-01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+56	5.87531816e-01	9.90900855e-04	1.41270504e-04	4.20766134e-05	#gaugefix_facg : beta1=9.101278e-01  aopt=2.315957e-01  f0p/vol/Nd/Nc=2.11705213e-04 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.17655828e-01	1.44101573e+00	1.44420002e-01	1.36027427e-01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.002s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+57	5.87557953e-01	1.14647279e-03	1.55474852e-04	4.44840134e-05	#gaugefix_facg : beta1=1.198104e+00  aopt=2.176558e-01  f0p/vol/Nd/Nc=2.34540321e-04 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.45825076e-01	1.53315915e+00	1.61647759e-01	1.81602282e-01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+58	5.87589094e-01	1.06365992e-03	1.69329078e-04	5.29977731e-05	#gaugefix_facg : beta1=7.725436e-01  aopt=2.458251e-01  f0p/vol/Nd/Nc=2.49537622e-04 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.29050593e-01	1.71295614e+00	1.75879068e-01	1.80117394e-01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+59	5.87621743e-01	1.24845484e-03	1.88507837e-04	5.55608480e-05	#gaugefix_facg : beta1=1.092265e+00  aopt=2.290506e-01  f0p/vol/Nd/Nc=2.78801455e-04 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.24474695e-01	1.73340729e+00	1.75434964e-01	1.74336067e-01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+60	5.87653939e-01	1.31052001e-03	1.87258626e-04	5.47877484e-05	#gaugefix_facg : beta1=9.539819e-01  aopt=2.244747e-01  f0p/vol/Nd/Nc=2.82130093e-04 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.34375492e-01	1.85487129e+00	1.90817553e-01	2.01985045e-01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+61	5.87689724e-01	1.36951552e-03	2.03349526e-04	6.08915820e-05	#gaugefix_facg : beta1=9.497078e-01  aopt=2.343755e-01  f0p/vol/Nd/Nc=3.01899623e-04 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.02558983e-01	2.08802788e+00	2.02508809e-01	1.63063495e-01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+62	5.87725243e-01	1.75758869e-03	2.18423825e-04	6.04339618e-05	#gaugefix_facg : beta1=1.254161e+00  aopt=2.025590e-01  f0p/vol/Nd/Nc=3.39848287e-04 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.24031629e-01	1.88975995e+00	1.88908536e-01	1.87606558e-01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+63	5.87759784e-01	1.37413943e-03	2.06319937e-04	5.87670014e-05	#gaugefix_facg : beta1=5.536910e-01  aopt=2.240316e-01  f0p/vol/Nd/Nc=3.07578117e-04 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.94179816e-01	1.78684843e+00	1.65576564e-01	1.21698168e-01
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+64	5.87788233e-01	1.38396046e-03	1.90578921e-04	4.84008963e-05	#gaugefix_facg : beta1=9.950111e-01  aopt=1.941798e-01  f0p/vol/Nd/Nc=2.90828194e-04 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.88271915e-01	1.21575277e+00	1.10036560e-01	7.39715417e-02
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+65	5.87806922e-01	9.10977980e-04	1.29978483e-04	3.17940508e-05	#gaugefix_facg : beta1=6.710122e-01  aopt=1.882719e-01  f0p/vol/Nd/Nc=1.97876427e-04 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.003s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.98217288e-01	9.48336694e-01	8.87180852e-02	6.91850616e-02
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+66	5.87822278e-01	7.30821253e-04	1.02161625e-04	2.61234666e-05	#gaugefix_facg : beta1=7.880884e-01  aopt=1.982173e-01  f0p/vol/Nd/Nc=1.54351675e-04 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.01343455e-01	6.68658326e-01	6.30351774e-02	5.11584026e-02
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+67	5.87833254e-01	4.95695537e-04	7.26941270e-05	1.86717301e-05	#gaugefix_facg : beta1=6.220934e-01  aopt=2.013435e-01  f0p/vol/Nd/Nc=1.08831108e-04 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.93335163e-01	5.28442439e-01	4.85886350e-02	3.55138364e-02
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+68	5.87841582e-01	3.94538578e-04	5.69949724e-05	1.41672903e-05	#gaugefix_facg : beta1=7.832708e-01  aopt=1.933352e-01  f0p/vol/Nd/Nc=8.60095116e-05 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.89959655e-01	3.79940237e-01	3.45356223e-02	2.39566551e-02
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+69	5.87847464e-01	2.90373406e-04	4.04005775e-05	1.00061524e-05	#gaugefix_facg : beta1=7.577403e-01  aopt=1.899597e-01  f0p/vol/Nd/Nc=6.18392313e-05 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.08772169e-01	2.74913104e-01	2.64452230e-02	2.32247323e-02
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+70	5.87852139e-01	2.07111198e-04	2.99730935e-05	7.95335993e-06	#gaugefix_facg : beta1=7.002394e-01  aopt=2.087722e-01  f0p/vol/Nd/Nc=4.47449714e-05 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.06641280e-01	2.30140285e-01	2.19994526e-02	1.89266677e-02
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+71	5.87856011e-01	1.84399926e-04	2.44760026e-05	6.58638620e-06	#gaugefix_facg : beta1=8.672403e-01  aopt=2.066413e-01  f0p/vol/Nd/Nc=3.74577286e-05 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.12754540e-01	1.89919590e-01	1.84505199e-02	1.68080442e-02
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+72	5.87859301e-01	1.38410453e-04	2.06045869e-05	5.59558200e-06	#gaugefix_facg : beta1=7.048428e-01  aopt=2.127545e-01  f0p/vol/Nd/Nc=3.09113916e-05 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.13626435e-01	1.66507958e-01	1.62208993e-02	1.48842091e-02
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+73	5.87862198e-01	1.39669346e-04	1.74106719e-05	4.92925948e-06	#gaugefix_facg : beta1=1.053246e+00  aopt=2.136264e-01  f0p/vol/Nd/Nc=2.71009047e-05 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.06087651e-01	1.50085926e-01	1.43390695e-02	1.22583534e-02
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+74	5.87864719e-01	1.12855741e-04	1.67017846e-05	4.28854703e-06	#gaugefix_facg : beta1=7.238089e-01  aopt=2.060877e-01  f0p/vol/Nd/Nc=2.44280478e-05 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.30647582e-01	1.29827758e-01	1.31758054e-02	1.36505432e-02
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+75	5.87867164e-01	1.07390812e-04	1.39024727e-05	4.15881296e-06	#gaugefix_facg : beta1=9.212148e-01  aopt=2.306476e-01  f0p/vol/Nd/Nc=2.11308201e-05 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.12144443e-01	1.34768848e-01	1.31061509e-02	1.18598253e-02
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+76	5.87869499e-01	1.03663182e-04	1.45601071e-05	3.97138516e-06	#gaugefix_facg : beta1=9.302105e-01  aopt=2.121444e-01  f0p/vol/Nd/Nc=2.19350338e-05 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.97591783e-01	1.13414029e-01	1.05953539e-02	8.19103929e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+77	5.87871331e-01	9.13637247e-05	1.22616259e-05	3.11568653e-06	#gaugefix_facg : beta1=9.346401e-01  aopt=1.975918e-01  f0p/vol/Nd/Nc=1.84593147e-05 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.92678396e-01	8.79038837e-02	8.06558391e-03	5.83728581e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+78	5.87872711e-01	6.42563490e-05	9.61995206e-06	2.34866420e-06	#gaugefix_facg : beta1=6.497947e-01  aopt=1.926784e-01  f0p/vol/Nd/Nc=1.43072727e-05 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.95141838e-01	6.64909043e-02	6.14631260e-03	4.61316364e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+79	5.87873768e-01	5.18610756e-05	7.21607334e-06	1.79810284e-06	#gaugefix_facg : beta1=8.440470e-01  aopt=1.951418e-01  f0p/vol/Nd/Nc=1.08220873e-05 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.94997054e-01	4.84209539e-02	4.46983989e-03	3.35199722e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+80	5.87874537e-01	3.29482283e-05	5.41740889e-06	1.30714681e-06	#gaugefix_facg : beta1=5.546641e-01  aopt=1.949971e-01  f0p/vol/Nd/Nc=7.88101463e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.86775575e-01	3.42760878e-02	3.07682158e-03	2.02468933e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+81	5.87875058e-01	2.72679631e-05	3.66583033e-06	8.86215406e-07	#gaugefix_facg : beta1=8.803239e-01  aopt=1.867756e-01  f0p/vol/Nd/Nc=5.57879033e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.82865770e-01	2.51958938e-02	2.22943693e-03	1.35841130e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+82	5.87875433e-01	1.75954088e-05	2.90093648e-06	6.37852555e-07	#gaugefix_facg : beta1=5.782189e-01  aopt=1.828658e-01  f0p/vol/Nd/Nc=4.10089418e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.11182682e-01	1.61282971e-02	1.56024354e-03	1.40185127e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+83	5.87875710e-01	1.17028045e-05	1.77010539e-06	4.71559877e-07	#gaugefix_facg : beta1=6.442997e-01  aopt=2.111827e-01  f0p/vol/Nd/Nc=2.62504836e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.16023160e-01	1.44242395e-02	1.41254703e-03	1.32259552e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+84	5.87875963e-01	1.08993012e-05	1.56652972e-06	4.31380500e-07	#gaugefix_facg : beta1=9.390995e-01  aopt=2.160232e-01  f0p/vol/Nd/Nc=2.34769523e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.13197514e-01	1.36808198e-02	1.33043515e-03	1.21671278e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+85	5.87876201e-01	9.77237584e-06	1.53590900e-06	4.03842424e-07	#gaugefix_facg : beta1=9.255584e-01  aopt=2.131975e-01  f0p/vol/Nd/Nc=2.22669593e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.15409045e-01	1.14824091e-02	1.12296885e-03	1.04614651e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+86	5.87876402e-01	8.26701278e-06	1.27410433e-06	3.42501186e-07	#gaugefix_facg : beta1=8.623330e-01  aopt=2.154090e-01  f0p/vol/Nd/Nc=1.86888169e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.22193787e-01	1.11943313e-02	1.11270305e-03	1.09140343e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+87	5.87876605e-01	7.52334645e-06	1.25948282e-06	3.44446430e-07	#gaugefix_facg : beta1=8.709678e-01  aopt=2.221938e-01  f0p/vol/Nd/Nc=1.82199403e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.15637100e-01	9.54549736e-03	9.34192622e-04	8.71855174e-04
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+88	5.87876772e-01	7.07867218e-06	1.04950494e-06	2.85072759e-07	#gaugefix_facg : beta1=9.903712e-01  aopt=2.156371e-01  f0p/vol/Nd/Nc=1.55362913e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.22519184e-01	9.72058403e-03	9.66927783e-04	9.50595628e-04
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+89	5.87876948e-01	6.89867501e-06	1.10080903e-06	2.99536099e-07	#gaugefix_facg : beta1=9.205945e-01  aopt=2.225192e-01  f0p/vol/Nd/Nc=1.58212631e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.29313440e-01	8.02067812e-03	8.09716722e-04	8.32337525e-04
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+90	5.87877098e-01	5.72602091e-06	8.91365939e-07	2.54650143e-07	#gaugefix_facg : beta1=8.184118e-01  aopt=2.293134e-01  f0p/vol/Nd/Nc=1.30544891e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.19744267e-01	9.20761382e-03	9.10090995e-04	8.76941517e-04
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+91	5.87877263e-01	7.33538166e-06	9.90780058e-07	2.80218077e-07	#gaugefix_facg : beta1=1.304735e+00  aopt=2.197443e-01  f0p/vol/Nd/Nc=1.49863506e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.33744203e-01	8.81791870e-03	8.98412253e-04	9.47894222e-04
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+92	5.87877431e-01	6.08653877e-06	1.00402569e-06	2.85375503e-07	#gaugefix_facg : beta1=6.469259e-01  aopt=2.337442e-01  f0p/vol/Nd/Nc=1.43520812e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.95235742e-01	9.16662946e-03	1.02611148e-03	1.35361137e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+93	5.87877651e-01	6.66340801e-06	1.00889234e-06	3.74860605e-07	#gaugefix_facg : beta1=1.088151e+00  aopt=2.952357e-01  f0p/vol/Nd/Nc=1.49196443e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.45234038e-01	1.51405243e-02	1.57900127e-03	1.76699735e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+94	5.87877954e-01	1.04686103e-05	1.68442317e-06	5.15058055e-07	#gaugefix_facg : beta1=1.679943e+00  aopt=2.452340e-01  f0p/vol/Nd/Nc=2.46427804e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.32101063e-01	1.78879476e-02	1.82554732e-03	1.90737604e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+95	5.87878294e-01	1.31335145e-05	1.96941019e-06	5.78498291e-07	#gaugefix_facg : beta1=1.324605e+00  aopt=2.321011e-01  f0p/vol/Nd/Nc=2.91144980e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.39981455e-01	2.11511397e-02	2.19376532e-03	2.39362700e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+96	5.87878710e-01	1.45969602e-05	2.39175919e-06	7.07922108e-07	#gaugefix_facg : beta1=1.016129e+00  aopt=2.399815e-01  f0p/vol/Nd/Nc=3.44256832e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.57953635e-01	2.48971288e-02	2.66209712e-03	3.14543346e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+97	5.87879236e-01	1.62566495e-05	2.85501746e-06	8.95164372e-07	#gaugefix_facg : beta1=1.010566e+00  aopt=2.579536e-01  f0p/vol/Nd/Nc=4.05226706e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.004s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.66438962e-01	3.06652245e-02	3.34303173e-03	4.08113188e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+98	5.87879912e-01	2.17344271e-05	3.40514003e-06	1.14928249e-06	#gaugefix_facg : beta1=1.310554e+00  aopt=2.664390e-01  f0p/vol/Nd/Nc=4.99108471e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.69320848e-01	4.03399658e-02	4.42213206e-03	5.45375464e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+99	5.87880812e-01	2.81308001e-05	4.51087664e-06	1.53138068e-06	#gaugefix_facg : beta1=1.113017e+00  aopt=2.693208e-01  f0p/vol/Nd/Nc=6.56574965e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.65030366e-01	5.47894426e-02	6.08752599e-03	7.44109140e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.012s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+100	5.87882049e-01	4.09209119e-05	6.00653376e-06	2.10358926e-06	#gaugefix_facg : beta1=1.347917e+00  aopt=2.650304e-01  f0p/vol/Nd/Nc=8.91755251e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.02841408e-01	8.57577961e-02	8.77596612e-03	6.77601768e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+101	5.87883602e-01	6.65309782e-05	9.16552727e-06	2.64263344e-06	#gaugefix_facg : beta1=1.425666e+00  aopt=2.028414e-01  f0p/vol/Nd/Nc=1.39579746e-05 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.89180877e-01	9.90085837e-02	1.14183342e-02	1.50853100e-02
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+102	5.87886063e-01	7.59939859e-05	1.03970684e-05	4.18549609e-06	#gaugefix_facg : beta1=7.037762e-01  aopt=2.891809e-01  f0p/vol/Nd/Nc=1.61146783e-05 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.00331755e-01	1.61349766e-01	1.61289378e-02	1.21744116e-02
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+103	5.87888892e-01	1.21483291e-04	1.73749459e-05	4.81155995e-06	#gaugefix_facg : beta1=1.247696e+00  aopt=2.003318e-01  f0p/vol/Nd/Nc=2.62613551e-05 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.95500411e-01	1.58584703e-01	1.53663594e-02	1.09398699e-02
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+104	5.87891552e-01	1.36588125e-04	1.55458498e-05	4.52503535e-06	#gaugefix_facg : beta1=8.515925e-01  aopt=1.955004e-01  f0p/vol/Nd/Nc=2.58113123e-05 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.83234822e-01	1.43610902e-01	1.58814834e-02	2.03465482e-02
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+105	5.87894875e-01	1.13981448e-04	1.45423345e-05	5.65326210e-06	#gaugefix_facg : beta1=4.162580e-01  aopt=2.832348e-01  f0p/vol/Nd/Nc=2.33741703e-05 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.002s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.76883501e-01	2.45908673e-01	2.16615290e-02	1.07127869e-02
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+106	5.87898489e-01	2.35363257e-04	2.41308478e-05	6.14695510e-06	#gaugefix_facg : beta1=2.037923e+00  aopt=1.768835e-01  f0p/vol/Nd/Nc=4.00241981e-05 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.87180588e-01	1.53591394e-01	1.38171670e-02	9.14689512e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+107	5.87900831e-01	1.08887367e-04	1.74134681e-05	3.98263710e-06	#gaugefix_facg : beta1=2.778136e-01  aopt=1.871806e-01  f0p/vol/Nd/Nc=2.49985993e-05 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.004s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=3.00000000e-01	1.29602178e-01	1.48738187e-02	2.06008315e-02
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+108	5.87904184e-01	9.70250754e-05	1.43393404e-05	5.70331018e-06	#gaugefix_facg : beta1=7.968961e-01  aopt=3.000000e-01  f0p/vol/Nd/Nc=2.10941045e-05 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.88083302e-01	1.78956149e-01	1.61429087e-02	1.08686438e-02
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+109	5.87906924e-01	1.32089378e-04	1.76584189e-05	4.66041914e-06	#gaugefix_facg : beta1=1.462331e+00  aopt=1.880833e-01  f0p/vol/Nd/Nc=2.91269773e-05 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.57868434e-01	1.26425858e-01	9.95429694e-03	1.89107935e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+110	5.87908548e-01	1.08258293e-04	1.31874423e-05	2.76271294e-06	#gaugefix_facg : beta1=9.912960e-01  aopt=1.578684e-01  f0p/vol/Nd/Nc=2.05771253e-05 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.63175294e-01	7.90626627e-02	6.40800735e-03	1.91623961e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+111	5.87909598e-01	5.19717834e-05	9.08314956e-06	1.78567127e-06	#gaugefix_facg : beta1=2.045627e-01  aopt=1.631753e-01  f0p/vol/Nd/Nc=1.28682719e-05 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.53443333e-01	5.21922425e-02	5.51134016e-03	6.38965487e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+112	5.87910674e-01	3.63717324e-05	5.66198502e-06	1.83069846e-06	#gaugefix_facg : beta1=6.548719e-01  aopt=2.534433e-01  f0p/vol/Nd/Nc=8.49483114e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.003s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.01867455e-01	6.55319657e-02	6.17672995e-03	5.05122628e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+113	5.87911750e-01	4.83891248e-05	7.02327003e-06	1.83084354e-06	#gaugefix_facg : beta1=1.468352e+00  aopt=2.018675e-01  f0p/vol/Nd/Nc=1.06660100e-05 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.85153230e-01	5.45700878e-02	4.87023447e-03	3.10790909e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+114	5.87912573e-01	3.89344138e-05	6.03169350e-06	1.39873072e-06	#gaugefix_facg : beta1=7.719007e-01  aopt=1.851532e-01  f0p/vol/Nd/Nc=8.88185022e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.06008890e-01	4.84393913e-02	4.62165740e-03	3.95107796e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+115	5.87913385e-01	3.35949425e-05	5.34759304e-06	1.38164899e-06	#gaugefix_facg : beta1=8.176081e-01  aopt=2.060089e-01  f0p/vol/Nd/Nc=7.88401551e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.77674442e-01	3.45944014e-02	2.99943711e-03	1.61568372e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.002s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.003s
+116	5.87913885e-01	2.47312673e-05	3.77779547e-06	8.51033872e-07	#gaugefix_facg : beta1=7.572113e-01  aopt=1.776744e-01  f0p/vol/Nd/Nc=5.63059919e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.003s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.13314150e-01	2.71190593e-02	2.63754083e-03	2.41473787e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.002s
+117	5.87914356e-01	1.94473114e-05	2.94028056e-06	8.00728274e-07	#gaugefix_facg : beta1=7.845873e-01  aopt=2.133142e-01  f0p/vol/Nd/Nc=4.41390939e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.88188767e-01	2.14953508e-02	1.93906055e-03	1.30873176e-03
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.003s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.002s
+118	5.87914685e-01	1.44366051e-05	2.43448441e-06	5.59867555e-07	#gaugefix_facg : beta1=6.631813e-01  aopt=1.881888e-01  f0p/vol/Nd/Nc=3.49859225e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.003s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.66600738e-01	1.39001169e-02	1.14636597e-03	4.15563220e-04
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.002s
+119	5.87914874e-01	1.04867407e-05	1.47526425e-06	3.20546776e-07	#gaugefix_facg : beta1=7.802815e-01  aopt=1.666007e-01  f0p/vol/Nd/Nc=2.26238881e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.004s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.91569221e-01	1.00257491e-02	9.15074215e-04	6.52663559e-04
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+120	5.87915030e-01	7.47440759e-06	1.09928830e-06	2.65849971e-07	#gaugefix_facg : beta1=7.234334e-01  aopt=1.915692e-01  f0p/vol/Nd/Nc=1.63179509e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.81233252e-01	8.53030929e-03	7.50062858e-04	4.40996803e-04
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.002s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+121	5.87915156e-01	5.65388608e-06	9.69529103e-07	2.14006586e-07	#gaugefix_facg : beta1=7.192930e-01  aopt=1.812333e-01  f0p/vol/Nd/Nc=1.38839669e-06 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.15254565e-01	5.84399378e-03	5.71224020e-04	5.31511609e-04
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.005s
+122	5.87915258e-01	3.95157871e-06	6.49847219e-07	1.74146238e-07	#gaugefix_facg : beta1=7.068549e-01  aopt=2.152546e-01  f0p/vol/Nd/Nc=9.51170863e-07 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.92075712e-01	5.14494531e-03	4.70451501e-04	3.38094278e-04
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+123	5.87915338e-01	3.70383569e-06	5.67968251e-07	1.36807597e-07	#gaugefix_facg : beta1=9.015799e-01  aopt=1.920757e-01  f0p/vol/Nd/Nc=8.37393442e-07 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.004s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.82947820e-01	4.21983846e-03	3.73520731e-04	2.27961398e-04
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+124	5.87915401e-01	3.09289113e-06	4.52154874e-07	1.06873670e-07	#gaugefix_facg : beta1=8.738513e-01  aopt=1.829478e-01  f0p/vol/Nd/Nc=6.86822666e-07 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.002s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.79017493e-01	3.30336079e-03	2.87921338e-04	1.60624519e-04
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+125	5.87915449e-01	2.32688492e-06	3.69235544e-07	8.18600472e-08	#gaugefix_facg : beta1=7.463903e-01  aopt=1.790175e-01  f0p/vol/Nd/Nc=5.37656379e-07 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.84375581e-01	2.30551111e-03	2.05146165e-04	1.28958305e-04
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.002s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+126	5.87915484e-01	1.57190230e-06	2.56500614e-07	5.88385286e-08	#gaugefix_facg : beta1=6.365410e-01  aopt=1.843756e-01  f0p/vol/Nd/Nc=3.75245949e-07 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.002s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.20663924e-01	1.70196818e-03	1.68516188e-04	1.63502260e-04
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+127	5.87915515e-01	1.13762042e-06	1.89299011e-07	5.19829613e-08	#gaugefix_facg : beta1=7.315463e-01  aopt=2.206639e-01  f0p/vol/Nd/Nc=2.77013050e-07 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.83672019e-01	1.46129888e-03	1.29684533e-04	8.03725420e-05
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+128	5.87915536e-01	1.05113417e-06	1.60544216e-07	3.71507970e-08	#gaugefix_facg : beta1=9.765547e-01  aopt=1.836720e-01  f0p/vol/Nd/Nc=2.37841614e-07 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.014s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.014s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.98254375e-01	1.20980761e-03	1.12815578e-04	8.83391308e-05
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+129	5.87915556e-01	8.80960966e-07	1.31625359e-07	3.31988544e-08	#gaugefix_facg : beta1=8.201959e-01  aopt=1.982544e-01  f0p/vol/Nd/Nc=1.96908791e-07 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.11279229e-01	1.15121881e-03	1.11381401e-04	1.00168556e-04
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.012s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+130	5.87915576e-01	8.41939402e-07	1.25068529e-07	3.36672742e-08	#gaugefix_facg : beta1=9.166408e-01  aopt=2.112792e-01  f0p/vol/Nd/Nc=1.87372853e-07 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.09331261e-01	1.14907046e-03	1.10607359e-04	9.77054078e-05
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+131	5.87915595e-01	7.91343690e-07	1.26623875e-07	3.32957096e-08	#gaugefix_facg : beta1=8.903905e-01  aopt=2.093313e-01  f0p/vol/Nd/Nc=1.87023187e-07 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.33166591e-01	1.07493283e-03	1.09376221e-04	1.15023600e-04
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+132	5.87915616e-01	7.67810478e-07	1.16569922e-07	3.46939741e-08	#gaugefix_facg : beta1=9.675949e-01  aopt=2.331666e-01  f0p/vol/Nd/Nc=1.74956516e-07 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.31568932e-01	1.11970854e-03	1.13565136e-04	1.18329317e-04
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+133	5.87915637e-01	7.92741046e-07	1.23705469e-07	3.58937058e-08	#gaugefix_facg : beta1=1.076385e+00  aopt=2.315689e-01  f0p/vol/Nd/Nc=1.82244228e-07 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.97758026e-01	1.25777758e-03	1.17117737e-04	9.11246689e-05
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+134	5.87915657e-01	1.03159578e-06	1.32983707e-07	3.44315229e-08	#gaugefix_facg : beta1=1.397635e+00  aopt=1.977580e-01  f0p/vol/Nd/Nc=2.04716403e-07 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.11875397e-01	1.46227474e-03	1.41700587e-04	1.28112285e-04
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+135	5.87915682e-01	9.89640732e-07	1.67582766e-07	4.28865763e-08	#gaugefix_facg : beta1=7.352515e-01  aopt=2.118754e-01  f0p/vol/Nd/Nc=2.38000447e-07 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.003s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.45715929e-01	1.50581801e-03	1.56940479e-04	1.75986266e-04
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+136	5.87915712e-01	1.04576435e-06	1.65114123e-07	5.12211827e-08	#gaugefix_facg : beta1=1.068425e+00  aopt=2.457159e-01  f0p/vol/Nd/Nc=2.45087567e-07 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.14179148e-01	1.71857441e-03	1.67547563e-04	1.54507750e-04
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+137	5.87915742e-01	1.24767177e-06	1.91355687e-07	5.09620344e-08	#gaugefix_facg : beta1=1.304818e+00  aopt=2.141791e-01  f0p/vol/Nd/Nc=2.79715887e-07 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.82770176e-01	1.66986819e-03	1.47717390e-04	8.98024109e-05
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+138	5.87915767e-01	1.19992636e-06	1.84609896e-07	4.22533885e-08	#gaugefix_facg : beta1=9.509931e-01  aopt=1.827702e-01  f0p/vol/Nd/Nc=2.71788442e-07 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.02442571e-01	1.48175174e-03	1.39946135e-04	1.15156452e-04
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+139	5.87915792e-01	1.00900294e-06	1.66876034e-07	4.15311195e-08	#gaugefix_facg : beta1=8.129865e-01  aopt=2.024426e-01  f0p/vol/Nd/Nc=2.41170530e-07 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.63661456e-01	1.06062097e-03	8.61957651e-05	2.65393924e-05
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+140	5.87915806e-01	7.40212762e-07	1.17038848e-07	2.40301862e-08	#gaugefix_facg : beta1=7.737220e-01  aopt=1.636615e-01  f0p/vol/Nd/Nc=1.72627110e-07 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.002s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.91943623e-01	7.33567358e-04	6.70415125e-05	4.80893350e-05
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+141	5.87915817e-01	5.15688531e-07	7.96993631e-08	1.94907308e-08	#gaugefix_facg : beta1=6.883468e-01  aopt=1.919436e-01  f0p/vol/Nd/Nc=1.19395729e-07 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.08427906e-01	6.32157028e-04	6.07023153e-05	5.31630699e-05
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+142	5.87915828e-01	4.39214914e-07	7.13752129e-08	1.82382299e-08	#gaugefix_facg : beta1=8.006591e-01  aopt=2.084279e-01  f0p/vol/Nd/Nc=1.02890141e-07 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.002s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.63778370e-01	5.20428571e-04	4.23169349e-05	1.31323300e-05
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+143	5.87915835e-01	3.93338064e-07	5.55146164e-08	1.17986615e-08	#gaugefix_facg : beta1=9.461893e-01  aopt=1.637784e-01  f0p/vol/Nd/Nc=8.47051710e-08 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.14112148e-01	3.92469339e-04	3.82486819e-05	3.52552433e-05
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.003s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+144	5.87915842e-01	2.74833111e-07	4.39702505e-08	1.16317704e-08	#gaugefix_facg : beta1=6.326027e-01  aopt=2.141121e-01  f0p/vol/Nd/Nc=6.38784732e-08 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.06632438e-01	3.97513462e-04	3.79840990e-05	3.26842260e-05
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+145	5.87915848e-01	2.84382264e-07	4.37169856e-08	1.13696655e-08	#gaugefix_facg : beta1=1.051172e+00  aopt=2.066324e-01  f0p/vol/Nd/Nc=6.46994567e-08 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.11952581e-01	3.65000254e-04	3.53769233e-05	3.20064173e-05
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+146	5.87915855e-01	2.63096245e-07	4.01508225e-08	1.07087919e-08	#gaugefix_facg : beta1=9.299149e-01  aopt=2.119526e-01  f0p/vol/Nd/Nc=5.94075934e-08 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.16717209e-01	3.76823054e-04	3.69630193e-05	3.48023832e-05
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+147	5.87915861e-01	2.56122478e-07	4.25225253e-08	1.13043559e-08	#gaugefix_facg : beta1=8.952330e-01  aopt=2.167172e-01  f0p/vol/Nd/Nc=6.13318773e-08 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.17783189e-01	3.79980703e-04	3.73695020e-05	3.54803533e-05
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+148	5.87915868e-01	2.71219277e-07	4.16691052e-08	1.14552313e-08	#gaugefix_facg : beta1=1.185039e+00  aopt=2.177832e-01  f0p/vol/Nd/Nc=6.18458175e-08 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.89539054e-01	3.67614804e-04	3.33234671e-05	2.30056407e-05
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+149	5.87915874e-01	2.49571898e-07	4.21577658e-08	9.64511715e-09	#gaugefix_facg : beta1=8.946052e-01  aopt=1.895391e-01  f0p/vol/Nd/Nc=5.98331386e-08 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.11845037e-01	3.26134907e-04	3.16014521e-05	2.85633228e-05
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+150	5.87915879e-01	2.21801114e-07	3.64672142e-08	9.56375412e-09	#gaugefix_facg : beta1=8.455182e-01  aopt=2.118450e-01  f0p/vol/Nd/Nc=5.30818534e-08 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.93353065e-01	3.09242393e-04	2.83939107e-05	2.08011097e-05
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+151	5.87915884e-01	2.03185551e-07	3.52542324e-08	8.27677193e-09	#gaugefix_facg : beta1=9.499669e-01  aopt=1.933531e-01  f0p/vol/Nd/Nc=5.03324207e-08 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.90083536e-01	2.21630796e-04	2.01275998e-05	1.40207635e-05
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+152	5.87915888e-01	1.52464801e-07	2.47470801e-08	5.83150228e-09	#gaugefix_facg : beta1=7.933068e-01  aopt=1.900835e-01  f0p/vol/Nd/Nc=3.60727208e-08 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.99535784e-01	2.06537009e-04	1.93348774e-05	1.53821798e-05
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+153	5.87915891e-01	1.39854945e-07	2.30720250e-08	5.70425618e-09	#gaugefix_facg : beta1=8.658042e-01  aopt=1.995358e-01  f0p/vol/Nd/Nc=3.36160496e-08 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.85619529e-01	1.65065620e-04	1.47550563e-05	9.50294452e-06
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+154	5.87915893e-01	1.14298580e-07	1.85755311e-08	4.24099544e-09	#gaugefix_facg : beta1=7.987975e-01  aopt=1.856195e-01  f0p/vol/Nd/Nc=2.68661490e-08 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.99442241e-01	1.27311619e-04	1.19150709e-05	9.46827095e-06
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+155	5.87915896e-01	8.77028094e-08	1.40722889e-08	3.51458496e-09	#gaugefix_facg : beta1=7.902008e-01  aopt=1.994422e-01  f0p/vol/Nd/Nc=2.07212922e-08 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=2.02494384e-01	1.20806178e-04	1.14089294e-05	9.39525671e-06
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+156	5.87915898e-01	8.22437829e-08	1.34293278e-08	3.38602812e-09	#gaugefix_facg : beta1=9.291316e-01  aopt=2.024944e-01  f0p/vol/Nd/Nc=1.96624638e-08 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:377]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:377]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:377]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:380]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:380]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:380]	0.001s
+max_cubic_spline[@../module/lhpc/gaugefix.qlua:394]	0.000s
+# cubic.spline(opt,f0p,f1-f0,f2-f0)=1.80111977e-01	9.48500837e-05	8.30294402e-06	4.75736942e-06
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+157	5.87915899e-01	6.51479602e-08	1.06474748e-08	2.36470565e-09	#gaugefix_facg : beta1=8.151425e-01  aopt=1.801120e-01  f0p/vol/Nd/Nc=1.54378391e-08 opt=cub.spline
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+158	5.87915900e-01	5.05406193e-08	7.92083159e-09	1.26350963e-09	#gaugefix_facg : beta1=7.757821e-01  aopt=8.000000e-02  f0p/vol/Nd/Nc=1.17376254e-08 opt=fix.step
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+159	5.87915900e-01	2.60593758e-08	4.02557037e-09	9.31823174e-10	#gaugefix_facg : beta1=5.156125e-01  aopt=8.000000e-02  f0p/vol/Nd/Nc=9.49488186e-09 opt=fix.step
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+160	5.87915901e-01	1.74608176e-08	2.25860489e-09	6.87502943e-10	#gaugefix_facg : beta1=6.700397e-01  aopt=8.000000e-02  f0p/vol/Nd/Nc=6.36571137e-09 opt=fix.step
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+161	5.87915901e-01	1.44450571e-08	1.93696387e-09	6.27479957e-10	#gaugefix_facg : beta1=8.272841e-01  aopt=8.000000e-02  f0p/vol/Nd/Nc=6.06659711e-09 opt=fix.step
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:359]	0.001s
+grad_func[@../module/lhpc/gaugefix.qlua:360]	0.002s
+field_fa[@../module/lhpc/gaugefix.qlua:362]	0.001s
+m_exp[@../module/lhpc/gaugefix.qlua:408]	0.000s
+gauge_transform_U[@../module/lhpc/gaugefix.qlua:409]	0.001s
+gf_func[@../module/lhpc/gaugefix.qlua:409]	0.001s
+# SumTr|U|^2/vol/Nd/Nc = 9.99999999e-01  SumTr|g|^2/vol/Nc=1.00000000e+00
+report_gauge_transf[@../module/lhpc/gaugefix.qlua:420]	0.001s
+162	5.87915901e-01	9.45099625e-09	1.30226810e-09	4.41568782e-10	#gaugefix_facg : beta1=6.542720e-01  aopt=8.000000e-02  f0p/vol/Nd/Nc=4.01861911e-09 opt=fix.step
+NAME                          	   CNT	      TOT[s]	      AVG[s]
+gf_func                       	   474	       0.360	       0.001
+max_cubic_spline              	   156	       0.000	       0.000
+field_fa                      	   162	       0.148	       0.001
+fourier_acc_coeff             	     1	       0.003	       0.003
+report_gauge_transf           	   161	       0.187	       0.001
+gauge_transform_U             	   635	       0.597	       0.001
+grad_func                     	   162	       0.381	       0.002
+m_exp                         	   474	       0.035	       0.000
+### tol_final=3.871128e-05  iter_final=162
+TIME("gaugefix landau","done") = 1.876 secs
+# [0]	1.000000e+00	5.697827e-01
+# [1]	1.000000e+00	5.838210e-01
+# [2]	1.000000e+00	6.055604e-01
+# [3]	1.000000e+00	5.924996e-01

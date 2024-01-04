@@ -4,12 +4,14 @@ require "gaugefix"
 require "stdlib"
 require "latvec"
 
-latsize = {48, 48, 48, 64}
-gauge_file = "../config/MILC/l4864f21b7373m00125m0250a.4314"
+_rcParam.la = {backend = 'gpu-cublas'}
+
+latsize = {4, 4, 4, 8}
+gauge_file = 'gauge_disord_4c8.NERSC'
 
 L = qcd.lattice(latsize)
 Nd = #L
-u = qcd.milc.read_gauge(L, gauge_file)
+u = qcd.nersc.read_gauge(L, gauge_file)
 vol = L:volume()
 Nc = u[1]:colors()
 
@@ -22,7 +24,7 @@ for mu = 0, Nd - 1 do
 end
 
 -- Fourier-accelerated (nonlinear) CG
-g, iter, tol = gaugefix_facg(u, gaugefix_coulomb_func, gaugefix_coulomb_grad,
+g, iter, tol = gaugefix_facg(u, gaugefix_landau_func, gaugefix_landau_grad,
                              gf_accu, gf_maxiter, true)
 
 ufix = gauge_transform_U(g, u)
