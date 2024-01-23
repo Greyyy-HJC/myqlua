@@ -1,0 +1,259 @@
+-- created by Jinchen on 2024-01-23
+package.path = package.path ..
+                   ';../module/qlib/?.qlua;../module/lhpc/?.qlua;../module/qlua-production/?.qlua'
+require "stdlib"
+require "lhpc-std"
+require "gauge/gfix"
+
+-- Function to generate the functional and gradient for gauge fixing,
+-- works for both Landau and Coulomb gauge.
+-- @param u The gauge field.
+-- @param gauge_type The type of gauge ("landau" or "coulomb").
+-- @return gf_func, gf_grad The gauge fixing functional and its gradient.
+function gfix_func_and_grad(u, gauge_type)
+    local L = u[1].lattice
+    local Nd = #L
+    local gfix_wgt_dir = {}
+
+    -- Initialize weight directions based on gauge type.
+    for mu = 0, #L - 1 do gfix_wgt_dir[1 + mu] = 1 end
+    if gauge_type == "landau" then
+        gfix_wgt_dir[#L] = 1
+    elseif gauge_type == "coulomb" then
+        gfix_wgt_dir[#L] = 0
+    else
+        error("gauge type not supported")
+    end
+
+    -- Internal function for the gauge fixing functional.
+    local function gfix_func(u)
+        local Nc = u[1]:colors()
+        local vol = L:volume()
+        local gf = 0.
+
+        for mu = 0, Nd - 1 do
+            local wgt = gfix_wgt_dir[1 + mu]
+            assert(0 <= wgt)
+            gf = gf + wgt * u[1 + mu]:trace():real():sum()
+        end
+        return gf
+    end
+
+    -- Internal function for the gradient of the gauge fixing functional.
+    local function gfix_grad(u)
+        local Nc = u[1]:colors()
+        local vol = L:volume()
+        local gr = L:ColorMatrix(0.)
+
+        for mu = 0, Nd - 1 do
+            local wgt = gfix_wgt_dir[1 + mu]
+            assert(0 <= wgt)
+            local x = u[1 + mu] + u[1 + mu]:shift(mu, "from_backward"):adjoin()
+            gr = gr + wgt * (x - x:adjoin()) * complex(0, .5)
+        end
+        return gr - gr:trace() * L:ColorMatrix(1. / Nc)
+    end
+
+    return gfix_func, gfix_grad
+end
+
+-- gaugefix_facg function for gauge fixing using non-linear conjugate gradient optimization
+-- Parameters:
+--   u: The input gauge field.
+--   gf_func: The functional to be maximized.
+--   grad_func: The algebraic gradient of the functional.
+--   tol: Tolerance for the norm of the gradient, i.e. the accuracy of the gauge fixing.
+--   maxiter: Maximum number of iterations.
+--   verbose: A flag to control the verbosity of the output.
+--   tol_switch_fletcher: Tolerance for switching to linear search.
+-- Returns:
+--   gcur: The final gauge transformation.
+--   cnt: The total number of iterations.
+--   final_grad_norm: The final normalized gradient norm.
+gaugefix_facg = function(u, gf_func, grad_func, tol, maxiter, verbose,
+                         tol_switch_fletcher)
+    -- Implementation follows arXiv:1405.5812[hep-lat]
+    -- Optimizes the gauge field 'u' to maximize 'gf_func' in the direction given by 'grad_func'
+
+    local function field_fa(x, fa_coeff)
+        local y = qcd.fourier_transf(x, -1)
+        return qcd.fourier_transf(fa_coeff * y / x.lattice:volume(), 1)
+    end
+
+    local function fourier_acc_coeff(L)
+        -- return field p2max/p2 for Fourier acceleration
+        local p2 = L:Real(0.)
+        local p2max = 16 -- true for even L, approx for odd L
+        for mu = 0, #L - 1 do
+            local k = (2 * math.pi * L:Real(L:pcoord(mu))) / L[mu]
+            p2 = p2 + 2 * (1. - k:cos())
+        end
+        L:Subset(qcd.le(p2, 0)):where(function() p2:set(L:Real(1.)) end) -- avoid zeros
+        return L:Real(p2max) / p2
+    end
+
+    local function max_cubic_spline(y0p, x1, y1, x2, y2)
+        -- find maximum point in [0,x2] of cubic spline :
+        --      f(x) = a * x**3 + b * x**2 + c * x, f(0)=0, 
+        --      such that f'(0)=f0p, f(x1)=y1, f(x2)=y2
+        -- (0, x1, x2) must be distinct and asc.ordered
+        assert(0 < x1)
+        assert(x1 < x2)
+        local a, b, c, r1, r2, disc, xdef, xopt
+        c = y0p
+        r1 = (y1 - c * x1) / x1 / x1
+        r2 = (y2 - c * x2) / x2 / x2
+        a = (r1 - r2) / (x1 - x2)
+        b = (r1 * x2 - r2 * x1) / (x2 - x1)
+        disc = b * b - 3 * a * c
+        -- solve f'(x) = 3*a*x**2 + 2*b*x + c = 0 for max spline
+        if 0 < y2 then
+            xdef = x2
+        else
+            xdef = 0.
+        end
+        if disc <= 0 then -- full cubic (a!=0) w/o local extrema || a==0 && b==0
+            return xdef
+        elseif (0 == a) then -- FIXME relax condition to include very small a?
+            if (0 <= b) then -- no local max
+                return xdef
+            elseif c <= 0 then -- && b < 0
+                -- max from cubic spline cannot be located
+                return xdef
+            else -- b<0 && c>0
+                if c < x2 * (-2 * b) then
+                    return c / (-2 * b)
+                else
+                    return xdef
+                end
+            end
+        else -- a!=0 && disc > 0: full cubic with 2 extrema
+            xopt = (-b - math.sqrt(disc)) / (3 * a) -- for both pos. and neg. a
+            if 0 < xopt and xopt < x2 then
+                return xopt
+            else
+                return xdef
+            end
+        end
+    end
+
+    -- Assign local variables to the functions passed as arguments for easier access and potential performance benefits
+    local field_fa = field_fa
+    local grad_func = grad_func
+    local fourier_acc_coeff = fourier_acc_coeff
+    local gf_func = gf_func
+    local gauge_transform_U = gauge_transform_U
+    local max_cubic_spline = max_cubic_spline
+    -- Define a local function for matrix exponentiation
+    local m_exp = function(m) return m:exp() end
+
+    -- Step size initialization for conjugate gradient method
+    local alpha0 = 0.08 -- initial step size
+    local alpha1 = 0.15 -- first line search step size
+    local alpha2 = 0.30 -- second line search step size
+    -- Table of possible step sizes for line search (unused in this snippet but may be used elsewhere)
+    local alpha_tab = {
+        0.00, 0.001, 0.002, 0.01, 0.02, 0.03, 0.04, .05, .10, .15, .20, .25, .30
+    }
+    -- Tolerance switch for Fletcher's condition; default value if not provided
+    if nil == tol_switch_fletcher then tol_switch_fletcher = 1e-6 end
+
+    -- Dimensionality and volume calculations for the lattice
+    local Nd = #u -- number of dimensions
+    local Nc = u[1]:colors() -- number of colors
+    local Nadj = Nc * Nc - 1 -- adjoint representation dimension
+    local L = u[1].lattice -- lattice from the first gauge field
+    local vol = L:volume() -- volume of the lattice
+    -- Compute the Fourier acceleration coefficient
+    local fa_coeff = fourier_acc_coeff(L)
+
+    -- Calculate the initial gradient and its norm
+    local deriv0 = grad_func(u)
+    local deriv0_n2 = deriv0:norm2()
+    local grad0 = field_fa(deriv0, fa_coeff)
+    local grad0_n2 = grad0:norm2()
+    -- Initialize the search direction
+    local s0 = grad0
+    -- Apply the exponential map to the initial search direction with the initial step size
+    local gcur = m_exp(s0 * complex(0, alpha0))
+    -- Evaluate the gauge fixing functional
+    local f0 = gf_func(gauge_transform_U(gcur, u))
+
+    -- Initialize iteration counter
+    local cnt = 1
+    -- Declare variables to be used in the optimization loop
+    local u_g, s1, deriv1, deriv1_n2, grad1, grad1_n2
+    local beta1, f0p, f1, f2, alpha_opt
+
+    -- Print initial verbose output if required
+    if verbose then
+        printf("Iter: %d, FuncVal: %e, GradNorm: %e\n", cnt, f0 / vol / Nd / Nc,
+               grad0_n2 / vol / Nadj)
+    end
+
+    -- Optimization loop: continue until gradient norm is below tolerance or maximum iterations reached
+    while tol < grad0_n2 / vol / Nadj and cnt < maxiter do
+        -- Update the gauge field using the current gauge transformation
+        u_g = gauge_transform_U(gcur, u)
+        -- Compute the new gradient and its norm
+        deriv1 = grad_func(u_g)
+        deriv1_n2 = deriv1:norm2()
+        grad1 = field_fa(deriv1, fa_coeff)
+        grad1_n2 = grad1:norm2()
+        -- Determine if line search should be performed based on Fletcher's condition
+        local lin_search = (tol_switch_fletcher < deriv1_n2 / vol / Nadj)
+
+        -- Compute the conjugate gradient beta parameter
+        if lin_search then
+            -- Use Polak-Ribière formula to calculate beta
+            beta1 = qcd.dot(grad1, grad1 - grad0):sum():real() / grad0_n2
+            -- Reset beta to zero if it is negative
+            if beta1 < 0 then beta1 = 0. end
+        else
+            -- Use Fletcher-Reeves formula to calculate beta
+            beta1 = grad1_n2 / grad0_n2
+        end
+
+        -- Update the search direction
+        s1 = grad1 + beta1 * s0
+        -- Compute directional derivative along s1
+        local f0p = qcd.dot(s1, deriv1):sum():real()
+
+        -- Perform line search if necessary
+        if lin_search then
+            -- Evaluate the functional at two points along the search direction
+            local f1 = gf_func(gauge_transform_U(m_exp(s1 * complex(0, alpha1)),
+                                                 u_g))
+            local f2 = gf_func(gauge_transform_U(m_exp(s1 * complex(0, alpha2)),
+                                                 u_g))
+            -- Use cubic spline interpolation to find the optimal step size
+            alpha_opt = max_cubic_spline(f0p, alpha1, f1 - f0, alpha2, f2 - f0)
+        else
+            -- If not line searching, use the initial step size
+            alpha_opt = alpha0
+        end
+
+        -- Update the gauge transformation by applying the optimal step size along the search direction
+        gcur = m_exp(s1 * complex(0, alpha_opt)) * gcur
+        -- Evaluate the functional and check convergence
+        local f0_new = gf_func(gauge_transform_U(gcur, u))
+        local conver = math.abs(1. - f0 / f0_new)
+
+        -- Prepare for the next iteration
+        f0 = f0_new
+        deriv0 = deriv1
+        grad0 = grad1
+        grad0_n2 = grad1_n2
+        s0 = s1
+        cnt = cnt + 1
+
+        -- Print verbose output if required
+        if verbose then
+            printf("Iter: %d, FuncVal: %e, Convergence: %e, GradNorm: %e\n",
+                   cnt, f0 / vol / Nd / Nc, conver, grad0_n2 / vol / Nadj)
+        end
+    end
+
+    -- Return the final gauge transformation, number of iterations, and normalized gradient norm
+    return gcur, cnt, grad0_n2 / vol / Nadj
+end
