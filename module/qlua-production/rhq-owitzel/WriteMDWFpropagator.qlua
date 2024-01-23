@@ -1,0 +1,317 @@
+require "stdlib"
+
+function DD_PAIRwrite_MDWF_point_source_propagator(fname, src, src_vec, q_prop, PropInfo, GaugeInfo, precision)
+-- Chroma still chokes reading these guys...
+
+
+local prop_info =[=[<?xml version="1.0"?>
+
+
+<usqcdPropFile>
+  <version>1.0</version>
+  <type>USQCD_DiracFermion_Source_Sink_Pairs</type>
+  <info>
+    <Propagator>
+      <version>1</version>
+      <ForwardProp>
+        <version>9</version>
+        <quarkSpinType>FULL</quarkSpinType>
+        <obsvP>true</obsvP><FermionAction>
+      <FermAct>DWF</FermAct>
+      <OverMass>1.8</OverMass>
+      <Mass>0.04</Mass>
+      <N5>16</N5>
+      <FermionBC>
+        <FermBC>SIMPLE_FERMBC</FermBC>
+        <boundary>1 1 1 1</boundary>
+      </FermionBC>
+    </FermionAction>
+<InvertParam>
+      <invType>CG_INVERTER</invType>
+      <RsdCG>1e-8</RsdCG>
+      <MaxCG>8000</MaxCG>
+    </InvertParam>
+</ForwardProp>
+      <PropSource>
+        <version>6</version><Source>
+      <version>2</version>
+      <SourceType>POINT_SOURCE</SourceType>
+      <j_decay>3</j_decay>
+      <t_srce>0 0 0 0</t_srce>
+      <Displacement>
+        <version>1</version>
+        <DisplacementType>NONE</DisplacementType>
+      </Displacement>
+    </Source>
+
+        <j_decay>3</j_decay>
+        <t_source>0</t_source>
+      </PropSource>
+      <Config_info><NERSC>
+      <mat_size>12</mat_size>
+      <float_size>8</float_size>
+      <nrow>24 24 24 64</nrow>
+      <boundary>1 1 1 1</boundary>
+      <w_plaq>0.5879696612</w_plaq>
+      <link>-3.167062043e-05</link>
+      <ensemble_id>130</ensemble_id>
+      <ensemble_label>IWASAKI_Nf2p1_24c64s16_b2.13M1.80mu0.005ms0.04_rhmc_H_R_G</ensemble_label>
+      <creator>RBC</creator>
+      <creator_hardware>QCDOC</creator_hardware>
+      <creation_date>Wed Jun 21 07:15:05 2006</creation_date>
+      <archive_date>Sat May 19 16:08:48 EDT 2007</archive_date>
+      <sequence_number>495</sequence_number>
+      <checksum>f07b7406</checksum>
+    </NERSC>
+</Config_info>
+    </Propagator>
+  </info>
+</usqcdPropFile>
+]=]
+--[[
+<usqcdPropFile>
+  <version>1.0</version>
+  <type>USQCD_DiracFermion_Source_Sink_Pairs</type>
+  <info>
+    <Propagator>
+      <version>1</version>
+      <ForwardProp>
+        <version>9</version>
+        <quarkSpinType>FULL</quarkSpinType>
+        <obsvP>true</obsvP><FermionAction>
+        <FermAct>:ACTION:</FermAct>
+          <OverMass>:OVERMASS:</OverMass>
+          <Mass>:MASS:</Mass>
+          <N5>:LS:</N5>
+          <b5>:B5:</b5>
+          <c5>:C5:</c5>
+          <FermionBC>
+          <FermBC>SIMPLE_FERMBC</FermBC>
+          <boundary>:FERMION_BC:</boundary>
+        </FermionBC>
+        </FermionAction>
+        <InvertParam>
+          <invType>CG_INVERTER</invType>
+          <RsdCG>:RSDCG:</RsdCG>
+          <MaxCG>:MAXCG:</MaxCG>
+        </InvertParam>
+      </ForwardProp>
+      <PropSource>
+        <version>6</version>
+        <Source>
+          <version>2</version>
+          <SourceType>POINT_SOURCE</SourceType>
+          <j_decay>3</j_decay>
+          <t_srce>:SRCVEC:</t_srce>
+          <Displacement>
+           <version>1</version>
+           <DisplacementType>NONE</DisplacementType>
+          </Displacement>
+        </Source>
+        <j_decay>3</j_decay>
+        <t_source>:TIMESLICE:</t_source>
+      </PropSource>
+      <Config_info>
+        <NERSC>
+        <mat_size>12</mat_size>
+        <float_size>8</float_size>
+        <nrow>:DIMENSION_1: :DIMENSION_2: :DIMENSION_3: :DIMENSION_4:</nrow>
+        <boundary>:BOUNDARY_1: :BOUNDARY_2: :BOUNDARY_3: :BOUNDARY_4:</boundary>
+        <w_plaq>:PLAQUETTE:</w_plaq>
+        <link>:LINK_TRACE:</link>
+        <ensemble_id>:ENSEMBEL_ID:</ensemble_id>
+        <ensemble_label>:ENSEMBLE_LABEL:</ensemble_label>
+        <creator>:CREATOR:</creator>
+        <creator_hardware>:CREATOR_HARDWARE:</creator_hardware>
+        <creation_date>:CREATION_DATE:</creation_date>
+        <archive_date>:ARCHIVE_DATE:</archive_date>
+        <sequence_number>:SEQUENCE_NUMBER:</sequence_number>
+        <checksum>:CHECKSUM:</checksum>
+        </NERSC>
+       </Config_info>
+    </Propagator>
+  </info>
+</usqcdPropFile>
+]]
+
+local src_info =[=[<?xml version="1.0"?>
+
+
+<usqcdSourceInfo>
+   <version>1.0</version>
+   <info>
+   </info>
+</usqcdSourceInfo>
+]=]
+
+file_info=[=[<?xml version="1.0"?>
+
+
+<propagator>
+  <id>0</id>
+</propagator>
+
+]=]
+
+-- local file_info =[=[<?xml version="1.0"?>
+-- ]=]
+
+
+
+-- Replace :PLACEHOLDER: using values provided in an asscociate array 
+for index, value in pairs(PropInfo) do
+     prop_info = string.gsub(prop_info, ":" .. index .. ":", value)
+end
+for index, value in pairs(GaugeInfo) do
+    if value == 'PERIODIC' then
+       value = 1
+    elseif value == 'ANTIPERIODIC' then
+       value = -1
+    elseif  index == 'CHECKSUM' then
+      value = string.format("%x", value) -- tostring doesn't deal well with hex numbers
+      value = string.sub(value, 9, -1)  -- poor hack!
+    end
+    prop_info = string.gsub(prop_info, ":" .. index .. ":", value)
+end
+
+ printf("%s\n\n", prop_info)
+
+
+
+
+-- WriteDDpair_propagator(src, q_prop,"single")
+start_time = os.time()
+-- fname = "./test-mdwf-"..mval.."."..config
+qcd.ddpairs.write(precision, fname, prop_info, src, src_info, src_vec[4], q_prop, file_info, "single")
+printf("Wrote DD pair propagator: "..fname.." \n")
+printf("\nTime writing %s precision propagator: %d sec \n\n", precision, os.difftime(os.time(), start_time))
+
+end
+
+-- --------------------------------------------------------------------------------------------------
+
+function QIOwrite_MDWF_point_source_propagator(fname, q_prop, PropInfo, GaugeInfo, precision)
+
+file_info=[=[<?xml version="1.0"?>
+
+
+<propagator>
+  <id>0</id>
+</propagator>
+
+]=]
+
+prop_info=[=[<?xml version="1.0"?>
+
+
+<Propagator>
+  <ForwardProp>
+    <version>9</version>
+    <quarkSpinType>FULL</quarkSpinType>
+    <obsvP>true</obsvP>
+    <FermionAction>
+      <FermAct>:ACTION:</FermAct>
+      <OverMass>:OVERMASS:</OverMass>
+      <Mass>:MASS:</Mass>
+      <b5>:B5:</b5>
+      <c5>:C5:</c5>
+      <N5>:LS:</N5>
+      <FermionBC>
+        <FermBC>SIMPLE_FERMBC</FermBC>
+        <boundary>:FERMION_BC:</boundary>
+      </FermionBC>
+    </FermionAction>
+    <InvertParam>
+      <invType>CG_INVERTER</invType>
+      <RsdCG>:RSDCG:</RsdCG>
+      <MaxCG>:MAXCG:</MaxCG>
+    </InvertParam>
+  </ForwardProp>
+  <StateInfo></StateInfo>
+  <PropSource>
+      <version>6</version>
+      <Source>
+        <version>1</version>
+        <SourceType>POINT_SOURCE</SourceType>
+        <j_decay>3</j_decay>
+        <t_srce>:SRCVEC:</t_srce>
+        <SmearingParam>
+          <wvf_kind>GAUGE_INV_GAUSSIAN</wvf_kind>
+          <wvf_param>4.35</wvf_param>
+          <wvfIntPar>30</wvfIntPar>
+          <no_smear_dir>3</no_smear_dir>
+        </SmearingParam>
+        <Displacement>
+          <version>1</version>
+          <DisplacementType>NONE</DisplacementType>
+        </Displacement>
+        <LinkSmearing>
+          <LinkSmearingType>APE_SMEAR</LinkSmearingType>
+          <link_smear_fact>2.5</link_smear_fact>
+          <link_smear_num>0</link_smear_num>
+          <no_smear_dir>3</no_smear_dir>
+        </LinkSmearing>
+      </Source>
+      <j_decay>3</j_decay>
+      <t_source>0</t_source>
+  </PropSource>
+    <RNG>
+      <Seed>
+        <elem>11</elem>
+        <elem>0</elem>
+        <elem>0</elem>
+        <elem>0</elem>
+      </Seed>
+    </RNG>
+    <Config_info>
+      <Config_info>
+        <NERSC>
+          <mat_size>12</mat_size>
+          <float_size>8</float_size>
+          <nrow>:DIMENSION_1: :DIMENSION_2: :DIMENSION_3: :DIMENSION_4:</nrow>
+          <boundary>:BOUNDARY_1: :BOUNDARY_2: :BOUNDARY_3: :BOUNDARY_4:</boundary>
+          <w_plaq>:PLAQUETTE:</w_plaq>
+          <link>:LINK_TRACE:</link>
+          <ensemble_id>:ENSEMBLE_ID:</ensemble_id>
+          <ensemble_label>:ENSEMBLE_LABEL:</ensemble_label>
+          <creator>:CREATOR:</creator>
+          <creator_hardware>:CREATOR_HARDWARE:</creator_hardware>
+          <creation_date>:CREATION_DATE:</creation_date>
+          <archive_date>:ARCHIVE_DATE:</archive_date>
+          <sequence_number>:SEQUENCE_NUMBER:</sequence_number>
+          <checksum>:CHECKSUM:</checksum>
+        </NERSC>
+      </Config_info>
+    </Config_info>
+
+</Propagator>
+
+]=]
+
+
+-- Replace :PLACEHOLDER: using values provided in an asscociate array 
+local index, value
+for index, value in pairs(PropInfo) do
+     prop_info = string.gsub(prop_info, ":" .. index .. ":", value)
+end
+for index, value in pairs(GaugeInfo) do
+    if value == 'PERIODIC' then
+       value = 1
+    elseif value == 'ANTIPERIODIC' then
+       value = -1
+    elseif  index == 'CHECKSUM' then
+      value = string.format("%x", value) -- tostring doesn't deal well with hex numbers
+      value = string.sub(value, 9, -1)  -- poor hack!
+    end
+    prop_info = string.gsub(prop_info, ":" .. index .. ":", value)
+end
+
+-- printf("%s\n\n", prop_info)
+
+start_time = os.time()
+qcd.qdpcc.write_prop(precision, fname, file_info, q_prop, prop_info, "single")
+printf("Wrote QIO propagator: "..fname.." \n")
+printf("\nTime writing %s precision propagator: %d sec \n\n", precision, os.difftime(os.time(), start_time))
+
+end
+

@@ -1,0 +1,236 @@
+package.path = './?.qlua;./qlib-lhpc/?.qlua;./qlib/?.qlua;' .. package.path
+require "strict"    -- catch all undefined (nil) variables
+require "stdlib"    -- standard printf, etc
+require "lhpc-std"  -- make_source, etc
+require "ape-smear" -- gauge smear
+require "gauge"
+require "qdpc_io"
+require "setup_util"
+require "latvec"
+
+require "cedm-seq"  -- sequential sources
+require "hadspec"
+require "hex-smear"
+require "madwf_sns"
+
+------------------------------------------------------------------------------
+-- INITIALIZATION
+------------------------------------------------------------------------------
+tot_timer = timer("total")
+L = qcd.lattice(latsize, {network=network_geom})
+S = rnd_init(L, rnd_seed)
+
+------------------------------------------------------------------------------
+-- function to sample one source location
+------------------------------------------------------------------------------
+-- compute & save forward and CP-odd backward propagators and do final contraction
+--  at the cEDM insertion, sum over timeslice
+function sample_contract_cedm_2pt(L, cfg_key, gauge_u_smearings, 
+        prop_load_func,
+        csrc, c3pt_psnk_list, c3pt_tsep_list, c3pt_flav_list,
+        Tpol_list, ama)
+  -- parameters
+  --  L               lattice object
+  --  cfg_key          gauge cfg "key" : string
+  --  gauge_u_smearings  a table of smeared gauge fields for cEDM contractions
+  --  smear_func      source smearing function x_smeared = smear_func(x_point)
+  --  solver_func     fermion solver x = solver_func(y) <-> Dslash.x = y
+  --  prop_save_func  function to save propagators prop_save_func(filename, x, [title])
+  --  csrc            forward source position for the sample
+  --  c3pt_psnk_list, c3pt_tsep_list      sink momentum, time separation list
+  --  c3pt_flav_list  list of cedm flavor insertions
+  --  S2, S1          sink and source diquark spin structures
+  --  Tpol_list       list of nucleon polarization matrices
+  --  ama        AMA parameter for saving files
+  -- also requires global functions for propagator storage
+  --  get_frwprop_file            F
+  --  get_bkwprop_file            B
+  --  get_hadspec_file
+  --  get_hadspec_cpbar_file
+  -- and variables
+  --  flav_list
+  --  have_frwprop
+  local tt    -- timer
+
+  -- load frwprop
+  local frwprop = prop_load_func(get_frwprop_file(cfg_key, csrc, ama), "frwprop")
+
+  -- calc gauge_clover term
+
+  for i_tsep, tsep in pairs(c3pt_tsep_list) do
+    local tsrc = csrc[1+t_axis]
+    local tsnk = (tsrc + tsep) % latsize[1+t_axis]
+    -- correct for boundary conditions if necessary
+    local bc_fac = 1.
+    if tsnk <= tsrc then bc_fac = ferm_bc[1+t_axis]^3 end
+
+    for i_psnk, psnk in pairs(c3pt_psnk_list) do
+      for i_tpol, tpol in pairs(Tpol_list) do
+        local c2pt_cpbar  = {}
+        -- backward props for each flav, tpol
+        for i_flav, flav in pairs(c3pt_flav_list) do
+          local bkwprop_str = string.format("bkwprop_%s_%s", i_tpol, flav)
+          tt  = timer(bkwprop_str)
+          local bkwprop_file  = get_bkwprop_file(cfg_key, csrc, psnk, tsnk, i_tpol, flav, ama)
+          local bkwprop = prop_load_func(bkwprop_file, bkwprop_str)
+          tt("done")
+          
+      
+          for k_u, u in pairs(gauge_u_smearings) do
+            local gclov = {}
+            local gclov_trc0 = {}
+            local cm_1 = L:ColorMatrix(1.)
+            for i = 0, #L-1 do
+              gclov[1+i] = {}
+              gclov[1+i][1+i] = false
+              gclov_trc0[1+i] = {}
+              gclov_trc0[1+i][1+i] = false
+              for j = 0, i - 1 do
+                local c = clover_term(u, i, j)
+                gclov[1+i][1+j]  = c
+                gclov[1+j][1+i]  = -gclov[1+i][1+j]
+                gclov_trc0[1+i][1+j] = c - (c:trace() / c:colors()) * cm_1 
+                gclov_trc0[1+j][1+i] = -gclov_trc0[1+i][1+j]
+              end
+            end
+
+            -- calc cpbar 
+            local k_cc = string.format('%s/proton_%s/%s/dt%d', 
+                            k_u, i_tpol, flav, tsep)
+            c2pt_cpbar[k_cc] = bc_fac * (bkwprop * cedm_seqsrc_edm(frwprop, gclov)):trace()
+            local k_cc_trc0 = string.format('%s_trc0/proton_%s/%s/dt%d', 
+                            k_u, i_tpol, flav, tsep)
+            c2pt_cpbar[k_cc_trc0] = bc_fac * (bkwprop * cedm_seqsrc_edm(frwprop, gclov_trc0)):trace()
+          
+            force_gc(bkwprop_str)
+          end
+        end
+
+        tt = timer("save_c2pt_cpbar")
+        local c2pt_cpbar_file = get_hadspec_cpbar_file(cfg_key, csrc, i_tpol, psnk, tsnk, ama)
+        printf("[save_c2pt_cpbar] %s\n", c2pt_cpbar_file)
+        local c2pt_cpbar_aff  = qcd.aff.Writer(c2pt_cpbar_file)
+        save_2pt_list(L, c2pt_cpbar_aff, '/hadspec_cpbar/', 
+                c2pt_cpbar, csrc, { {0,0,0,0} }, t_axis, 1.)
+        c2pt_cpbar_aff:close()
+        tt("done")
+      end
+    end
+  end
+
+  force_gc("sample_cedm_2pt")
+end
+
+
+------------------------------------------------------------------------------
+-- MAIN
+------------------------------------------------------------------------------
+
+cur_timer = timer("gauge_read")
+printf("read gauge '%s'\n", get_gauge_file(cfg_key))
+gauge_u = qcd.nersc.read_gauge(L, get_gauge_file(cfg_key))
+cur_timer("done")
+
+-- gauge field for source construction
+wup_gauge_u = APE_smear(gauge_u, ape_alpha, ape_N, ape_accu, ape_maxiter, t_axis)
+
+-- gauge fields for cEDM term definition
+gauge_u_smearings = {
+  orig  = gauge_u,
+  ape10 = APE_smear(gauge_u, ape_alpha, 10, ape_accu, ape_maxiter, -1),
+  ape25 = APE_smear(gauge_u, ape_alpha, 25, ape_accu, ape_maxiter, -1),
+  ape50 = APE_smear(gauge_u, ape_alpha, 50, ape_accu, ape_maxiter, -1),
+--  TODO
+--  wf1   = nil,
+--  wf2   = nil,
+--  wf3   = nil,
+}
+gauge_u_smearings.hex1 = bmw_hex(gauge_u, 1)
+gauge_u_smearings.hex2 = bmw_hex(gauge_u_smearings.hex1, 1)
+gauge_u_smearings.hex3 = bmw_hex(gauge_u_smearings.hex2, 1)
+gauge_u_smearings.hex4 = bmw_hex(gauge_u_smearings.hex3, 1)
+gauge_u_smearings.hex5 = bmw_hex(gauge_u_smearings.hex4, 1)
+
+
+-------------------------------------------------------------------------------
+-- initialize mdwf object 
+-- LOAD EIGENVECTORS
+-------------------------------------------------------------------------------
+if false then
+  mdwf  = qcd.MDWF.generic(gauge_u, ferm_bc, 
+              mdwf_L5, mdwf_M5, mdwf_mf,
+              mdwf_b5, mdwf_c5)
+  mdwf_eigcg_df = mdwf:eig_deflator(eigcg_vmax, eigcg_nev, eigcg_tol, l_nev)
+  do
+    local evecs_perm = mdwf_evec_file(cfg_key, l_nev)
+    local evecs_scratch = mdwf_evec_file_scratch(cfg_key, l_nev)
+
+    if evecs_scratch ~= evecs_perm then
+      cur_timer = timer("evecs_rawdump_sync")
+      printf("evecs_rawdump_sync: '%s' -> '%s'\n", evecs_perm, evecs_scratch)
+      evecs_rawdump_sync(evecs_perm, evecs_scratch, evec_rawdump_stride)
+      cur_timer("done")
+    end
+
+    cur_timer = timer("evecs_rawload")
+    printf("[evec_read] %s\n", evecs_scratch)
+    mdwf_eigcg_df:evecs_rawload(evecs_scratch, l_nev, 
+                  {rank_stride=evec_rawdump_stride})
+    mdwf_eigcg_df:stop()
+    cur_timer("done")
+  end
+end
+
+------------------------------------------------------------------------------
+-- AUX FUNCTIONS
+------------------------------------------------------------------------------
+function smear_func_wup(x) 
+  -- reqiures global wup_a, wup_n, wup_gauge_u, t_axis
+  return wuppertal_smear(wup_gauge_u, wup_alpha, wup_N, x, t_axis)
+end
+if false then
+function prop_save_func(fname, x, title, prop_prec)
+  -- requires in the scope:
+  --  prop_volfmt       part_dir for fast
+  --  prop_vol_stride   spacing between ranks doing IO (set equal to the number of ranks per 1 IO node)
+  if nil == title then
+    title = tostring(x)
+  end
+  local tt = timer(string.format("SAVE %s", title))
+  local qio_w = open_qdpc_write(L, fname, "", prop_qio_volfmt, 
+                    {rank_stride=prop_qio_stride})
+  qio_w:DiracPropagator(prop_prec, x, title)
+  qio_w:close()
+  tt("done")
+end
+end
+function prop_load_func(fname, title)
+  -- requires in the scope:
+  --  prop_volfmt       part_dir for fast
+  --  prop_vol_stride   spacing between ranks doing IO (set equal to the number of ranks per 1 IO node)
+  if nil == title then
+    title = ''
+  end
+  local tt = timer(string.format("LOAD %s", title))
+  local qio_r = open_qdpc_read(L, fname, {rank_stride=prop_qio_stride})
+  local res = qio_r:DiracPropagator()
+  qio_r:close()
+  tt("done")
+  return res
+end
+
+
+for i_ama, ama in pairs(ama_list) do
+  for i_csrc, csrc in pairs(ama['csrc_list']) do 
+    sample_contract_cedm_2pt(L, cfg_key, gauge_u_smearings,
+              prop_load_func, csrc, 
+              c3pt_psnk_list, c3pt_tsep_list, 
+              c3pt_flav_list, c3pt_tpol_list, ama)
+  end
+  force_gc()
+  print_obj(qcd.memory_usage())
+end
+
+tot_timer("done")
+printf("QLUA_RUN_SUCCESS\n")
+-- vim : syn=lua

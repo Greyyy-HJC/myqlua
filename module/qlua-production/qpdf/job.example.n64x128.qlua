@@ -1,0 +1,2 @@
+cfg_key = '1002'
+network_geom = {8, 8, 8, 16}

@@ -1,0 +1,42 @@
+-- closure for F,F' functionals for gauge-fixing algorithms
+--  dir_wgt   {wx, wy, ...}[mu] weight for direction [mu]
+--            ie for Landau={1,1,1,1} (default), for Coulomb={1,1,1,0},
+--            varying for anisotropic lattices
+function mk_gaugefix_genlandau_func(wgt_dir)
+  local wgt_dir = wgt_dir or {}
+  local function genlandau_func(u)
+    local Nd  = #u
+    local Nc  = u[1]:colors()
+    local L   = u[1].lattice
+    local vol = L:volume()
+
+    local gf  = 0.
+    for mu = 0, Nd-1 do
+      local wgt = wgt_dir[1+mu] or 1.
+      assert(0. <= wgt)
+      gf = gf + wgt * u[1+mu]:trace():real():sum()
+    end
+    return gf
+  end
+  -- define gradient of a functional F[g] on gauge fields as
+  -- F[transf(e^{ia}, g)] = F[g] + Tr[a*gradF[g]] + O(a^2), a->0
+  -- then gradF[g]_{ij} = [ (1/i) (d / d a_ji) F[transf(e^{ia}, g)] ]|_{a=0}
+  local function genlandau_grad(u)
+    -- compute gradient for landau gaugefix (algebra)
+    -- no normalization 1/Nc 1/Vol : local elements must be ~O(1) at the start
+    local Nd  = #u
+    local Nc  = u[1]:colors()
+    local L   = u[1].lattice
+    local vol = L:volume()
+
+    local gr  = L:ColorMatrix(0.)
+    for mu=0, Nd-1 do
+      local wgt = wgt_dir[1+mu] or 1.
+      assert(0. <= wgt)
+      local x = u[1+mu] + u[1+mu]:shift(mu, "from_backward"):adjoin()
+      gr = gr + wgt * (x - x:adjoin()) * complex(0, .5)
+    end
+    return gr - gr:trace() * L:ColorMatrix(1./ Nc)
+  end
+  return genlandau_func, genlandau_grad
+end

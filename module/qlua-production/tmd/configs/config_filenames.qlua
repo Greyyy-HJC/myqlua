@@ -1,0 +1,55 @@
+require 'util/strkey'
+
+function get_frwprop_file(cfg_key, csrc, ama, tag)
+  return string.format("%s/frw_prop/frw_prop.%s.%s.%s.%s.lime", 
+          data_pdir, cfg_key, strkey.ama_str(ama), tag, strkey.csrc_str_f(csrc))
+end
+
+function get_frwprop_grp_file(cfg_key, csrcgrp, ama, tag)
+  return string.format("%s/frw_prop/frw_prop_grp.%s.%s.%s.%s.lime", 
+          data_pdir, cfg_key, strkey.ama_str(ama), tag, strkey.csrcgrp_str_f(csrcgrp))
+end
+
+function get_seqprop_nucsink_file(cfg_key, csrc, psnk, tsnk, tpol_tag, flavor, ama, tag)
+  return string.format("%s/bkw_prop/bkw_prop.%s.%s.%s.%s.%s.%s.%s.lime", 
+          data_pdir, cfg_key, strkey.ama_str(ama), tag, 
+          strkey.csrc_str_f(csrc), strkey.snk_str_old(psnk, tsnk), tpol_tag, flavor)
+end
+get_bkwprop_file = get_seqprop_nucsink_file
+
+
+function get_seqprop_grp_nucsink_file(cfg_key, csrcgrp, psnk, tsep, tpol_tag, flavor, ama, tag)
+  return string.format("%s/bkw_prop/bkw_prop_grp.%s.%s.%s.%s.%s.%s.%s.lime", 
+          data_pdir, cfg_key, strkey.ama_str(ama), tag,
+          strkey.csrcgrp_str_f(csrcgrp), strkey.snk_str_f(psnk, tsep), tpol_tag, flavor)
+end
+get_bkwprop_grp_file = get_seqprop_grp_nucsink_file
+
+
+function get_hadspec_file(cfg_key, csrcgrp, ama)
+  return string.format('%s/hadspec/hadspec.%s.%s.%s.aff',
+          data_top, cfg_key, strkey.ama_str(ama), strkey.csrcgrp_str_f(csrcgrp))
+end
+
+function get_c2pt_file(cfg_key, csrcgrp, ama, tag)
+  return string.format('%s/c2pt/c2pt.%s.%s.%s.%s.aff',
+          data_top, cfg_key, strkey.ama_str(ama), tag, strkey.csrcgrp_str_f(csrcgrp))
+end
+
+function get_bb_file(cfg_key, csrcgrp, psnk, tsep, tpol_tag, flav_cur, ama, tag)
+  return string.format("%s/bb/bb.%s.%s.%s.%s.%s.%s.%s.aff",
+          data_top, cfg_key, strkey.ama_str(ama), tag, strkey.csrcgrp_str_f(csrcgrp), strkey.snk_str_f(psnk, tsep),
+          tpol_tag, flav_cur)
+end
+
+function get_tmd_file(cfg_key, csrcgrp, psnk, tsep, tpol_tag, flav_cur, ama, tag)
+  return string.format("%s/tmd/tmd.%s.%s.%s.%s.%s.%s.%s.aff",
+          data_top, cfg_key, strkey.ama_str(ama), tag, strkey.csrcgrp_str_f(csrcgrp), strkey.snk_str_f(psnk, tsep),
+          tpol_tag, flav_cur)
+end
+
+function get_qpdf_proton_file(cfg_key, csrcgrp, psnk, tsep, tpol_tag, flav_cur, tag, ama)
+  return  string.format("%s/qpdf/qpdf.%s.%s.proton_%s.%s.%s.%s.%s.aff",
+              data_top, cfg_key, strkey.ama_str(ama), tpol_tag, flav_cur, 
+              strkey.csrcgrp_str(csrcgrp), strkey.snk_str(psnk, tsep), tag)
+end

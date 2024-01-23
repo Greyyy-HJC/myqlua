@@ -1,0 +1,73 @@
+require 'iter'
+
+assert(network_geom)
+assert(split_geom)          -- job script - XXX this is split-CG 4D geometry; product gives the total number of solves
+assert(netblock_geom)       -- job script - XXX netblock geometry: if running on KNL with 4 MPI-ranks / node, set it to e.g. {1,1,2,2}; then {1,1,2,2}*local_xyzt will reside on the same node to minimize internode comms
+assert(jobcfg.cfg_key)
+assert(jobcfg.rnd_seed)
+
+latsize = {48,48,48,96}
+t_axis = #latsize - 1
+
+-------------------------------------------------------------------------------
+-- quark action 
+-------------------------------------------------------------------------------
+ferm_bc = {1,1,1,1} ; bc = ferm_bc
+mdwf_M5 = 1.8
+mdwf_mf = 0.00078
+mdwf_L5_full = 24
+mdwf_b5_full = 1.5
+mdwf_c5_full = 0.5
+-- zMoebius params : etamax=1.45
+mdwf_L5  = 10
+mdwf_bmc5 = 1.
+mdwf_bpc5 = {   -- same as 16c32 test TODO check/update
+  1./complex(1.45806438985048,-0),
+  1./complex(1.18231318389348,-0),
+  1./complex(0.830951166685955,-0),
+  1./complex(0.542352409156791,-0),
+  1./complex(0.341985020453729,-0),
+  1./complex(0.21137902619029,-0),
+  1./complex(0.126074299502912,-0),
+  1./complex(0.0990136651962626,-0),
+  1./complex(0.0686324988446592,0.0550658530827402),
+  1./complex(0.0686324988446592,-0.0550658530827402),
+}
+assert(#mdwf_bpc5 == mdwf_L5)
+mdwf_b5, mdwf_c5 = {}, {}
+for s = 1, mdwf_L5 do 
+  mdwf_b5[s] = .5 * (mdwf_bpc5[s] + mdwf_bmc5)
+  mdwf_c5[s] = .5 * (mdwf_bpc5[s] - mdwf_bmc5)
+end
+
+assert(io.dexists('qlua-production/config/dwf'))
+jobcfg.cfglist_all  = iter.igen_list(io.lines('qlua-production/config/dwf/DWFI48c96.cfglist.ALL'))
+jobcfg.cfg_index    = table_index(jobcfg.cfglist_all, jobcfg.cfg_key)
+printf("cfg_key='%s' index=%d\n", jobcfg.cfg_key, jobcfg.cfg_index)
+
+-------------------------------------------------------------------------------
+-- SETUP: lattice, gauge, rnd
+-------------------------------------------------------------------------------
+
+function get_gauge_file(cfg_key)
+  return string.format("%s/gauge/ckpoint_lat.%s",
+          jobcfg.ens_top, cfg_key)
+end
+
+jobcfg.job_timer = timer("total")
+L = qcd.lattice(latsize, {network=network_geom, netblock=netblock_geom})
+lat = L     -- alias
+S = rnd_init(L, rnd_seed)
+rnd = S     -- alias
+print_network_settings()
+print_subgrid_settings(L)
+if rawget(_G, openmp) then 
+  printf("num_threads=%d\n", openmp.num_threads())
+  printf("thread_limits=%d\n", openmp.thread_limit())
+end
+
+tt = timer("gauge_read")
+printf("read gauge '%s'\n", get_gauge_file(jobcfg.cfg_key))
+gauge_u = qcd.nersc.read_gauge(L, get_gauge_file(jobcfg.cfg_key))
+tt("done")
+

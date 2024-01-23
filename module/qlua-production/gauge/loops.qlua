@@ -1,0 +1,436 @@
+require 'gauge'
+
+function gauge_staples_5li(U,a,b)
+  assert(0 < #U)
+  local L = U[1].lattice
+  assert(#L == #U)
+
+  local function bstaple(vb2, s, vb4, pm)
+    -- vb2, vb4 are properly shifted and conj'ed link matrices
+    if      1 == pm then return vb2 * s:shift(b, "from_forward") * vb4
+    elseif -1 == pm then return vb2 * s:shift(b, "from_backward") * vb4
+    else error("bad direction") end
+  end
+
+  -- Va==Va1
+  -- Va{m}  = U_{x, x+m*a}
+  -- Vaf{m} = U_{x+a, x+(m+1)*a}
+  -- Var{m} = U_{x-m*a, x}
+  -- Su{m,n} = U_{x+m*a,x+m*a+n*b} * U_{x+m*a+n*b,x+n*b} * U_{x+n*b,x}
+  -- Sd{m,n} = U_{x+m*a,x+m*a-n*b} * U_{x+m*a-n*b,x-n*b} * U_{x-n*b,x}
+  -- C{m,n} = C_{n,m} = sum_{(m,n)-loops without Va}   (result)
+  -- Vbp{m} = U_{x+m*a, x+m*a+b}
+
+  local C11   = L:ColorMatrix()
+  local C22   = L:ColorMatrix()
+  local C12   = L:ColorMatrix()
+  local C13   = L:ColorMatrix()
+  local C33   = L:ColorMatrix()
+
+  -- (1,n) staples
+  local Va    = U[1+a]
+  local aVb   = U[1+b]:adjoin()                         -- vb4 for Su
+  local Vbr1  = U[1+b]:shift(b, "from_backward")        -- vb4 for Sd
+  local Vbp1  = U[1+b]:shift(a, "from_forward")         -- vb2 for Su
+  local aVbrp1= Vbp1:adjoin():shift(b, "from_backward") -- vb2 for Sd
+
+  local Su11  = bstaple(Vbp1,   Va:adjoin(), aVb ,  1)
+  local Sd11  = bstaple(aVbrp1, Va:adjoin(), Vbr1, -1)
+  C11         = Su11 + Sd11
+  local Su12  = bstaple(Vbp1,   Su11, aVb,   1)   ; Su11 = nil
+  local Sd12  = bstaple(aVbrp1, Sd11, Vbr1, -1)   ; Sd11 = nil
+  C12         = Su12 + Sd12
+  local Su13  = bstaple(Vbp1,   Su12, aVb,   1)   ; Su12 = nil
+  local Sd13  = bstaple(aVbrp1, Sd12, Vbr1, -1)   ; Sd12 = nil
+  C13         = Su13 + Sd13                       ; Su13,Sd13 = nil,nil
+
+  -- (2,n) staples
+  local Vaf1  = Va:shift(a, "from_forward")
+  local Var1  = Va:shift(a, "from_backward")
+  local Va2   = Va * Va:shift(a, "from_forward")
+  local Vbp2  = Vbp1:shift(a, "from_forward")
+  local aVbrp2= Vbp2:adjoin():shift(b, "from_backward")
+
+  local Su21  = bstaple(Vbp2,   Va2:adjoin(),  aVb,   1)
+  local Sd21  = bstaple(aVbrp2, Va2:adjoin(),  Vbr1, -1)
+  local S21   = Su21 + Sd21
+  local S21r1 = S21:shift(a, "from_backward")
+  C12         = C12 + Vaf1 * S21 + S21r1 * Var1   ; S21,S21r1 = nil,nil
+  local Su22  = bstaple(Vbp2,   Su21, aVb,   1)
+  local Sd22  = bstaple(aVbrp2, Sd21, Vbr1, -1)
+  local S22   = Su22 + Sd22                       ; Su22,Sd22 = nil,nil
+  local S22r1 = S22:shift(a, "from_backward")
+  C22         = Vaf1 * S22 + S22r1 * Var1         ; S22,S22r1 = nil,nil
+
+  -- (3,n) staples
+  local Vaf2  = Va2:shift(a, "from_forward")
+  local Var2  = Var1:shift(a, "from_backward") * Var1
+  local Va3   = Va * Va2:shift(a, "from_forward")
+  local Vbp3  = Vbp2:shift(a, "from_forward")
+  local aVbrp3= Vbp3:adjoin():shift(b, "from_backward")
+
+  local Su31  = bstaple(Vbp3,   Va3:adjoin(),  aVb,   1)
+  local Sd31  = bstaple(aVbrp3, Va3:adjoin(),  Vbr1, -1)
+  local S31   = Su31 + Sd31
+  local S31r1 = S31  :shift(a, "from_backward")
+  local S31r2 = S31r1:shift(a, "from_backward")
+  C13         = C13 + Vaf2 * S31 + Vaf1 * S31r1 * Var1 + S31r2 * Var2 ; S31,S31r1,S31r2 = nil,nil,nil
+  
+  local Su32  = bstaple(Vbp3,   Su31, aVb,   1)   ; Su31 = nil
+  local Su33  = bstaple(Vbp3,   Su32, aVb,   1)   ; Su32 = nil
+  local Sd32  = bstaple(aVbrp3, Sd31, Vbr1, -1)   ; Sd31 = nil
+  local Sd33  = bstaple(aVbrp3, Sd32, Vbr1, -1)   ; Sd32 = nil
+  local S33   = Su33 + Sd33                       ; Su33,Sd33 = nil,nil
+  local S33r1 = S33  :shift(a, "from_backward")
+  local S33r2 = S33r1:shift(a, "from_backward")
+  C33         = Vaf2 * S33 + Vaf1 * S33r1 * Var1 + S33r2 * Var2       ; S33,S33r1,S33r2 = nil,nil,nil
+
+  return C11, C22, C12, C13, C33
+end
+
+function gauge_staple_gen(U, a, b, MNtab)
+  -- staple in dir a, plane (a,b)
+  -- XXX adjoint staple, so that Tr[U_{x,x+m} * S^{(m,n)}] is the gauge-inv plaquette trace
+  assert(0 < #U)
+  local L = U[1].lattice
+  assert(#L == #U)
+  MNtab = MNtab or {1}
+
+  local Cab   = {}
+  local Va    = U[1+a]
+  local Va_m  = nil
+  local Vb    = U[1+b]
+  local Vbp   = Vb
+  local Var, Vaf = {}, {}
+  for m = 1, #MNtab do
+    if m == 1 then Va_m    = Va
+    else 
+      Vaf[m-1]  = Va_m:shift(a, "from_forward")
+      Va_m      = Va * Vaf[m-1]
+      if m == 2 then Var[1]   = Va:shift(a, "from_backward")
+      else           Var[m-1] = (Var[m-2] * Va):shift(a, "from_backward") end
+    end
+    Vbp   = Vbp:shift(a, "from_forward")
+    local Su = Va_m:adjoin()
+    local Sd = Su
+    Cab[m] = {}
+    for n = 1, MNtab[m] do
+      Su = Vbp * Su:shift(b, "from_forward") * Vb:adjoin()
+      Sd = (Vbp:adjoin() * Sd * Vb):shift(b, "from_backward") 
+      local S = Su + Sd
+      -- TODO skip if this (m,n) is not needed?
+      if 1 == m then Cab[m][n] = S 
+      else
+        local C = Vaf[m-1] * S
+        for k = 2, m - 1 do
+          S = S:shift(a, "from_backward")
+          C = C + Vaf[m-k] * S * Var[k-1]
+        end
+        S = S:shift(a, "from_backward")
+        C = C + S * Var[m-1]
+        Cab[m][n] = C 
+      end
+    end
+  end
+  return Cab
+end
+
+function gauge_trplaq_gen(U, a, b, MNtab)
+  -- (complex) trace of m*n plaquettes in plane (a,b),
+  --      [m][n] = Tr[U^{(m,n)}_{x,a,b}]
+  assert(0 < #U)
+  local L = U[1].lattice
+  assert(#L == #U)
+  MNtab = MNtab or {1}
+
+  local Cab   = {}
+  local Va    = U[1+a]
+  local aVb   = U[1+b]:adjoin()
+  local Va_m  = nil
+  local Vbp_m = U[1+b]
+  for m = 1, #MNtab do
+    Cab[m] = {}
+    if m == 1 then  Va_m  = Va
+    else            Va_m  = Va * Va_m:shift(a, "from_forward") end
+    Vbp_m   = Vbp_m:shift(a, "from_forward")
+    local Su = Va_m:adjoin()
+    for n = 1, MNtab[m] do
+      Su = Vbp_m * Su:shift(b, "from_forward") * aVb
+      Cab[m][n] = (Va_m * Su):trace()
+    end
+  end
+  return Cab
+end
+
+function gauge_fieldtensor_gen(U, a, b, MNtab)
+  --    cimp[m,n] = improvement coeff
+  --    res[m][n] = (m*n) * F_{a,b}^{(m,n)}   [sic! area is NOT divided out; no averaging over (a,b)]
+  assert(0 < #U)
+  local L = U[1].lattice
+  assert(#L == #U)
+  MNtab = MNtab or {1}
+
+  local Gab   = {}
+  local Va    = U[1+a]
+  local aVb   = U[1+b]:adjoin()
+  local Vb_r  = U[1+b]:shift(b, "from_backward")
+  local Vbp_m = U[1+b]
+  local Va_m  = nil
+  for m = 1, #MNtab do
+    Gab[m] = {}
+    if m == 1 then  Va_m = Va
+    else            Va_m = Va * Va_m:shift(a, "from_forward") end
+    Vbp_m   = Vbp_m:shift(a, "from_forward")
+    local aVbp_m_r= Vbp_m:adjoin():shift(b, "from_backward")
+    local Su, Sd = Va_m:adjoin(), Va_m:adjoin()
+    for n = 1, MNtab[m] do
+      Su = Vbp_m * Su:shift(b, "from_forward") * aVb
+      Sd = aVbp_m_r * Sd:shift(b, "from_backward") * Vb_r 
+      local S = Su - Sd
+      -- TODO skip if this (m,n) is not needed?
+      local G = Va_m * S
+      local Gr= S * Va_m
+      for k = 1, m do Gr = Gr:shift(a, "from_backward") end
+      G = G + Gr
+      Gab[m][n] = (G - G:adjoin()) / complex(0, 8)
+    end
+  end
+  return Gab
+end
+
+function gauge_li5coeff(c5)
+--  return {1., 0., 0., 0., 0., }
+  return {  ( 19.  -  55. * c5) / 9., 
+            (  1.  -  64. * c5) / 9., 
+            (-64.  + 640. * c5) / 45., 
+            (  0.2 -   2. * c5), 
+            c5 }
+end
+
+function gauge_actdensity_imp5li_symm(U, c5)
+  -- return sum_{mu,nu} sum_i c_i/(m_i^2 n_i^2) * Re Tr[1-U^{(m,n)}_{x,mu,nu}] 
+  --      -> classical (1/4)\sum_{mu,nu,a}(F_{mu,nu}^a)^2 =Sglue 
+  --  with convention U_{p,mu,nu} = exp(i F_{mu,nu}^a t^a) with Tr[t^a t^b]=(1/2)delta^{ab}
+  assert(0 < #U)
+  local L   = U[1].lattice
+  local nc  = U[1]:colors()
+  assert(#L == #U)
+
+  local cimp  = gauge_li5coeff(c5)
+  local act = L:Real(0.)
+  local plaq3x3 = {3, 3, 3}
+  -- sum mu < nu
+  for mu = 0, #L-1 do
+    for nu = mu + 1, #L-1 do
+      -- FIXME G[2][3], G[3][2] are computed but not used
+      local G = gauge_trplaq_gen(U, mu, nu, plaq3x3)
+      local c = (
+          -- coeff   norm  sym.factor
+            (cimp[1] /  1. * 2) * (  nc - G[1][1]:real())
+          + (cimp[2] / 16. * 2) * (  nc - G[2][2]:real())
+          + (cimp[3] /  4.    ) * (2*nc - G[1][2]:real() - G[2][1]:real())
+          + (cimp[4] /  9.    ) * (2*nc - G[1][3]:real() - G[3][1]:real())
+          + (cimp[5] / 81. * 2) * (  nc - G[3][3]:real()) )
+      local c = c + c:shift(mu, "from_backward")
+      local c = c + c:shift(nu, "from_backward")
+      act = act + 0.5 * c -- sic! factor 2 *0.25
+    end
+  end
+  return act
+end
+
+function gauge_actdensity_imp5li(U, c5)
+  -- return sum_{mu,nu} sum_i c_i/(m_i^2 n_i^2) * Re Tr[1-U^{(m,n)}_{x,mu,nu}] 
+  --      -> classical (1/4)\sum_{mu,nu,a}(F_{mu,nu}^a)^2 =Sglue 
+  --  with convention U_{p,mu,nu} = exp(i F_{mu,nu}^a t^a) with Tr[t^a t^b]=(1/2)delta^{ab}
+  assert(0 < #U)
+  local L   = U[1].lattice
+  local nc  = U[1]:colors()
+  assert(#L == #U)
+
+  local cimp  = gauge_li5coeff(c5)
+  local act = L:Real(0.)
+  local plaq3x3 = {3, 3, 3}
+  -- sum mu < nu
+  for mu = 0, #L-1 do
+    for nu = mu + 1, #L-1 do
+      -- FIXME G[2][3], G[3][2] are computed but not used
+      local G = gauge_trplaq_gen(U, mu, nu, plaq3x3)
+      act = ( act 
+          -- coeff   norm  sym.factor
+          + (cimp[1] /  1. * 2) * (  nc - G[1][1]:real())
+          + (cimp[2] / 16. * 2) * (  nc - G[2][2]:real())
+          + (cimp[3] /  4.    ) * (2*nc - G[1][2]:real() - G[2][1]:real())
+          + (cimp[4] /  9.    ) * (2*nc - G[1][3]:real() - G[3][1]:real())
+          + (cimp[5] / 81. * 2) * (  nc - G[3][3]:real()) )
+    end
+  end
+  return act
+end
+
+function gauge_smear_imp5li(U, A, N, opt)
+  --    U     gauge field
+  --    A     APE-style smearing coeff; 
+  --          A=0 is equiv.to cooling: only staples are used)
+  --    N     number of iterations
+  --    opt = {t_axis=-1, imp5li_c5=0.05,
+  --           sunproj='proj', sunproj_accu=1e-8, sunproj_iter=150}
+  assert(0 < #U)
+  local L = U[1].lattice
+  assert(#L == #U)
+  opt = opt or {}
+  local t_axis  = opt.t_axis or -1
+  local c5      = opt.imp5li_c5 or 0.05
+  local sunproj_accu = opt.sunproj_accu or 1e-8
+  local sunproj_iter = opt.sunproj_iter or 150
+  local sunproj      = opt.sunproj or 'proj'
+  local sunproj_func = nil
+  if     'exp'  == sunproj then 
+    sunproj_func = function(u, u0) return toSUn(u) end
+  elseif 'proj' == sunproj then 
+    sunproj_func = function(u, u0) return u:proj(sunproj_accu, sunproj_iter, u0) end
+  else error(string.format("unknown sunproj='%s'", sunproj)) end
+    
+  local cimp  = gauge_li5coeff(c5)
+  local plaq3x3 = {3,3,3}
+  local V = U
+  for iter = 1, N do
+    local Vnew = {}
+    for mu = 0, #L - 1 do 
+      if mu ~= t_axis then
+        local Ssum = A * V[1+mu]
+        for nu = 0, #L - 1 do if nu ~= mu and nu ~= t_axis then
+          -- FIXME G[2][3], G[3][2] are computed but not used
+          local S = gauge_staple_gen(V, mu, nu, plaq3x3)
+          -- hep-lat/9701012
+          -- action S = \sum_i c_i S_{m_i,n_i}; 
+          --        S_{m,n} = (1/(m^2*n^2)) * \sum_{x,mu,nu} Tr[1 - U_{plaq x,mu,nu}]
+          --        (m,n) = [ (1,1), (2,2), (1,2), (1,3), (3,3) ]
+          Ssum =  Ssum + (
+                  -- coeff   norm  sym.factor
+                    (cimp[1] /  1. * 2) *  S[1][1] 
+                  + (cimp[2] / 16. * 2) *  S[2][2]
+                  + (cimp[3] /  4.    ) * (S[1][2] + S[2][1])
+                  + (cimp[4] /  9.    ) * (S[1][3] + S[3][1])
+                  + (cimp[5] / 81. * 2) *  S[3][3] ):adjoin()
+        end end
+        Vnew[1+mu] = sunproj_func(Ssum, V[1+mu])
+      else 
+        Vnew[1+mu] = V[1+mu] 
+      end 
+    end
+    V = Vnew
+  end
+  return V
+end
+
+function gauge_actdensity_plaq(U)
+  -- return sum{mu,nu} Re Tr [1-U_{p,mu,nu}] 
+  --      -> classical (1/4)\sum_{mu,nu,a}(F_{mu,nu}^a) = Sglue
+  --  with convention U_{p,mu,nu} = exp(i F_{mu,nu}^a t^a) with Tr[t^a t^b]=(1/2)delta^{ab}
+  local L   = U[1].lattice
+  local nc  = U[1]:colors()
+  local act = L:Real(0.)
+  for mu = 0, #L - 1 do
+    for nu = mu + 1, #L - 1 do
+      local p = gauge_plaquette(U, mu, nu)
+      act = act + 2 * (nc - p:trace():real())
+    end
+  end
+  return act
+end
+
+function gauge_actdensity_plaq_symm(U)
+  -- action density (x) symmetric around site (x)
+  -- return sum{mu,nu} (1/4){Re Tr [1-U_{p,mu,nu}] + (p -> p-mu) + (p -> p-nu) + (p -> p-mu-nu) }
+  --      -> classical (1/4)\sum_{mu,nu,a}(F_{mu,nu}^a) = Sglue
+  --  with convention U_{p,mu,nu} = exp(i F_{mu,nu}^a t^a) with Tr[t^a t^b]=(1/2)delta^{ab}
+  local L = U[1].lattice
+  local nc = U[1]:colors()
+  local act = L:Real(0.)
+  for mu = 0, #L-1 do
+    for nu = mu+1, #L-1 do
+      local c = (nc - gauge_plaquette(U, mu, nu):trace():real())
+      c = c + c:shift(mu, "from_backward")
+      c = c + c:shift(nu, "from_backward")
+      act = act + 0.5 * c -- sic! factor 2 *0.25
+    end
+  end
+  return act
+end
+
+function gauge_staple_plaq_rect(U, a)
+  -- compute sum of plaq and sum of rect staples
+  -- return: Cplaq, Crect
+  assert(0 < #U)
+  local L = U[1].lattice
+  assert(#L == #U)
+  local Cplaq = L:ColorMatrix()   -- zero
+  local Crect = L:ColorMatrix()   -- zero
+  local Vbp   = {}
+  local Va_m  = U[1+a]
+  for b = 0, #L - 1 do if a ~= b then
+    local Vb    = U[1+b]
+    Vbp[1+b] = Vb:shift(a, "from_forward")
+    local Su    = Va_m:adjoin()
+    local Sd    = Su
+    -- 1x1
+    local Su    = Vbp[1+b] * Su:shift(b, "from_forward") * Vb:adjoin()
+    local Sd    = (Vbp[1+b]:adjoin() * Sd * Vb):shift(b, "from_backward")
+    Cplaq = Cplaq + Su + Sd
+    -- 1x2
+    local Su    = Vbp[1+b] * Su:shift(b, "from_forward") * Vb:adjoin()
+    local Sd    = (Vbp[1+b]:adjoin() * Sd * Vb):shift(b, "from_backward")
+    Crect = Crect + Su + Sd
+  end end -- for b~=a
+
+  local Vaf  = Va_m:shift(a, "from_forward")
+  Va_m  = U[1+a] * Vaf
+  local Var  = U[1+a]:shift(a, "from_backward")
+  
+  for b = 0, #L - 1 do if a ~= b then
+    local Su    = Va_m:adjoin()
+    local Sd    = Su
+    local Vb    = U[1+b]
+    Vbp[1+b] = Vbp[1+b]:shift(a, "from_forward")
+    -- 2x1
+    local Su    = Vbp[1+b] * Su:shift(b, "from_forward") * Vb:adjoin()
+    local Sd    = (Vbp[1+b]:adjoin() * Sd * Vb):shift(b, "from_backward")
+    local S     = Su + Sd
+    Crect = Crect + Vaf * S
+    S     = S:shift(a, "from_backward")
+    Crect = Crect + S * Var
+  end end
+
+  return Cplaq, Crect
+end
+
+function gauge_actdensity_plaq_rect(U, c1)
+  assert(0 < #U)
+  local L = U[1].lattice
+  local nc = U[1]:colors()
+  assert(#L == #U)
+  local S   = L:Real()   -- zero
+  local c0  = 1. - 8 * c1
+  for a = 0, #L do for b = a + 1, #L - 1 do
+    local Sab = gauge_trplaq_gen(U, a, b, {2, 1})
+    S = S + 2 * (3*nc - c0 * Sab[1][1]:real() 
+                      - c1 * (Sab[2][1]:real() + Sab[1][2]:real()))
+  end end
+  return S
+end
+function gauge_force_plaq_rect(U, c1)
+  assert(0 < #U)
+  local L   = U[1].lattice
+  local nc  = U[1]:colors()
+  assert(#L == #U)
+  local C   = {}
+  local c0  = 1. - 8 * c1
+  for a = 0, #L - 1 do 
+    C[1+a] = L:ColorMatrix()   -- zero
+    for b = 0, #L - 1 do if b ~= a then
+      local Cab = gauge_staple_gen(U, a, b, {2, 1})
+      C[1+a] = C[1+a] - c0 * Cab[1][1] - c1 * (Cab[1][2] + Cab[2][1])
+  end end end
+  return C
+end

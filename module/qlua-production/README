@@ -1,0 +1,60 @@
+scripts must have pattern for the top `qlua-production' directory package.path
+because different parts of the package may reference each other relative to it
+
+TODO
+  * update make_srcgrp_grid to automatically split into time groups based eg on csrcgrid_nt
+
+REMOVE 
+  * string_prefix (is_prefix) if available in qlib/stdlib
+  
+# vim: sts=2 sw=2
+
+
+
+
+=== ORGANIZING CONFIGS ===
+GOALS
+* split monstrous config files into 
+*# lattice params
+*# solver params
+*# production params : loads <lattice params>, <solver params>; define run-specific params
+migrate as many params to jobcfg as practical; 
+jobcfg parameters are for exchanging job-specific vars between config files
+
+example (started from tmd/configs/config_4c8.tmd_boost_bcderiv.qlua)
+qlua-production/config/dwf/TEST4c8_zmobius.qlua
+IN
+* jobcfg.cfg_key
+* jobcfg.ens_top
+* jobcfg.rnd_seed
+DO
+* load gauge
+OUT
+* gauge_u
+* latsize 
+* ferm_bc
+* action params
+* S, rnd
+* jobcfg.cfglist_all for src creation; read file from config/ENS.cfglist.ALL
+
+qlua-production/config/dwf/TEST4c8_zmobius_grid.qlua
+qlua-production/config/dwf/TEST4c8_zmobius_grid-split.qlua
+IN
+* (all config)
+* jobcfg.do_contract_only, jobcfg.do_bogus_prop
+
+DO
+* init grid
+* load evecs
+* self tests?
+OUT
+* function make_solver
+* function make_solver_bcderiv
+
+qlua-production/<project>/configs/
+IN
+* (all config)
+DO
+* set rcparams BEFORE requiring other configs
+OUT
+

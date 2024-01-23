@@ -1,0 +1,28 @@
+-- XXX this is a (likely temporary) file with various useful utils for saving/loading/bookkeeping
+function prop_remove_func(fname)
+  if     'single'   == prop_qio_volfmt then
+    os.rm(fname, {all=false, wait=true, nofail=true})
+  elseif 'part'     == prop_qio_volfmt then
+    os.rm(string.format('%s.vol%04d', fname, os.node()), 
+        {all=true, wait=true, nofail=true})
+  elseif 'part_dir' == prop_qio_volfmt then
+    os.rm(string.format('%s/vol%04d/%s', dirname(fname), os.node(), basename(fname)),
+        {all=true, wait=true, nofail=true})
+  end
+end
+
+function log_have_tag(log_file, log_tag)
+  os.mkdir_path(dirname(log_file))
+  if not io.fexists(log_file) then return false end
+  for s in io.lines(log_file) do
+    if s == log_tag then return true end
+  end
+  return false
+end
+function log_done_tag(log_file, log_tag)
+  os.mkdir_path(dirname(log_file))
+  local f = io.open(log_file, "a")
+  f:write(string.format("%s\n", log_tag))
+  f:flush()
+  f:close()
+end

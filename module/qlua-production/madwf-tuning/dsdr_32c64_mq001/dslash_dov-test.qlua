@@ -1,0 +1,106 @@
+-- compute & save eigenvectors
+-- 1. Run poly-accelerated Lanczos to convergence
+-- 2. Save eigenvectors
+-- 3. Compute & save 1 exact, 1 sloppy inversion on a gaussian source
+
+require "gauge"
+require "ape-smear"
+require "stdlib"
+require "lhpc-std"
+require "qdpc_io"
+require "latvec"
+require "defl_util"
+require "setup_util"
+require "mdwf_eopc"
+
+tot_timer = timer("total")
+-------------------------------------------------------------------------------
+-- SETUP
+-------------------------------------------------------------------------------
+L = qcd.lattice(latsize, {network=network_geom})
+print_network_settings()
+print_subgrid_settings(L)
+
+if nil == job_key then 
+  error("nil job_key")
+  os.exit(1)
+end
+cfg_key = job_key
+
+rnd = rnd_init(L, rnd_seed)
+
+-- load & smear gauge
+cur_timer = timer("gauge_read")
+printf("[read-gauge] '%s'\n", get_file_gauge(cfg_key))
+gauge_u = qcd.nersc.read_gauge(L, get_file_gauge(cfg_key))
+cur_timer("done")
+
+-------------------------------------------------------------------------------
+-- TEST INVERSIONS
+-------------------------------------------------------------------------------
+cur_timer = timer("gauge_smear")
+gauge_u_ape = APE_smear(gauge_u, ape_alpha, ape_N, ape_accu, ape_maxiter, t_axis)
+cur_timer("done")
+-- gen source
+cur_timer = timer("make_source")
+test_src = make_source(gauge_u_ape, test_src_coord, wup_alpha, wup_N, t_axis)
+cur_timer("done")
+
+test_src_df = test_src[{d=0,c=0}]
+
+
+function save_soldf(soldf, fname)
+  local qio_w = open_qdpc_write(L, fname, 'soldf', prop_volfmt)
+  qio_w:DiracFermion(soldf, 'soldf')
+  qio_w:close()
+end
+
+-- construct Moebius obj
+mdwf = qcd.MDWF.generic(gauge_u, ferm_bc, mdwf_L5, mdwf_M5, mdwf_mf, mdwf_b5, mdwf_c5)
+gauge_u_bc  = gauge_copy(gauge_u)
+gauge_apply_boundary(gauge_u_bc, ferm_bc)
+function check_sol_src(sol5d, src5d, title)
+  title = title or string.format("%s-%s", sol5d, src5d)
+  local src5d1  = mdwf:D(sol5d)
+  local src5d2  = latvec.dslash_moebius(sol5d, gauge_u_bc, mdwf_M5, mdwf_mf, mdwf_b5, mdwf_c5)
+  printf("%s : rdiff(mdwf:D, latvec_mdwf)=%e\n", title, latvec.rdiff(src5d1, src5d2))
+  printf("%s : rdiff(latvec_mdwf(x), b)=%e\n", title, latvec.rdiff(src5d2, src5d))
+  latvec.print_cmp(src5d, src5d2, string.format('%s: b<->D(x)', title))
+end
+
+-- compute sol
+save_soldf(test_src_df, soldf_file(cfg_key, 'src', 0))
+src_dov = latvec.dslash_moebius(dwf.y4to5(test_src_df, mdwf_L5), 
+                          gauge_u_bc, mdwf_M5, 1., mdwf_b5, mdwf_c5)
+src_dslash = latvec.scal_left(-1., 
+    latvec.op_mdwf_dminus(dwf.z4to5(test_src_df, mdwf_L5), 
+      gauge_u_bc, mdwf_M5, mdwf_c5))
+for i_eps, eps in pairs(sol_eps_list) do
+  local solver  = mdwf:mixed_solver(mixcg_tol1^2, mixcg_maxiter1, eps^2, mixcg_maxiter_exact)
+  cur_timer = timer(string.format("inv_dov_df eps=%.1e", eps))
+  local sol5d_dov = solver(src_dov, true, true)
+  cur_timer("done")
+  check_sol_src(sol5d_dov, src_dov, string.format('dov[eps=%.1e]', eps))
+  cur_timer = timer("save sol dov")
+  local sol_dov = dwf.y5to4(sol5d_dov, mdwf_L5)
+  save_soldf(sol_dov, soldf_file(cfg_key, 'dov', eps))
+  cur_timer("done")
+
+
+  cur_timer = timer(string.format("inv_dslash_df eps=%.1e", eps))
+  local sol5d_dslash = solver(src_dslash, true, true)
+  cur_timer("done")
+  check_sol_src(sol5d_dslash, src_dslash, string.format('dslash[eps=%.1e]', eps))
+  cur_timer = timer("save sol dslash")
+  local sol_dslash = dwf.y5to4(sol5d_dslash, mdwf_L5)
+  save_soldf(sol_dslash, soldf_file(cfg_key, 'dslash', eps))
+  cur_timer("done")
+
+  local sol_dov2 = test_src_df + (1. - mdwf_mf) * sol_dslash
+  latvec.print_cmp(sol_dov, sol_dov2, 'sol_dov--sol_dov2')
+  printf("rdiff[eps=%.1e](sol_dov,sol_dov2)=%e\n", eps, latvec.rdiff(sol_dov, sol_dov2))
+end
+
+
+tot_timer("done")
+printf("QLUA_RUN_SUCCESS\n")

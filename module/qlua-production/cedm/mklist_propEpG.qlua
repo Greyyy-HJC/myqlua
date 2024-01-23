@@ -1,0 +1,107 @@
+require 'strict'
+require 'stdlib'
+
+function list_extend(list_dst, list_new)
+  for i,v in ipairs(list_new) do
+    list_dst[1+#list_dst] = v
+  end
+end
+function list_append(list_dst, v_new)
+  list_dst[1+#list_dst] = v_new
+end
+function list_csrc(ama) 
+  if nil ~= ama['csrc_list'] then return ama['csrc_list']
+  elseif nil ~= ama['csrcgrp_list'] then
+    res = {}
+    for k,v in pairs(ama['csrcgrp_list']) do
+      list_extend(res, v)
+    end
+    return res
+  else error("no source list")
+  end
+end
+function list_csrc_first(ama) 
+  if nil ~= ama['csrc_list'] then return ama['csrc_list']
+  elseif nil ~= ama['csrcgrp_list'] then
+    local res = {}
+    for k,v in pairs(ama['csrcgrp_list']) do
+      list_append(res, v[1])
+    end
+    return res
+  else error("no source list")
+  end
+end
+
+function mklist_propEpG_tag_tsnk(cfgkey, ama, 
+        psnk_list, tsep_list, tpol_list, flav_list, gf_tag_list, time_rev)
+  for i_csrc, csrc in ipairs(list_csrc_first(ama)) do
+    local tsrc = csrc[1+t_axis]
+    
+    for i_tsep, tsep in pairs(tsep_list) do
+
+      local lt = latsize[1+t_axis]
+      local tsnk = nil
+      if time_rev then
+        tsnk = (lt + tsrc - tsep) % lt
+      else
+        tsnk = (tsrc + tsep) % lt
+      end
+
+      for ip, psnk in pairs(psnk_list) do
+        for itpol, tpol in pairs(tpol_list) do
+          for i_gf, gf_tag in pairs(gf_tag_list) do 
+            for iflav_c, flav_c in pairs(flav_list) do
+              for iflav_d, flav_d in pairs(flav_list) do
+                printf('%s\n', get_cedmsinkseqprop_file(cfgkey, 
+                      csrc, psnk, tsnk, itpol, flav_c, flav_d, gf_tag, ama))
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+end
+
+function mklist_propEpGgrp_tag_tsep(cfgkey, ama, 
+        psnk_list, tsep_list, tpol_list, flav_list, gf_tag_list, time_rev)
+  for i_csrc, csrc in ipairs(list_csrc_first(ama)) do
+    local tsrc = csrc[1+t_axis]
+    
+    for i_tsep, tsep in pairs(tsep_list) do
+
+      local lt = latsize[1+t_axis]
+
+      for ip, psnk in pairs(psnk_list) do
+        for itpol, tpol in pairs(tpol_list) do
+          for i_gf, gf_tag in pairs(gf_tag_list) do 
+            for iflav_c, flav_c in pairs(flav_list) do
+              for iflav_d, flav_d in pairs(flav_list) do
+                printf('%s\n', get_cedmsinkseqprop_grp_file(cfgkey, 
+                      csrc, psnk, tsep, itpol, flav_c, flav_d, gf_tag, ama))
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+end
+
+cfg_key = assert(job_key)
+
+for i_ama, ama in pairs(ama_list) do
+  if nil ~= ama['csrc_list'] then  -- indep
+    mklist_propEpG_tag_tsnk(cfg_key, ama, 
+        c3pt_psnk_list, c3pt_tsep_list, 
+        cedm_Tpol5_c3pt_list, flav_list, 
+        {'orig'}, false)
+  elseif nil ~= ama['csrcgrp_list'] then -- coh
+    mklist_propEpGgrp_tag_tsep(cfg_key, ama, 
+        c3pt_psnk_list, c3pt_tsep_list, 
+        cedm_Tpol5_c3pt_list, flav_list, 
+        {'orig'}, false)
+  else
+    error("no csrc list") 
+  end
+end

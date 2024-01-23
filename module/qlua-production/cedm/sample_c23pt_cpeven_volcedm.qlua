@@ -1,0 +1,257 @@
+require 'cedm/cedm_get_prop'
+
+------------------------------------------------------------------------------
+-- sample cpeven and volcedm-induced cpodd c2,c3
+------------------------------------------------------------------------------
+function sample_c23pt_cpeven_volcedm(
+        L, cfg_key, csrc, ama,
+        c2pt_psnk_list, c3pt_psnk_list, c3pt_qext_list, tsep_list,
+        S2, S1, 
+        Tpol_list_c3pt, Tpol5_list_c3pt, 
+        flav_list,
+        gf_lpath, gf_clov_list, 
+        smear_func, solver_func, 
+        t_axis, ferm_bc,
+        redo_contract)
+  -- parameters
+  --  L               lattice object
+  --  cfg_key          gauge cfg "key" : string
+  --  csrc            forward source position for the sample
+  --  ama             AMA parameter for saving files
+  --  c2pt_psnk_list  sink momentum for c2pt, c2pt_volcedm
+  --  c3pt_psnk_list  sink momentum for c3pt, c2pt_cpbar
+  --  c3pt_qext_list  list of momenta for insertions
+  --  tsep_list       source-sink separation list
+  --  S2, S1          sink and source diquark spin structures
+  --  Tpol_list, Tpol5_list 
+  --                  list of nucleon polarization matrices for 0- and 1-st order in CEDM insertions
+  --  flav_list       flavors for cedm and current insertions
+  --  gf_lpath        gauge field for link paths in building blocks
+  --  gf_clov_list    table of (smeared) gauge clover term for the cEDM insertions
+  --  smear_func      source smearing function x_smeared = smear_func(x_point)
+  --  solver_func     fermion solver x = solver_func(y) <-> Dslash.x = y
+  --  redo_contract   { hadspec=false, c2pt=false,
+  --                    c2pt_volcedm=false, c2pt_cpbar=false,
+  --                    bb=true, bb_volcedm=true }
+
+  -- also requires global functions for propagator storage
+  --  get_frwprop_file            F
+  --  get_hadspec_file
+  --  get_c2pt_volcedm_file
+  --  get_cedmseqprop_file
+  -- and variables
+
+  -- XXX envs : 
+  --    latsize
+  --    hadspec_baryon_list, hadspec_meson_list 
+  --    bb_link_min, bb_link_max,
+  --    bb_volcedm_link_min, bb_volcedm_link_max,
+  --    t_axis
+  --    ferm_bc
+  local timer_1src  = timer('1src c23pt_cpeven_volcedm')
+  redo_contract = redo_contract or {}
+  local tt    -- timer
+  local bc_quark_t  = ferm_bc[1+t_axis]
+  local bc_baryon_t = bc_quark_t^3
+  local csrc_str  = string.format("x%d_y%d_z%d_t%d", 
+            csrc[1],csrc[2],csrc[3],csrc[4])
+  
+  local prop_F, is_new_F = get_prop_F(L, cfg_key, csrc, ama, smear_func, solver_func)
+  tt = timer('smear_prop_F')
+  local prop_F_sm  = smear_func(prop_F)
+  tt('done')
+  if is_new_F or redo_contract.hadspec then -- contract hadspec, c2pt (CP-even)
+    -- hadspec (all mesons, baryons)
+    tt  = timer("save_hadspec") 
+    local hadspec_file = get_hadspec_file(cfg_key, csrc, ama)
+    printf('[save_hadspec] %s\n', hadspec_file)
+    os.mkdir_path(dirname(hadspec_file))
+    local aff_hadspec = qcd.aff.Writer(hadspec_file)
+    save_hadspec_list_fast(L, aff_hadspec, '/hadspec/SP',
+                     prop_F, prop_F, csrc, c2pt_psnk_list,
+                     t_axis, bc_quark_t, hadspec_baryon_list, hadspec_meson_list)
+    save_hadspec_list_fast(L, aff_hadspec, '/hadspec/SS',
+                     prop_F_sm, prop_F_sm, csrc, c2pt_psnk_list,
+                     t_axis, bc_quark_t, hadspec_baryon_list, hadspec_meson_list)
+    aff_hadspec:close()
+    tt('done')
+  end
+  if is_new_F or redo_contract.c2pt then
+    -- c2pt (protons with all tpol)
+    tt  = timer("save_c2pt") 
+    local c2pt = {} -- [kpath]
+    local c2pt_sm = {} -- [kpath]
+    for tpol_g = 0, 15 do
+      local tpol, tpol_tag = gamma{n=tpol_g}, string.format("Tg%d", tpol_g)
+      local k_cc = string.format('proton_%s', tpol_tag)
+      c2pt[k_cc] = cedm_baryon_sigma(prop_F, prop_F, S2, S1, tpol)
+      c2pt_sm[k_cc] = cedm_baryon_sigma(prop_F_sm, prop_F_sm, S2, S1, tpol)
+    end -- tpol
+    local c2pt_file = get_c2pt_file(cfg_key, csrc, ama)
+    printf("[save_c2pt] %s\n", c2pt_file)
+    os.mkdir_path(dirname(c2pt_file))
+    local c2pt_aff  = qcd.aff.Writer(c2pt_file)
+    save_2pt_list_fast(L, c2pt_aff, '/c2pt/SP/',
+              c2pt, csrc, c2pt_psnk_list, t_axis, bc_baryon_t)
+    save_2pt_list_fast(L, c2pt_aff, '/c2pt/SS/',
+              c2pt_sm, csrc, c2pt_psnk_list, t_axis, bc_baryon_t)
+    c2pt_aff:close()
+    tt('done')
+  end -- is_new_F
+  
+  local prop_C = {}    -- [gf_tag]
+  local prop_C_sm = {} -- [gf_tag]
+  for gf_tag, gf_clov in pairs(gf_clov_list) do
+    local is_new_C
+    prop_C[gf_tag], is_new_C = get_prop_volcedm_C(
+        L, cfg_key, csrc, ama, 
+        prop_F, 
+        gf_clov, gf_tag, 
+        smear_func, solver_func)
+    tt = timer('smear_prop_C')
+    prop_C_sm[gf_tag] = smear_func(prop_C[gf_tag])
+    tt('done')
+    if is_new_C or redo_contract.c2pt_volcedm then -- contract c2pt_volcedm (CP-odd, t=tsink)
+      tt = timer("save_c2pt_volcedm")
+      local c2pt_volcedm    = {} -- [kpath]
+      local c2pt_volcedm_sm = {} -- [kpath]
+      for i_flav, flav in pairs(flav_list) do
+        for tpol_g = 0, 15 do
+          local tpol5, tpol5_tag = gamma{n=tpol_g}, string.format("Tg%d", tpol_g)
+          local k_cc = string.format('%s/proton_%s/%s', 
+                                gf_tag, tpol5_tag, flav)
+          c2pt_volcedm[k_cc]    = cedm_baryon_sigma_seqone(
+                                prop_F, prop_F, prop_C[gf_tag],
+                                flav, S2, S1, tpol5)
+          c2pt_volcedm_sm[k_cc] = cedm_baryon_sigma_seqone(
+                                prop_F_sm, prop_F_sm, prop_C_sm[gf_tag],
+                                flav, S2, S1, tpol5)
+        end --tpol5
+      end --flav
+      
+      local c2pt_volcedm_file = get_c2pt_volcedm_file(cfg_key, csrc, gf_tag, ama)
+      printf("[save_c2pt_volcedm] %s\n", c2pt_volcedm_file)
+      os.mkdir_path(dirname(c2pt_volcedm_file))
+      local c2pt_volcedm_aff  = qcd.aff.Writer(c2pt_volcedm_file)
+      save_2pt_list_fast(L, c2pt_volcedm_aff, '/c2pt_volcedm/SP/',
+                c2pt_volcedm, csrc, c2pt_psnk_list, t_axis, bc_baryon_t)
+      save_2pt_list_fast(L, c2pt_volcedm_aff, '/c2pt_volcedm/SS/',
+                c2pt_volcedm_sm, csrc, c2pt_psnk_list, t_axis, bc_baryon_t)
+      c2pt_volcedm_aff:close()
+      tt("done")
+    end -- is_new_C
+  end -- gf_tag
+
+  for i_tsep, tsep in pairs(tsep_list) do
+    local tsrc = csrc[1+t_axis]
+    local tsnk = (tsrc + tsep) % latsize[1+t_axis]
+    for i_psnk, psnk in pairs(c3pt_psnk_list) do
+      local psnk_str = string.format("PX%d_PY%d_PZ%d", psnk[1], psnk[2], psnk[3])
+      -- compute prop_B, save CP-even c3pt
+      for tpol_tag, tpol in pairs(Tpol_list_c3pt) do
+        for i_flav_cur, flav_cur in pairs(flav_list) do
+          local prop_B, is_new_B = get_prop_B(
+              L, cfg_key, csrc, ama, psnk, tsnk, 
+              S2, S1, tpol, tpol_tag, flav_cur, 
+              prop_F_sm,
+              smear_func, solver_func)
+          if is_new_B or redo_contract.bb then -- contract c3pt(t=tcur, tsnk=const, flav=flav_cur)
+            tt = timer("save_bb")
+            local bb_file = get_bb_file(cfg_key, csrc, psnk, tsep,
+                tpol_tag, flav_cur, ama)
+            printf("[save_bb] %s\n", bb_file)
+            os.mkdir_path(dirname(bb_file))
+            local bb_aff = qcd.aff.Writer(bb_file)
+            general_save_bb(bb_aff, 
+                string.format("/bb/SS/proton_%s/%s/%s/%s_dt%d", tpol_tag, flav_cur, 
+                              csrc_str, psnk_str, tsep),
+                prop_F, prop_B, gf_lpath, 
+                csrc, tsep, bb_link_min, bb_link_max,
+                c3pt_qext_list, t_axis, ferm_bc)
+            bb_aff:close()
+            tt("done")
+          end
+        end -- flav_cur
+      end -- tpol
+      force_gc("sample_cedm_2pt:prop_B")
+
+      -- compute prop_B5, save CP-odd c2pt
+      -- compute prop_EpG, save CP-odd c3pt
+      for tpol5_tag, tpol5 in pairs(Tpol5_list_c3pt) do
+        for i_flav_cur, flav_cur in pairs(flav_list) do
+          local prop_B5, is_new_B5 = get_prop_B(
+              L, cfg_key, csrc, ama, psnk, tsnk, 
+              S2, S1, tpol5, tpol5_tag, flav_cur, 
+              prop_F_sm, 
+              smear_func, solver_func)
+          
+          if is_new_B5 or redo_contract.c2pt_cpbar then -- contract c2pt_cpbar(t=tcedm, tsnk=const, flav_cedm:=flav_cur)
+            tt = timer("save_c2pt_cpbar")
+            local c2pt_cpbar  = {} -- [kpath]
+            for gf_tag, gf_clov in pairs(gf_clov_list) do
+              local cedm_frwprop = cedm_seqsrc_edm(prop_F, gf_clov)
+              local cc = (prop_B5 * cedm_frwprop):trace()
+              local k_cc = string.format('%s/proton_%s/%s/%s_dt%d', 
+                              gf_tag, tpol5_tag, flav_cur, psnk_str, tsep)
+              -- correct for boundary conditions (maintaining compat with prev calc)
+              if tsrc <= tsnk then c2pt_cpbar[k_cc] = cc
+              else c2pt_cpbar[k_cc] = bc_baryon_t * cc end
+            end -- gf
+
+            local c2pt_cpbar_file = get_c2pt_cpbar_file(cfg_key, csrc, psnk, tsep, 
+                tpol5_tag, flav_cur, ama)
+            printf("[save_c2pt_cpbar] %s\n", c2pt_cpbar_file)
+            os.mkdir_path(dirname(c2pt_cpbar_file))
+            local c2pt_cpbar_aff  = qcd.aff.Writer(c2pt_cpbar_file)
+            save_2pt_list_fast(L, c2pt_cpbar_aff, '/c2pt_cpbar/SS/',
+                    c2pt_cpbar, csrc, c2pt_psnk_list, t_axis, 1.)  -- sic! no BC_t when tcedm wraps around Lt
+            c2pt_cpbar_aff:close()
+            tt("done")
+          end -- if is_new_B5
+
+          for gf_tag, gf_clov in pairs(gf_clov_list) do
+            for i_flav_cedm, flav_cedm in pairs(flav_list) do
+              local prop_EpG, is_new_EpG = get_prop_volcedm_EpG(
+                  L, cfg_key, csrc, ama, psnk, tsnk,
+                  S2, S1, tpol5, tpol5_tag, flav_cur, flav_cedm,
+                  prop_F_sm, prop_C_sm[gf_tag], prop_B5, 
+                  gf_clov, gf_tag,
+                  smear_func, solver_func)
+              if is_new_EpG or redo_contract.bb_volcedm then -- contract c3pt_cpbar
+                tt = timer("save_bb_volcedm")
+                local bb_volcedm_file = get_bb_volcedm_file(cfg_key, csrc, psnk, tsep,
+                    tpol5_tag, flav_cur, flav_cedm, gf_tag, ama)
+                printf("[save_bb_volcedm] %s\n", bb_volcedm_file)
+                os.mkdir_path(dirname(bb_volcedm_file))
+                local bb_volcedm_aff = qcd.aff.Writer(bb_volcedm_file)
+
+                local p1_list = {}
+                local p2_list = {}
+                if flav_cur == flav_cedm then
+                  p1_list = { prop_F,   prop_C[gf_tag] }
+                  p2_list = { prop_EpG, prop_B5        }
+                else
+                  p1_list = { prop_F   }
+                  p2_list = { prop_EpG }
+                end
+                general_save_bb(bb_volcedm_aff, 
+                    string.format("/bb_volcedm/SS/%s/proton_%s/%s/%s/%s/%s_dt%s", 
+                        gf_tag, tpol5_tag, flav_cur, flav_cedm, csrc_str, psnk_str, tsep),
+                    p1_list, p2_list, gf_lpath, 
+                    csrc, tsep, bb_volcedm_link_min, bb_volcedm_link_max,
+                    c3pt_qext_list, t_axis, ferm_bc)
+                bb_volcedm_aff:close()
+                tt("done")
+              end -- is_new_EpG
+            end -- flav_cedm
+          end -- gf
+        end -- flav_cur
+      end -- tpol5
+      force_gc("sample_cedm_2pt:prop_B5")
+
+    end -- psnk
+  end -- tsep
+
+  force_gc("sample_cedm_2pt")
+  timer_1src('done')
+end

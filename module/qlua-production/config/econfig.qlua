@@ -1,0 +1,98 @@
+-- various numerical params for ensembles
+
+econfig = rawget(_G, 'econfig') or {}
+
+econfig.ensemble_param = {
+  ['TEST8c16_isoClover'] = {
+    latsize       = { 8,  8,  8, 16 },
+    quark_mass    = { ['UD'] = 0.2, ['S'] = 0.5, },
+    quark_csw     = 0.01,
+    quark_bc      = {  1,  1,  1, -1 },
+    gauge_smear   = { type = 'stout', stout_rho = 0.125, stout_nstep = 1, },
+  },
+  ['TEST32c64_isoClover'] = {
+    latsize       = { 32, 32, 32, 64 },
+    quark_mass    = { ['UD'] = 0.2, ['S'] = 0.5, },
+    quark_csw     = 0.01,
+    quark_bc      = {  1,  1,  1, -1 },
+    gauge_smear   = { type = 'stout', stout_rho = 0.125, stout_nstep = 1, },
+  },
+  ['TEST48c64_isoClover'] = {
+    latsize       = { 48, 48, 48, 64 },
+    quark_mass    = { ['UD'] = 0.2, ['S'] = 0.2, },
+    quark_csw     = 0.01,
+    quark_bc      = {  1,  1,  1, -1 },
+    gauge_smear   = { type = 'hyp', hyp_nstep = 1, },
+  },
+  ['TEST64c64_isoClover'] = {
+    latsize       = { 64, 64, 64, 64 },
+    quark_mass    = { ['UD'] = 0.2, ['S'] = 0.5, },
+    quark_csw     = 0.01,
+    quark_bc      = {  1,  1,  1, -1 },
+    gauge_smear   = { type = 'hyp', hyp_nstep = 1, },
+  },
+  ['JLab_isoClover_C13'] = {
+    latsize       = { 32, 32, 32, 96 },
+    quark_mass    = { ['UD'] = -0.2850, ['S'] = -0.2450, },
+    quark_csw     = 1.24930970916466,
+    quark_bc      = {  1,  1,  1, -1 },
+    gauge_smear   = { type = 'stout', stout_rho = 0.125, stout_nstep = 1, },
+  },
+  ['JLab_isoClover_D5'] = {
+    latsize       = { 32, 32, 32, 64 },
+    quark_mass    = { ['UD'] = -0.2390, ['S'] = -0.2050, },
+    quark_csw     = 1.20536588031793,
+    quark_bc      = {  1,  1,  1, -1 },
+    gauge_smear   = { type = 'stout', stout_rho = 0.125, stout_nstep = 1, },
+  },
+  ['JLab_isoClover_D6'] = {
+    latsize       = { 48, 48, 48, 96 },
+    quark_mass    = { ['UD'] = -0.2416, ['S'] = -0.2050, },
+    quark_csw     = 1.20536588031793,
+    quark_bc      = {  1,  1,  1, -1 },
+    gauge_smear   = { type = 'stout', stout_rho = 0.125, stout_nstep = 1, },
+  },
+  ['JLab_isoClover_D7'] = {
+    latsize       = { 64, 64, 64,128 },
+    quark_mass    = { ['UD'] = -0.2416, ['S'] = -0.2050, },
+    quark_csw     = 1.20536588031793,
+    quark_bc      = {  1,  1,  1, -1 },
+    gauge_smear   = { type = 'stout', stout_rho = 0.125, stout_nstep = 1, },
+  },
+  ['Hotqcd_hisqsea_a060_48c64'] = {
+    latsize       = { 48, 48, 48, 64 },
+    quark_mass    = { ['UD'] = -0.038888, },
+    quark_csw     = 1.0336,
+    quark_bc      = {  1,  1,  1, -1 },
+    gauge_smear   = { type = 'hyp', hyp_nstep = 1, },
+  },
+  ['Hotqcd_hisqsea_a040_64c64'] = {
+    latsize       = { 64, 64, 64, 64 },
+    quark_mass    = { ['UD'] = -0.033, },
+    quark_csw     = 1.02868,
+    quark_bc      = {  1,  1,  1, -1 },
+    gauge_smear   = { type = 'hyp', hyp_nstep = 1, },
+  },
+    ['Hotqcd_hisqsea_a076_64c64'] = {
+    latsize       = { 64, 64, 64, 64 },
+    quark_mass    = { ['UD'] = -0.049, },
+    quark_csw     = 1.0372,
+    quark_bc      = {  1,  1,  1, -1 },
+    gauge_smear   = { type = 'hyp', hyp_nstep = 1, },
+  },
+    ['Hotqcd_hisqsea_a076_64c64_16nodes'] = {
+    latsize       = { 64, 64, 64, 64 },
+    quark_mass    = { ['UD'] = -0.049, },
+    quark_csw     = 1.0372,
+    quark_bc      = {  1,  1,  1, -1 },
+    gauge_smear   = { type = 'hyp', hyp_nstep = 1, },
+  },
+    ['Hotqcd_hisqsea_a076_64c64_8nodes'] = {
+    latsize       = { 64, 64, 64, 64 },
+    quark_mass    = { ['UD'] = -0.049, },
+    quark_csw     = 1.0372,
+    quark_bc      = {  1,  1,  1, -1 },
+    gauge_smear   = { type = 'hyp', hyp_nstep = 1, },
+  },
+}
+

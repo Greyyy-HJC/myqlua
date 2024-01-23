@@ -1,0 +1,124 @@
+require "stdlib"
+require "lhpc-std"
+require "wuppertal-smear"
+require "latvec"
+
+function wuppertal_smear_twisted(U, alpha, N, G, axis, tw_mom)
+  --
+  --  U is not twisted
+  --  tw: 4-dimensional mom, may be fractional (for BC twisting)
+  local L = latvec.lattice(G)
+  latvec.lattice(U)
+  if #tw_mom ~= #L then
+    assert(#tw_mom == #L - 1)
+    tw_mom = space2full(tw_mom, axis, 0)
+  end
+  local c_tw = L:planewave({0,0,0,0}, tw_mom)
+  return c_tw * wuppertal_smear(U, alpha, N, c_tw:conj() * G, axis)
+end
+
+function make_source_twisted(Z, csrc, wup_a, wup_n, t_axis, tw_mom)
+  local cm = L:ColorMatrix()
+  for a = 0, cm:colors() - 1 do
+    cm[{csrc[1], csrc[2], csrc[3], csrc[4],a=a,b=a}] = complex(1,0)
+  end
+  L:Subset{axis=t_axis, position=csrc[1+t_axis]}:where(
+      function()
+        cm:set(wuppertal_smear_twisted(Z, wup_a, wup_n, cm, t_axis, tw_mom))
+      end)
+  return L:DiracPropagator(cm)
+end
+
+function timeit(title, func, ...)
+  local t = timer(title)
+  local res = { func(...) }
+  t("done")
+  return unpack(res)
+end
+
+-- TODO move to config
+wup_smear_list = {
+    { 10, 0.5 },
+    { 25, 0.5 },
+    { 50, 0.5 },
+    { 70, 0.5 },
+    { 100, 0.5 },
+    { 150, 0.5 }
+}
+-- smearing momenta
+q_tw  = {1, 0, 0}
+hadspec_psnk_list = make_mom_list(10)
+baryon_list = {
+    "proton_1",
+    "proton_2",
+    "proton_3",
+    "proton_4",
+    "proton_5",
+    "proton_6",
+    "proton_negpar_3" 
+}
+
+
+function save_hadspec_twisted(L,
+        aff_w, aff_kpath_prefix,
+        d, u,
+        csrc, psnk_list, q_tw,
+        t_axis, q_bc_t,
+        baryon_list)
+  -- insert '/' between kpath prefix and the rest of kpath
+  if (0 < aff_kpath_prefix:len()) then aff_kpath_prefix = aff_kpath_prefix .. '/' end
+  -- create a list of 4d momenta appropriate for momentum projection
+  -- XXX note that <N(t,p)\bar{N}(0)> = \sum_x exp(-ipx) <N(t,x)\bar{N}(0)>
+  local psnk_pw = {}
+  local bc_bar_t = bc_quark_t * bc_quark_t * bc_quark_t
+  for i,p in ipairs(psnk_list) do
+    assert(#p == #q_tw)
+    local b_twmom = {}
+    for j = 0, #q_tw - 1 do
+      b_twmom[j] = p[j] + 3 * q_tw[j]
+    end
+    psnk_pw[i] = L:planewave(csrc, space2full(b_twmom, t_axis, 0)):conj()
+  end
+
+  local tsrc = csrc[1+t_axis]
+  local tsize = L[t_axis]
+  -- create MultiSet for projections
+  -- TODO replace with shifted and sign-aware multiset?
+  local mset_tcoord = L:MultiSet(tsize, L:pcoord(t_axis))
+
+  -- calc baryon 2pts
+  for i, bar in pairs(baryon_list) do
+    local val = baryon_tab[bar]
+    local c2pt = val[1](d, u, val[2], val[3])
+    for i,psnk in ipairs(psnk_list) do
+      aff_w:write(aff_kpath_prefix .. hadspec_kpath(bar, csrc, psnk),
+                  make_hadspec_standard(c2pt:project(psnk_pw[i], mset_tcoord),
+                                        tsrc, tsize, bc_bar_t))
+    end
+  end
+end
+
+
+function calc_hadspec_twisted(solver_func, gauge_u, mom_list, csrc, tw_mom)
+  -- XXX solver_func must have correct BC for tw_mom
+  for i_sm_src, sm_src in pairs(wup_smear_list) do
+    local wup_n_src, wup_a_src = unpack(sm_src)
+    local wup_tag_src = string.format("GN%dx%.4f", wup_n_src, wup_a_src)
+    local cur_timer = timer(string.format("make_source(%dx%f)", wup_a_src, wup_n_src))
+    local frw_src = timeit(string.format("make_source(%dx%f)", wup_n_src, wup_a_src),
+        make_source_twisted, gauge_u, csrc, wup_a, wup_n, t_axis, tw_mom)
+    local frw_prop = timeit("calc_prop", solver_func, frw_src)
+    for j_sm_snk, sm_snk in pairs(wup_smear_list) do
+      local wup_tag_snk = string.format("GN%dx%.4f", wup_n_snk, wup_a_snk)
+      local wup_n_snk, wup_a_snk = unpack(sm_snk)
+      local frw_prop_sm = timeit(string.format("smear_prop(%dx%f)", wup_n_snk, wup_a_snk),
+         wuppertal_smear_twisted, gauge_u, wup_a_snk, wup_n_snk, t_axis, tw_mom)
+      local aff_w = qcd.aff.Writer(get_file_hadspec())
+      timeit(save_hadspec_twisted(L, aff_w, 
+                string.format("/cfg%s/hspectrum/%s-%s/", cfg_key, wup_tag_src, wup_tag_snk),
+                frw_prop_sm, frw_prop_sm, csrc, hadspec_psnk_list, q_tw,
+                t_axis, ferm_bc[1+t_axis], baryon_list))
+    end
+  end
+end
+

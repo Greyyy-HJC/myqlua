@@ -1,0 +1,99 @@
+package.path = 'qlib/?.qlua;qlib-lhpc/?.qlua;lhpc/?.qlua;qlua-production/?.qlua;' ..  package.path
+
+require 'strict'
+require 'stdlib'
+require 'lhpc-std'
+require 'setup_util'
+require 'latvec'
+require 'fastsmear'
+require 'gauge'
+
+require 'util/geom'
+
+function print_slices(x, axis, func, tit)
+  tit = tit or tostring(x)
+  local L = latvec.lattice(x)
+  for c = 0, L[axis]-1 do
+    local v = L:Subset({axis=axis, position=c}):where(func, x)
+    printf("%s[%d=%d]=%s\n", tit, axis, c, tostring(v))
+  end
+end
+function print_elem(x, func, tit)
+  tit = tit or tostring(x)
+  for i = 1, #x do 
+    local v = func(x[i])
+    printf("%s[%d]=%s\n", tit, i-1, tostring(v))
+  end
+end
+function trsum(x)
+  return latvec.norm2(latvec.apply(function(y)return y:trace()end, x))
+end
+
+function wuppertal_smear_fast_dp2(U, alpha, N, G, axis, t0)
+  local tt
+  local L = latvec.lattice(U)
+  latvec.lattice(G, L)
+  assert(0 <= axis and axis < #L)
+
+  local xG
+  tt = timer('fastsmear:conv2array')
+  if ('lattice.dirac.propagator' == type(G)) then xG = dp2dfl(G)
+  else error(string.format("unsupported type='%s'", type(G))) end
+  tt('done')
+  assert('table' == type(xG))
+  local l_xG = #xG
+--  print_elem(xG, latvec.norm2, 'xG')    --**
+
+  tt = timer('fastsmear:make_maps')
+  local map_sc, map_gt, map_ss, Ldst = hyperslab_map_bidir(
+      L, t0, 1, l_xG, axis, {network='copy'})                       ; tt('done')
+  
+  tt = timer('fastsmear:map_gauge')
+  local U_map = latvec.apply(map_sc, U)                             ; tt('done')
+--  print_slices(U,     axis, trsum, 'U')       --**
+--  print_slices(U_map, axis, trsum, 'U_map')   --**
+  tt = timer('fastsmear:map_field')
+  local xG_map = scatter_subset_array(map_sc, map_ss, xG)           ; tt('done')
+--  print_slices(xG_map, axis, latvec.norm2, 'xG_map')      --**
+  tt = timer('fastsmear:wup_smear')
+  local xG_sm_map = wuppertal_smear(U_map, alpha, N, xG_map, axis)  ; tt('done')
+--  print_slices(xG_sm_map, axis, latvec.norm2, 'xG_sm_map')  --**
+  
+  tt = timer('fastsmear:unmap_field')                               ; tt('done')
+  local xG_sm = gather_subset_array(map_gt, map_ss, xG_sm_map)
+--  print_elem(xG_sm, latvec.norm2, 'xG_sm')    --**
+  tt = timer('fastsmear:conv2field')
+  local G_sm
+  if ('lattice.dirac.propagator' == type(G)) then G_sm = dfl2dp(xG_sm)
+  else error(string.format("unsupported type='%s'", type(G))) end
+  tt('done')
+  return G_sm
+end
+
+
+latsize = {4,4,6,20}
+t_axis = #latsize-1
+L = qcd.lattice(latsize)
+S = rnd_init(L, 1973)
+
+dp = S:gaussian_DiracPropagator()
+cml = dp2cml(dp)
+dp2 = cml2dp(cml)
+latvec.print_cmp(dp, dp2, "dp <-> (conv<>cml)")
+
+t0l = {3,7,9,10}
+printf("t0l=[%s]\n", list_tostring(t0l))
+dp_t0 = L:DiracPropagator()
+for i_t0, t0 in ipairs(t0l) do L:Subset({axis=t_axis, position=t0}):where(function() dp_t0:set(dp) end) end
+dp_t0_v2 = L:DiracPropagator()
+for i_t0, t0 in ipairs(t0l) do L:Subset(qcd.eq(L:pcoord(t_axis),t0)):where(function() dp_t0_v2:set(dp) end) end
+latvec.print_cmp(dp_t0, dp_t0_v2, "dp_t0 <=> dp_t0_v2")
+
+wup_a = 0.5
+wup_n = 20
+U = latvec.fromfunction({4}, function()return toSUn(1.12*S:gaussian_ColorMatrix())end)
+sm_dp1 = wuppertal_smear(U, wup_a, wup_n, dp_t0, t_axis)
+sm_dp2 = wuppertal_smear_fast_dp2(U, wup_a, wup_n, dp_t0, t_axis, t0l)
+latvec.print_cmp(sm_dp1, sm_dp2, "sm(dp_t0) <=> sm_fast(dp_t0)")
+
+

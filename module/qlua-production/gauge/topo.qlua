@@ -1,0 +1,117 @@
+require 'gauge'
+require 'gauge/loops'
+
+function gauge_topdensity_Gmunu(Ghat)
+  -- uses only Ghat[1+i][1+j] for 0 <=i<j
+  -- compute local 
+  --  Q  = (1/(64 \pi^2)) \sum_{ijkl} \epsilon_{ijkl} G^a_{ij} G^a_{kl}
+  --     = (1/(32 \pi^2)) \sum_{ijkl} \epsilon_{ijkl} * Tr[Ghat_{ij} Ghat_{kl}]
+  --     = (1/(16 \pi^2)) \sum_{ij}  Tr[Ghat_{ij} Ghat_{dual(ij)}]
+  --     = (1/(8 \pi^2))  \sum_{i<j} Tr[Ghat_{ij} Ghat_{dual(ij)}]
+  --  where Ghat = t^a G^a and Tr[t^a t^b]=(1/2)delta^{ab}
+  -- XXX check Ghat norm in action
+  assert(0 < #Ghat)
+  assert(0 < #(Ghat[1]))
+  local L = Ghat[1][2].lattice
+  assert(4 == #L)
+  -- for 0<=i<j<4: eps4d[1+i][1+j]={k,l} such that eps[i,j,k,l]=+1
+  local eps4d = {   -- order of (k,l) encodes sign
+    {{}, {2,3} , {3,1}, {1,2}},
+    {{}, {   } , {0,3}, {2,0}},
+    {{}, {   } , {   }, {0,1}}}
+  local res = L:Real(0)
+  -- sum over i<j
+  for i = 0, #L-2 do
+    for j = i+1, #L-1 do
+      local k, l = unpack(eps4d[1+i][1+j])
+      if k < l then 
+        res = res + (Ghat[1+i][1+j] * Ghat[1+k][1+l]):trace():real()
+      else  
+        res = res - (Ghat[1+i][1+j] * Ghat[1+l][1+k]):trace():real()
+      end
+    end
+  end
+  return res / (8. * math.pi*math.pi)  -- sic! 4x symmetry factor
+end
+
+function gauge_topdensity_plaq(U)
+  -- return std-normalized Q with Gmunu from regular(square) plaquettes
+  assert(0 < #U)
+  local L = U[1].lattice
+  local cm_1 = L:ColorMatrix(1.)
+  local U_clovS = {}
+  for i = 0, #L-1 do
+    U_clovS[1+i] = {}
+    for j = 0, i do U_clovS[1+i][1+j] = false end
+    for j = i+1, #L-1 do
+      local F = gauge_clovsum_plaq(U, i, j)
+--      F = F - (F:trace() / F:colors()) * cm_1
+      U_clovS[1+i][1+j] = (F - F:adjoin()) / complex(0,8)
+    end
+  end
+  return gauge_topdensity_Gmunu(U_clovS)
+end
+
+function gauge_topdensity_rect(U)
+  -- return std-normalized Q with Gmunu from rectangular loops
+  assert(0 < #U)
+  local L = U[1].lattice
+  local cm_1 = L:ColorMatrix(1.)
+  local U_clovR = {}
+  for i = 0, #L-1 do
+    U_clovR[1+i] = {}
+    for j = 0, i do U_clovR[1+i][1+j] = false end
+    for j = i+1, #L-1 do
+      local F = gauge_clovsum_rect(U, i, j) - gauge_clovsum_rect(U, j, i)
+--      F = F - (F:trace() / F:colors()) * cm_1
+      U_clovR[1+i][1+j] = (F - F:adjoin()) / complex(0,32)
+    end
+  end
+  return gauge_topdensity_Gmunu(U_clovR)
+end
+
+function gauge_topdensity_imptree(U)
+  return (  (5./3.) * gauge_topdensity_plaq(U) 
+          - (2./3.) * gauge_topdensity_rect(U) )
+end
+
+function gauge_topdensity_imp5li(U, c5)
+  assert(0 < #U)
+  local L = U[1].lattice
+  assert(#L == #U)
+
+--  c5 = c5 or 0.05 -- XX
+  local cm1 = L:ColorMatrix(1.)
+  local function trsub(cm) 
+--    cm = cm - (cm:trace() / cm:colors()) * cm1
+    return cm
+  end
+
+  local G5li = {}
+  for k = 1, 5 do G5li[k] = {} end
+
+  local plaq3x3 = {3, 3, 3}
+  for mu = 0, #L-1 do
+    for k = 1, 5 do 
+      G5li[k][1+mu] = {}
+      for nu = 0, mu do G5li[k][1+mu][1+nu] = false end
+    end
+    for nu = mu + 1, #L-1 do
+      -- FIXME G[2][3], G[3][2] are computed but not used
+      local G = gauge_fieldtensor_gen(U, mu, nu, plaq3x3)
+      G5li[1][1+mu][1+nu] =      trsub(G[1][1])
+      G5li[2][1+mu][1+nu] =      trsub(G[2][2])
+      G5li[3][1+mu][1+nu] = .5 * trsub(G[1][2] + G[2][1])
+      G5li[4][1+mu][1+nu] = .5 * trsub(G[1][3] + G[3][1])
+      G5li[5][1+mu][1+nu] =      trsub(G[3][3])
+    end
+  end
+
+  local cimp  = gauge_li5coeff(c5)
+  local Q = ( (cimp[1] /  1.) * gauge_topdensity_Gmunu(G5li[1])
+            + (cimp[2] / 16.) * gauge_topdensity_Gmunu(G5li[2])
+            + (cimp[3] /  4.) * gauge_topdensity_Gmunu(G5li[3])
+            + (cimp[4] /  9.) * gauge_topdensity_Gmunu(G5li[4])
+            + (cimp[5] / 81.) * gauge_topdensity_Gmunu(G5li[5]) )
+  return Q
+end

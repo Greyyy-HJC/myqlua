@@ -1,0 +1,188 @@
+module('pdecay', package.seeall)
+
+------------------------------------------------------------------------------
+-- aux functions
+------------------------------------------------------------------------------
+function have_prop(cfg_key, prop_kind, prop_file)
+  local prop_log = get_prop_log_file(cfg_key, prop_kind)
+  local bn = basename(prop_file)
+  if not io.fexists(prop_log) then return false end
+  for s in io.lines(prop_log) do
+    if s == bn then return true end
+  end
+  return false
+end
+function done_prop(cfg_key, prop_kind, prop_file)
+  local prop_log = get_prop_log_file(cfg_key, prop_kind)
+  local bn = basename(prop_file)
+  local f = io.open(prop_log, "a")
+  f:write(string.format("%s\n", bn))
+  f:flush()
+  f:close()
+end
+function prop_save_func(fname, x, title, prop_prec)
+  -- requires in the scope:
+  --  prop_volfmt       part_dir for fast
+  --  prop_vol_stride   spacing between ranks doing IO (set equal to the number of ranks per 1 IO node)
+  if nil == title then
+    title = tostring(x)
+  end
+  printf("SAVE %s '%s'\n", title, fname)
+  local tt = timer(string.format("SAVE %s", title))
+  os.mkdir_path(dirname(fname))
+  local qio_w = open_qdpc_write(L, fname, "", prop_qio_volfmt, 
+                    {rank_stride=prop_qio_stride})
+  qio_w:DiracPropagator(prop_prec, x, title)
+  qio_w:close()
+  tt("done")
+end
+function prop_load_func(fname, title)
+  -- requires in the scope:
+  --  prop_vol_stride   spacing between ranks doing IO (set equal to the number of ranks per 1 IO node)
+  if nil == title then
+    title = ''
+  end
+  printf("LOAD %s '%s'\n", title, fname)
+  local tt = timer(string.format("LOAD %s", title))
+  local qio_r = open_qdpc_read(L, fname, {rank_stride=prop_qio_stride})
+  local res = qio_r:DiracPropagator()
+  qio_r:close()
+  tt("done")
+  return res
+end
+
+------------------------------------------------------------------------------
+-- load or compute propagators------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+-- general parameter order :
+--    coord; [polaris/flavor]; [prop(s)]; [gf] ; smear/solve
+-- return (prop_F, is_new)
+function get_prop_F_list(
+      L, cfg_key, csrc_list, ama, 
+      flav_frw,               -- flavor for forward prop
+      smear_func, solver_list_func)
+  local nsrc = #csrc_list
+  assert(0 < nsrc)
+  
+  -- prepare list of sources for new propagators or load old propagators
+  local prop_F_list = {}
+  local i_src_new_list = {}
+  local prop_file_new_list = {}
+  local src_F_new_list = {}
+  for isrc, csrc in ipairs(csrc_list) do
+    local prop_file = get_frwprop_flav_file(cfg_key, csrc, flav_frw, ama)
+    local is_new = not have_prop(cfg_key, "prop_F", prop_file) 
+    if is_new then
+      printf("NEED prop_F '%s'\n", prop_file)
+      list_append(i_src_new_list, isrc)
+      list_append(prop_file_new_list, prop_file)
+      local tt = timer("CALC src_F")
+      local src_F = smear_func(make_source_point(L, csrc))  ; tt("src")
+      list_append(src_F_new_list, src_F)
+    else
+      printf("HAVE prop_F '%s'\n", prop_file)
+      prop_F_list[isrc] = prop_load_func(prop_file, "prop_F")    -- load if available
+    end
+  end -- isrc
+
+  -- compute new propagators
+  local prop_F_new_list = {}
+  if 0 < #src_F_new_list then
+    local tt = timer("CALC prop_F")
+    prop_F_new_list = solver_list_func(src_F_new_list) ; tt("prop")
+  end
+
+  -- make the result list and save propagators
+  assert(#prop_F_new_list == #i_src_new_list)
+  for j, isrc in ipairs(i_src_new_list) do
+    local prop_file = prop_file_new_list[j]
+    local prop_F    = prop_F_new_list[j]
+    prop_F_list[isrc] = prop_F
+    prop_save_func(prop_file, prop_F, "prop_F", ama['prop_prec'])
+    done_prop(cfg_key, "prop_F", prop_file)         -- mark as computed and saved
+  end
+
+  src_F_new_list, prop_F_new_list = nil, nil
+  force_gc('get_prop_F_list')
+  qcd.log_rusage("fresource.txt","Get_prop")
+  local is_new_list = (0 < #i_src_new_list)
+  return prop_F_list, is_new_list
+end
+
+-- return (prop_B, is_new)
+mgamma_list = {
+  Tg15 = gamma{n=15}
+}
+function get_propgrp_B_list(
+      L, cfg_key, csrcgrp_list, ama,
+      psnk, tsep,             -- sink mom&pos XXX note that `get_prop_B' gets `tsnk' instead of `tsep'
+      mgamma_tag,             -- meson gamma-structure tag
+      flav_frw,               -- flavor of forward prop
+      flav_bkw,               -- flavor for backward prop
+      propgrp_F_sm_list,      -- forward prop:
+      smear_func, solver_list_func)
+  local nsrcgrp = #csrcgrp_list
+  assert(0 < nsrcgrp)
+
+  local Mgamma = mgamma_list[mgamma_tag]
+  local tt = timer("CALC prop_B")
+  local psnk4 = space2full(psnk, t_axis, 0)       -- make 4-vector
+
+  -- prepare list of sources for new propagators or load old propagators
+  local propgrp_B_list = {}
+  local i_srcgrp_new_list = {}
+  local prop_file_new_list = {}
+  local srcgrp_B_new_list = {}
+  for isrcgrp, csrcgrp in ipairs(csrcgrp_list) do
+    local prop_file = get_bkwprop_grp_flav_file(cfg_key, csrcgrp, psnk, tsep,
+        mgamma_tag, flav_frw, flav_bkw, ama)
+    local is_new = not have_prop(cfg_key, "prop_B", prop_file)
+    if is_new then
+      printf("NEED prop_B '%s'\n", prop_file)
+      list_append(i_srcgrp_new_list, isrcgrp)
+      list_append(prop_file_new_list, prop_file)
+      local tt = timer("CALC srcgrp_B")
+      local srcgrp_B = L:DiracPropagator()               -- field=0
+      local propgrp_F_sm = propgrp_F_sm_list[isrcgrp]
+      local tsnk_list = {}
+      for i_csrc, csrc in pairs(csrcgrp) do
+        local tsnk = (csrc[1+t_axis] + tsep) % latsize[1+t_axis]
+        L:Subset({axis=t_axis,pos=tsnk}):where(
+          function()
+            srcgrp_B:set(Mgamma * propgrp_F_sm * L:planewave(csrc, psnk4):conj())
+          end)                          ; tt("src")
+      end -- i_csrc
+      -- XXX this smearing was missing in `calc_c23pt_pdecay.qlua'; it is commented out for cross-check
+      if true then srcgrp_B = smear_func(srcgrp_B, {pos=tsnk_list})  
+      else printf("XXX XXX XXX  uncomment smearing of `srcgrp_B' in `get_propgrp_B_list' XXX XXX XXX\n") end
+      list_append(srcgrp_B_new_list, srcgrp_B)
+    else
+      printf("HAVE prop_B '%s'\n", prop_file)
+      propgrp_B_list[isrcgrp] = prop_load_func(prop_file, "prop_B")    -- load if available
+    end
+  end -- isrcgrp
+
+  -- compute new propagators
+  local propgrp_B_new_list = {}
+  if 0 < #srcgrp_B_new_list then
+    local tt = timer("CALC propgrp_B")
+    propgrp_B_new_list = solver_list_func(srcgrp_B_new_list) ; tt("prop")
+  end
+  
+  -- make the result list and save propagators
+  assert(#propgrp_B_new_list == #i_srcgrp_new_list)
+  for j, isrcgrp in ipairs(i_srcgrp_new_list) do
+    local prop_file = prop_file_new_list[j]
+    local propgrp_B = propgrp_B_new_list[j]
+    propgrp_B_list[isrcgrp] = propgrp_B
+    prop_save_func(prop_file, propgrp_B, "prop_B", ama['prop_prec'])
+    done_prop(cfg_key, "prop_B", prop_file)         -- mark as computed and saved
+  end
+
+  srcgrp_B_new_list, propgrp_B_new_list = nil, nil
+  force_gc('get_propgrp_B_list')
+  qcd.log_rusage("fresource.txt","Get_prop")
+  local is_new_list = (0 < #i_srcgrp_new_list)
+  return propgrp_B_list, is_new_list
+end
+

@@ -1,0 +1,835 @@
+require 'strict'
+require 'stdlib'
+require 'latvec'
+
+require 'rcparams'
+local function qbarq_backend() return contract_backend() end
+
+local function mk_d3_momlist(qlist, t_axis)
+  if #(qlist[1]) == #L-1 then return qlist
+  else 
+    printf("WARN passing 4d qext to general_save_* is deprecated; DO fix config scripts!\n")
+    local q3dlist = {}
+    for i,q in ipairs(qlist) do q3dlist[i] = full2space(q, t_axis) end
+    return q3dlist
+  end
+end
+local function opt_get_kpath(opt)
+  if opt and opt.save and opt.save.kpath then return opt.save.kpath end
+end
+local function opt_set_kpath(opt, kpath)
+  if opt and opt.save and opt.save.kpath then opt.save.kpath = kpath end
+end
+
+-- note on sign and encoding conventions: it is made consistent with 
+--   Dru Renner's BB code (see also the latcorr_lpaths.pdf note)
+do
+  -- ordinary shift of field q_x 
+  -- for mu<0(XYZT; mu1=-mu): (shift{q})_x = q_{x+mu1}
+  -- for mu>0(xyzt; mu1=+mu): (shift{q})_x = q_{x-mu1}
+  function dshift(mu, x)
+    if     (mu <  0) then return x:shift(-mu-1, "from_forward")
+    elseif (0  < mu) then return x:shift(mu-1, "from_backward")
+    else error(string.format("bad mu=%d", mu)) end
+  end
+  -- shift fundamental rep. field q_x(-> g_x q_x) with gauge links u_{x,mu}
+  -- for mu<0(XYZT; mu1=-mu): (shift{q})_x = u_{x,mu1}       q_{x+mu1}
+  -- for mu>0(xyzt; mu1=+mu): (shift{q})_x = u_{x-mu1,mu1}^H q_{x-mu1}
+  function dshift_q(mu, q, u)
+    if     (mu <  0) then return u[-mu] * q:shift(-mu-1, "from_forward")
+    elseif (0  < mu) then return (u[mu]:adjoin() * q):shift(mu-1, "from_backward")
+    else error(string.format("bad mu=%d", mu)) end
+  end
+  -- shift conjugate-fundamental rep. field qbar_x(-> qbar_x g_x^H) 
+  -- with gauge field u_{x,mu}
+  -- for mu<0(XYZT; mu1=-mu): (shift{qbar})_x = qbar_{x+mu1} * u_{x,mu1}^H
+  -- for mu>0(xyzt; mu1=+mu): (shift{qbar})_x = qbar_{x-mu1} * u_{x-mu1,mu1}
+  function dshift_qbar(mu, qbar, u) 
+    if     (mu <  0) then return qbar:shift(-mu-1, "from_forward") * u[-mu]:adjoin()
+    elseif (0  < mu) then return (qbar * u[mu]):shift(mu-1, "from_backward")
+    else error(string.format("bad mu=%d", mu)) end
+  end
+  -- shift gauge-covariant link a_{x,x+b} (-> g_x a_{x,x+b} g_{x+b}^H)
+  -- with gauge fields u1_{x,mu} = u1_{x,mu}, u2b_{x,mu}=u2_{x+b,mu} 
+  -- (normally u1==u2==u)
+  -- for mu<0(XYZT; mu1=-mu):
+  --    (shift{a})_{x,x+b} = u1_{x,mu1} a_{x+mu1,x+b+mu1} u2_{x+b,mu1}^H 
+  -- for mu>0(xyzt; mu1=+mu)
+  --    (shift{a})_{x,x+b} = u1_{x-mu1,mu1}^H a_{x-mu1,x+b-mu1} u2_{x+b-mu1,mu1} 
+  function dshift_adj_split(mu, a, u1, u2b)
+    if     (mu <  0) then
+      return u1[-mu] * a:shift(-mu-1, "from_forward") * u2b[-mu]:adjoin()
+    elseif (0  < mu) then 
+      return (u1[mu]:adjoin() * a * u2b[mu]):shift(mu-1, "from_backward")
+    else error(string.format("bad mu=%d", mu)) end
+  end
+
+  -- mu \in {-3, -2, -1, 1, 2, 3} 
+  local d1mu = { 
+    x= 1, y= 2, z= 3, t= 4,
+    X=-1, Y=-2, Z=-3, T=-4 }
+  local d2mu = { 
+    q={ 1, 2}, r={-1, 2}, s={ 2, 3}, u={-2, 3}, v={ 1, 3}, w={ 1,-3},
+    Q={-1,-2}, R={ 1,-2}, S={-2,-3}, U={ 2,-3}, V={-1,-3}, W={-1, 3} }
+
+  function lshift_ldir(shf, ldir, x, ...)
+    if d1mu[ldir] then return shf(d1mu[ldir], x, ...)
+    elseif d2mu[ldir] then
+      local mu1, mu2 = unpack(d2mu[ldir])
+      return 0.5 * (shf(mu2, shf(mu1, x, ...), ...) + shf(mu1, shf(mu2, x, ...), ...))
+    else error(string.format("bad ldir='%s'", ldir)) end
+  end
+  local ldir_inv_t = { 
+    x='X', X='x', 
+    y='Y', Y='y', 
+    z='Z', Z='z', 
+    t='T', T='t', 
+    q='Q', Q='q', 
+    r='R', R='r', 
+    s='S', S='s', 
+    u='U', U='u', 
+    v='V', V='v', 
+    w='W', W='w', 
+  }
+  function ldir_inv(d) return ldir_inv_t[d] end
+  function lpspec_inv(lp) 
+    local res = ''
+    for i=1, #lp do 
+      local inv_lp_i = assert(ldir_inv_t[string.sub(lp, i, i)])
+      res = res .. inv_lp_i end
+    return res
+  end
+end
+
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+-- TODO change qcd.save_bb_fast -> qcd.contract_
+-- TODO change input lpspec to match tmd_bfirst
+function general_save_qpdf_qbarq_internal_(
+    file_w,                   -- aff_w | hdf5_w
+    kpath,                    -- string
+    frwprop, bkwprop, gauge_u_,
+    csrc, tlen, ldir, lmin, lmax,
+    qlist, t_axis, bc_quark, 
+    opt_ -- {time_rev=false, result=false}
+    )
+  printf("general_save_qpdf_qbarq_internal_: ldir=%s  len=[%d,%d]\n", ldir, lmin, lmax)
+  opt_ = opt_ or {}
+  local time_rev = opt_.time_rev or false
+  assert(not time_rev)    -- needs special implementation
+
+  -- TODO rewrite with interface similar to TMD
+  local qbarq_type = 'qbarq_g_F_B'    -- TODO make a param for flexible B?
+  local q3dlist = mk_d3_momlist(qlist, t_axis)
+  local opt = { 
+          backend  = qbarq_backend(),
+          result        = opt_.result,
+          save          = {
+            file      = file_w,
+            kpath     = kpath,
+            fkey      = 'g',
+            mkey      = 'q' },
+          momproj       = { 
+            csrc      = csrc,
+            mom_list  = q3dlist,
+            t_axis    = t_axis,
+            bc_t      = 1,    -- sic! q and qbar change sign simultaneously, hence <(qbar*q)_t> is periodic
+            tlen      = tlen,
+            ft_sign   = 1 } }
+  local function qpdf_key(lpath) return string.format("l%d_%s", #lpath, lpath) end
+
+  local kpath = opt_get_kpath(opt) or ''
+  if (0 < #kpath and '/' ~= string.sub(kpath, #kpath)) then kpath = kpath .. '/' end
+  
+  local res = {}
+
+  local function save_contract(k, arg)
+    local kf = string.format('%s%s', kpath, k)
+    opt_set_kpath(opt, kf)
+    res[k] = qcd.contract_(qbarq_type, arg, opt)
+  end
+
+  local gauge_u = gauge_copy(gauge_u_)
+  gauge_apply_boundary(gauge_u, bc_quark)
+
+  -- save zero-length if lmin <= 0
+  if lmin <= 0 then
+    save_contract(qpdf_key(''), { frwprop, bkwprop})
+  end
+
+  -- save lp_len > 0
+  local lp_str = ''
+  for lp_len = 1, lmax do
+    frwprop = lshift_ldir(dshift_q, ldir, frwprop, gauge_u)
+    lp_str = lp_str .. ldir
+    if (lmin <= lp_len) then
+      save_contract(qpdf_key(lp_str), {frwprop, bkwprop})
+    end
+  end
+
+  print_obj(opt_, 'opt_')
+  if opt_.result then return res end
+end
+
+
+-- iterate over wlink_qbarq specs
+-- avoid saving l0 more than once
+--    wlink_qbarq_list = {lspec1, ...}
+--              lspec1 = { ldir, lmin, lmax } or { ldir, lmax} with default lmin=1
+-- TODO change input lpspec to match tmd_bfirst
+-- TODO get rid of file_w, kpath arguments
+function general_save_qpdf_qbarq(
+    file_w,                   -- aff_w | hdf5_w
+    kpath,                    -- string
+    frwprop, bkwprop, gauge_u_,
+    csrc, tlen, wlink_qbarq_list,
+    qext3_list, t_axis, bc_quark, 
+    opt_ -- {time_rev=false, result=false}
+    )
+  opt_ = opt_ or {}
+  local l0_saved = false
+  local res = {}
+  for i, lpspec in pairs(wlink_qbarq_list) do
+    -- { ldir, lmin, lmax } or { ldir, lmax} with 
+    local ldir, lmin, lmax = unpack(lpspec)
+    if nil == lmax then lmin, lmax = 0, lmin end
+    -- exclude repeating zero-length
+    if 0 == lmin then 
+      if l0_saved then lmin = 1 end
+      l0_saved = true 
+    end
+    local res1 = general_save_qpdf_qbarq_internal_(file_w, kpath, 
+        frwprop, bkwprop, gauge_u_, 
+        csrc, tlen, ldir, lmin, lmax,
+        qext3_list, t_axis, bc_quark, opt_)
+    
+    if opt_.result then table_update(res, res1) end
+  end
+
+  if opt_.result then return res end
+end
+
+
+--    frwprop,bkwprop 
+--              Tr [bkwprop . Gamma_n . W . frwprop]
+--              W = U_{leg2} . U_{nonleg} . U_{leg1}
+--    each_leg  do contraction on each intermediate leg length
+--    FT is done with respect to x : 
+--                     (v:leg2)
+--      qbar(bkwprop) ---------x
+--                             |
+--                             | (b:nonleg)
+--                             |
+--         q(frwprop) ----------
+--                     (v:leg1)
+-- TODO change general_save_qpdf_qbarq -> internal implementation using qcd.contract_
+-- TODO lpspec format: change to { { vlstr, bl={blstr,...}}, ... }
+function general_save_tmd_qbarq_vfirst(
+    file_w,                   -- aff_w | hdf5_w
+    kpath,                    -- string
+    frwprop, bkwprop, gauge_u_,
+    csrc, tlen, tmd_lpspec_list,
+    qext3_list, t_axis, bc_quark,
+    opt -- {time_rev=false, key_prefix=''}
+    )
+  opt = opt or {}
+  local key_prefix  = opt.key_prefix or ''
+  local time_rev    = opt.time_rev or false
+
+  if (0 < #kpath and '/' ~= string.sub(kpath, #kpath)) then kpath = kpath .. '/' end
+
+  local gauge_u = gauge_copy(gauge_u_)
+  gauge_apply_boundary(gauge_u, bc_quark)
+
+  local leg_frwprop = frwprop
+  local leg_bkwprop = bkwprop
+  local prev_lpspec = nil
+  local cur_leg_lp  = ''
+  for i_lpspec, lpspec in ipairs(tmd_lpspec_list) do
+    local leg_lp, leg_each, blpspec_list = unpack(lpspec)
+
+    -- save zero-length leg if specified explicitly as vlpspec=''
+    if '' == leg_lp then
+      general_save_qpdf_qbarq(file_w, kpath, 
+          frwprop, bkwprop, gauge_u,
+          csrc, tlen, blpspec_list,
+          qext3_list, t_axis, 
+          {1,1,1,1},  -- sic! bc_quark already applied above
+          { time_rev=time_rev,
+            key_prefix=string.format("vl%d_%s_b", #cur_leg_lp, cur_leg_lp) 
+          })
+    else
+      -- determine if leg_lp is incremental
+      local cur_leg_len = #cur_leg_lp
+      local inc_leg_lp  = nil
+      if (nil ~= prev_lpspec and cur_leg_len <= #leg_lp 
+          and string.sub(leg_lp, 1, cur_leg_len) == cur_leg_lp) then
+        inc_leg_lp    = string.sub(leg_lp, cur_leg_len + 1)
+      else  -- reset leg
+        leg_frwprop = frwprop
+        leg_bkwprop = bkwprop
+        cur_leg_lp  = ''
+        inc_leg_lp  = leg_lp
+      end
+
+      -- build up leg linkpaths
+--      printf("inc_leg_lp='%s'\n", inc_leg_lp)     --**
+      for i = 1, #inc_leg_lp do
+        local ldir = string.sub(inc_leg_lp, i, i)
+--        printf("inc_leg_lp[%d]='%s'\n", i, ldir)    --**
+        leg_frwprop = lshift_ldir(dshift_q,    ldir, leg_frwprop, gauge_u)
+        leg_bkwprop = lshift_ldir(dshift_qbar, ldir, leg_bkwprop, gauge_u)
+        cur_leg_lp  = cur_leg_lp .. ldir
+        if leg_each or #inc_leg_lp == i then
+          general_save_qpdf_qbarq(file_w, kpath, 
+              leg_frwprop, leg_bkwprop, gauge_u, 
+              csrc, tlen, blpspec_list, 
+              qext3_list, t_axis, 
+              {1,1,1,1},  -- sic! bc_quark already applied above
+              { time_rev=time_rev,
+                key_prefix=string.format("vl%d_%s_b", #cur_leg_lp, cur_leg_lp) 
+              })
+        end
+      end
+    end
+    prev_lpspec = lpspec
+  end
+end
+
+
+--[[
+--  lsp   { <dir> [, lmin] , lmax [, inc] }
+--        if lmin omitted: lmin=1
+--        if inc omitted: inc=1
+function lpspec_parse(lsp)
+  assert(2 <= #lsp)
+  local ldir = lsp[1]
+  local lmin, lmax, linc
+  if (2 == #lsp) then lmin, lmax, linc = 1, lsp[2], 1
+  elseif (3 == #lsp) then lmin, lmax, linc = lsp[2], lsp[3], 1
+  elseif (4 == #lsp) then lmin, lmax, linc = lsp[2], lsp[3], lsp[4]
+  else error(string.format("bad lpath spec='%s'", list_tostring(lsp))) end
+  return ldir, lmin, lmax, linc
+  
+end
+]]
+
+
+
+-- compute TMD PDF contractions searching 'b' direction first
+--              Tr [bkwprop . Gamma_n . W . frwprop]
+--              W = U_{leg2} . U_{nonleg} . U_{leg1} 
+--                = Uv . Ub . Uv^\dag
+--                = PU_{x,x+v} . PU_{x+v,x+v+b} . PU_{x+b,x+b+v}^\dag
+--    FT is done with respect to x : 
+--                     (v:leg2)
+--     qbar(bkwprop) x--*--*--*--*--*
+--                                  |
+--                                  *
+--                                  | (b:nonleg)
+--                                  *
+--                                  |
+--        q(frwprop)  --*--*--*--*--*
+--  
+--    gf_u_bc       gauge field with quark bc applied
+--    tmdspec_bfirst_list
+--      { { b_slpath_max1, vl={ v_lpath_max11, v_lpath_max12, ... } },
+--        { b_slpath_max2, vl={ v_lpath_max21, v_lpath_max22, ... } },
+--        ... }
+--      example:
+--      { { 'y'   , vl={ 'xxxxx', 'XXXXX' } },
+--        { 'yy'  , vl={ 'xxxx',  'XXXX'  } },
+--        { 'yyy' , vl={ 'xxx',   'XXX'   } },
+--        { 'Y'   , vl={ 'xxxxx', 'XXXXX' } },
+--        { 'YY'  , vl={ 'xxxx',  'XXXX'  } },
+--        { 'YYY' , vl={ 'xxx',   'XXX'   } } }
+--
+--    opt     passed to qcd.contract_
+--      opt.result: return table[tmd_key][ng] = L:Complex
+--    return: if opt.result, return table[tmd_key][ng] = L:Complex
+
+function general_save_tmd_qbarq_bfirst(
+    frwprop, bkwprop, gf_u_bc, tmdspec_bfirst_list, 
+    opt)-- { result, save, momproj}
+  local L = frwprop.lattice
+  local qbarq_type = 'qbarq_g_F_B'    -- TODO make a param for flexible B?
+  local res = {}
+  local function tmd_key(v_slp, b_slp) 
+    return string.format("vl%d_%s_bl%d_%s", #v_slp, v_slp, #b_slp, b_slp)
+  end
+
+  opt = table_deepmerge(
+      { backend = qbarq_backend()},
+      opt or {})
+  local kpath = opt_get_kpath(opt) or ''
+  if (0 < #kpath and '/' ~= string.sub(kpath, #kpath)) then kpath = kpath .. '/' end
+  local function save_contract(k, arg)
+    local kf = string.format('%s%s', kpath, k)
+    opt_set_kpath(opt, kf)
+    res[k] = qcd.contract_(qbarq_type, arg, opt)
+  end
+
+  -- save blen=0 just once
+  save_contract(tmd_key('', ''), { frwprop, bkwprop })
+
+  local b_slpath, bsh_u, b_ulpath, bsh_frwprop = nil, nil, nil, nil
+  for i_bspec, _b in ipairs(tmdspec_bfirst_list) do
+    local b_slpath_max, vspec_list = _b[1], _b.vl
+
+    -- check whether prev bpath can be reused
+    local b_slpath_inc
+    if string_is_prefix(b_slpath, b_slpath_max) then
+      b_slpath_inc= string.sub(b_slpath_max, 1+#b_slpath)
+    else  -- (re)set blpath and shift fields
+      b_slpath_inc= b_slpath_max
+      b_slpath    = ''
+      b_ulpath    = L:ColorMatrix(1.)
+      bsh_frwprop = frwprop
+      bsh_u       = gauge_copy(gf_u_bc)   -- FIXME need only directions that are in v
+    end
+
+    -- iterate over increments of b_slpath
+    for i_b = 1, #b_slpath_inc do   -- iterate blpath to b_slpath_max
+      local b_ldir= string.sub(b_slpath_inc, i_b, i_b)
+      b_slpath    = b_slpath .. b_ldir
+      b_ulpath    = lshift_ldir(dshift_q, b_ldir, b_ulpath, gf_u_bc)
+      bsh_frwprop = lshift_ldir(dshift,   b_ldir, bsh_frwprop)
+      for mu=1, #L do bsh_u[mu] = lshift_ldir(dshift, b_ldir, bsh_u[mu]) end  -- FIXME need only directions that are in v
+
+      -- save vlen=0 just once
+      save_contract(tmd_key('', b_slpath), { b_ulpath * bsh_frwprop, bkwprop })
+
+      local v_slpath, vbvH_ulpath = nil, nil
+      for i_vspec, _v in ipairs(vspec_list) do
+        local v_slpath_max = _v
+
+        -- check whether prev vpath can be reused
+        local v_slpath_inc
+        if string_is_prefix(v_slpath, v_slpath_max) then
+          v_slpath_inc= string.sub(v_slpath_max, 1+#v_slpath)
+        else  -- reset
+          v_slpath_inc= v_slpath_max
+          v_slpath    = ''
+          vbvH_ulpath = b_ulpath
+        end
+        
+        -- iterate over increments of vpath
+        for i_v = 1, #v_slpath_inc do
+          local v_ldir= string.sub(v_slpath_inc, i_v, i_v)
+          v_slpath    = v_slpath .. v_ldir
+          vbvH_ulpath = lshift_ldir(dshift_adj_split, lpspec_inv(v_ldir), vbvH_ulpath, 
+              gf_u_bc, bsh_u)
+          save_contract(tmd_key(v_slpath, b_slpath), 
+              { vbvH_ulpath * bsh_frwprop, bkwprop })
+        end
+      end
+    end
+  end
+
+  if opt.result then return res end
+end
+
+-------------------------------------------------------------------------------
+-- functions for convering lpath specs
+-------------------------------------------------------------------------------
+-- example input
+--  { rev=true, 'xx', 'yy' }
+-- generates output
+--  { 'xx', 'yy', 'XX', 'YY' }
+function lpspec_expand(v_lpspec)
+  local res = table_copy(v_lpspec)
+  if v_lpspec.rev then
+    res.rev = nil
+    local nv = #res
+    for i = 1, nv  do list_append(res, lpspec_inv(res[i])) end
+  end
+  table.sort(res)   -- for efficiency
+  return res
+end
+
+
+-- example input
+--  { { rev=true, 'y' , 'z'  , vl={ rev=true, 'xxxxx' } },
+--    { rev=true, 'yy', 'zz' , vl={ rev=true, 'xxxx'  } },
+-- generates output
+--  { { 'y'   , vl={ 'xxxxx', 'XXXXX' } },
+--    { 'yy'  , vl={ 'xxxx',  'XXXX'  } },
+--    { 'Y'   , vl={ 'xxxxx', 'XXXXX' } },
+--    { 'YY'  , vl={ 'xxxx',  'XXXX'  } },
+--    { 'z'   , vl={ 'xxxxx', 'XXXXX' } },
+--    { 'zz'  , vl={ 'xxxx',  'XXXX'  } },
+--    { 'Z'   , vl={ 'xxxxx', 'XXXXX' } },
+--    { 'ZZ'  , vl={ 'xxxx',  'XXXX'  } } }
+-- XXX vl value is reused
+-- NOTE output of this function should be given to iter_tmdspec_bfirst that expands 
+--  each blinkpath and vlinkpath from zero-length to max and iterates over their combinations
+-- FIXME expanded tmd_lpathspec generation: 
+--  1) expand blpath, vlpath
+--  2) sort wrt blpath 
+--  3) join entries with equal blpath into one, sort(union(a.vl,b.vl,..)) 
+--  4) within each entry, within vl join vlpaths that prefix each other
+function tmd_lpspec_expand(bv_lpspec_list)
+  local function copy_nonindex(dst, src)
+    for k,v in pairs(src) do
+      if 'number' ~= type(k) then dst[k] = v end
+    end
+  end
+  
+  local res = {}
+  for i_bv, bv in ipairs(bv_lpspec_list) do
+    local vl_exp = lpspec_expand(bv.vl)         -- expand v
+    for i_b, b in ipairs(bv) do
+      local res_i = { b }
+      copy_nonindex(res_i, bv)            -- copy all non-index keys
+      res_i.vl = vl_exp
+      list_append(res, res_i)
+      if bv.rev then
+        res_i.rev = nil
+        local res_irev  = { lpspec_inv(b) }
+        copy_nonindex(res_irev, res_i)
+        list_append(res, res_irev)
+      end
+    end
+    table.sort(res, function(a,b) return a[1]<b[1] end)
+  end
+  return res
+end
+
+function qbarq_make_linkpath_list_bb(ldir_list, lpath_min, lpath_max)
+  local i_lp, lp = 1, {''}
+  local lp_cur  = lp[i_lp]
+  local res
+  if lpath_min <= 0 then res = {''}
+  else res = {} end
+  while #lp_cur + 1 <= lpath_max do
+    for i_ld, ld in ipairs(ldir_list) do 
+      if 0 == #lp_cur or string.sub(lp_cur, #lp_cur, #lp_cur) ~= ldir_inv(ld) then
+        list_append(lp, lp_cur .. ld)
+        if lpath_min <= #lp_cur + 1 and #lp_cur + 1 <= lpath_max then
+          list_append(res, lp[#lp])
+        end
+      end
+    end
+    i_lp    = i_lp + 1
+    if #lp < i_lp then break end
+    lp_cur  = lp[i_lp]
+  end
+  table.sort(res)
+  return res
+end
+
+
+function general_save_bb_qbarq(
+    fw_p, bw_p, gf_u_bc, bbspec_list, opt)
+
+  local qbarq_type = 'qbarq_g_F_B'    -- TODO make a param for flexible B?
+  local L = latvec.lattice(fw_p)
+  latvec.lattice(bw_p, L)
+
+  local function bb_key(lpath) 
+    return string.format("l%d_%s", #lpath, lpath)
+  end
+
+  opt = table_copy(opt or {})
+  opt.backend = qbarq_backend()
+
+  local kpath = opt_get_kpath(opt) or ''
+  if (0 < #kpath and '/' ~= string.sub(kpath, #kpath)) then kpath = kpath .. '/' end
+
+  local res = {}
+  local function save_contract(k, arg)
+    local kf = string.format('%s%s', kpath, k)
+    opt_set_kpath(opt, kf)
+    -- TODO replace qbarq_g_F_B with bb_g_F_B when available
+    res[k] = qcd.contract_(qbarq_type, arg, opt)
+  end
+
+  local dp_zero, dp_one
+  if 'table' == type(fw_p) then 
+    dp_zero= L:DiracPropagator()
+    dp_one = L:DiracPropagator(L:ColorMatrix(1.))
+  end
+
+  -- function to generate linkpaths
+  local function search_linkpath_depthfirst(
+      fw_p,    -- adjoint(U_linkpath) * forward-prop
+      lpath,   -- linkpath(array of: dir for +1 shift, Nd+dir for -1 shift)
+      bbspec)
+    local ldir_list = assert(bbspec.ldir_list)
+    local lpath_min = assert(bbspec.bb_lmin)
+    local lpath_max = assert(bbspec.bb_lmax)
+    if lpath_min <= #lpath then 
+      local p1, p2 = fw_p, bw_p
+      if 'table' == type(fw_p) then
+        p1, p2 = dp_zero, dp_one
+        for k, x in pairs(fw_p) do
+          p1 = p1 + x * bw_p[k]
+        end
+      end
+      save_contract(bb_key(lpath), {p1, p2})
+    end
+
+    if lpath_max <= #lpath then return end
+
+    for i_ldir, ldir in ipairs(ldir_list) do
+      if (0 == #lpath) or (ldir_inv(string.sub(lpath, #lpath)) ~= ldir) then
+        local lpath_new = lpath .. ldir
+        local fw_p_new
+        if 'table' == type(fw_p) then 
+          fw_p_new = {}
+          for k, x in pairs(fw_p) do
+            fw_p_new[k] = lshift_ldir(dshift_q, ldir, x, gf_u_bc)
+          end
+        else fw_p_new = lshift_ldir(dshift_q, ldir, fw_p, gf_u_bc) end
+        search_linkpath_depthfirst(fw_p_new, lpath_new, bbspec)
+      end
+    end
+  end
+
+  -- call to linkpath walk
+  for i_bbspec, bbspec in ipairs(bbspec_list) do
+    search_linkpath_depthfirst(fw_p, '', assert(bbspec))
+  end
+end
+
+function general_save_bb(
+    file_w,              -- aff writer
+    file_kpath,          -- aff keypath
+    fw_p,               -- (list of) forward propagator
+    bw_p,               -- (list of) backward propagator, (SeqSrc * Dslash^-1) 
+                        -- XXX different from calc_bb which takes bw_p_adj!!!
+    gauge_u_,           -- gauge field without BC applied (applied internally)
+    csrc,               -- source coord: x,y,z,t
+    tsep,               -- source-sink separation
+    lpath_min,lpath_max,-- min/max linkpath length to save
+    qlist,              -- list of insertion momenta {q}; each q be with #q = #L
+    t_axis,             -- axis; currently works for t_axis ==3
+    bc_quark
+    )
+
+  local gf_u_bc = gauge_copy(gauge_u_)
+  gauge_apply_boundary(gf_u_bc, bc_quark)
+
+  local opt = { 
+            result    = false,
+            save      = {
+              file      = file_w,
+              kpath     = file_kpath,
+              fkey      = 'g',
+              mkey      = 'q' },
+            momproj   = { 
+              csrc      = csrc,
+              mom_list  = mk_d3_momlist(qlist, t_axis),
+              t_axis    = t_axis,
+              bc_t      = 1,    -- sic! q and qbar change sign simultaneously, hence <(qbar*q)_t> is periodic
+              tlen      = tsep + 1,
+              ft_sign   = 1 }
+          }
+  local bbspec = { 
+    bb_lmin   = lpath_min,
+    bb_lmax   = lpath_max,
+    ldir_list = {'x', 'y', 'z', 't', 'X', 'Y', 'Z', 'T'}
+  }
+  return general_save_bb_qbarq(--'qbarq_g_F_B', 
+      fw_p, bw_p, gf_u_bc, { bbspec }, opt)
+end
+
+function iter_tmdspec_bfirst(tmdspec_bfirst_list, func,
+    opt)
+  opt = opt or {}
+  local res1 = nil
+  local res = {}
+  local function tmd_key(v_slp, b_slp) 
+    return string.format("vl%d_%s_bl%d_%s", #v_slp, v_slp, #b_slp, b_slp)
+  end
+
+  -- always save zero-link
+  res1 = func({'', ''})
+  if res1 then res[tmd_key('', '')] = res1 end
+
+  local b_slpath = nil
+  for i_bspec, _b in ipairs(tmdspec_bfirst_list) do
+    local b_slpath_max, vspec_list = _b[1], _b.vl
+    if nil == vspec_list or 0 == #vspec_list then 
+      vspec_list = {''} 
+    end
+
+    -- check whether prev bpath can be reused
+    local b_slpath_inc
+    if string_is_prefix(b_slpath, b_slpath_max) then
+      b_slpath_inc= string.sub(b_slpath_max, 1+#b_slpath)
+    else  -- (re)set blpath and shift fields
+      b_slpath_inc= b_slpath_max
+      b_slpath    = ''
+    end
+
+    -- iterate over increments of b_slpath
+    for i_b = 1, #b_slpath_inc do   -- iterate blpath to b_slpath_max
+      local b_ldir= string.sub(b_slpath_inc, i_b, i_b)
+      b_slpath    = b_slpath .. b_ldir
+
+      -- save vlen=0 just once
+      res1 = func({b_slpath, ''})
+      if res1 then res[tmd_key('', b_slpath)] = res1 end
+
+      local v_slpath = nil
+      for i_vspec, _v in ipairs(vspec_list) do
+        local v_slpath_max = _v
+
+        -- check whether prev vpath can be reused
+        local v_slpath_inc
+        if string_is_prefix(v_slpath, v_slpath_max) then
+          v_slpath_inc= string.sub(v_slpath_max, 1+#v_slpath)
+        else  -- reset
+          v_slpath_inc= v_slpath_max
+          v_slpath    = ''
+        end
+        
+        -- iterate over increments of vpath
+        for i_v = 1, #v_slpath_inc do
+          local v_ldir= string.sub(v_slpath_inc, i_v, i_v)
+          v_slpath    = v_slpath .. v_ldir
+          res1 = func({b_slpath, v_slpath})
+          if res1 then res[tmd_key(v_slpath, b_slpath)] = res1 end
+        end
+      end
+    end
+  end
+
+  if res1 then return res end
+end
+
+
+-- iterate over wlink_qbarq specs
+-- avoid saving l0 more than once
+--    wlink_qbarq_list = {lspec1, ...}
+--              lspec1 = { ldir, lmin, lmax } or { ldir, lmax} with default lmin=1
+-- TODO change input lpspec to match tmd_bfirst ?? or make a different function??
+function iter_qpdf_lpspec(
+    wlink_qbarq_list, func, opt)
+  opt = opt or {}
+  local res1 = nil
+  local res = {}
+  local l0_saved = false
+  local function qpdf_key(b_slp) 
+    return string.format("l%d_%s", #b_slp, b_slp)
+  end
+
+  -- always save zero-link
+  res1 = func('')
+  if res1 then res[qpdf_key('')] = res1 end
+  l0_saved = true
+
+  for i, lpspec in pairs(wlink_qbarq_list) do
+    -- { ldir, lmin, lmax } or { ldir, lmax} with 
+    local ldir, lmin, lmax = unpack(lpspec)
+    if nil == lmax then lmin, lmax = 1, lmin end
+    -- exclude repeating zero-length
+    if 0 == lmin then 
+      if l0_saved then lmin = 1 end
+    end
+    for l_b = lmin, lmax do
+      local b_slpath = string.rep(ldir, l_b)
+      res1 = func(b_slpath) 
+      if res1 then res[qpdf_key(b_slpath)] = res1 end
+    end
+  end
+
+  if res1 then return res end
+end
+
+
+-- iterate over bb linkpaths
+-- linkpaths must be lex-ordered for max efficiency
+function contract_save_bb_qbarq(
+    frwprop, bkwprop, gf_u_bc, bb_lpath_list, 
+    opt)-- { result, save, momproj}
+  opt = table_copy(opt or {})
+  opt.backend = qbarq_backend()
+  local kpath = opt_get_kpath(opt) or ''
+
+  local res = {}
+  if (0 < #kpath and '/' ~= string.sub(kpath, #kpath)) then kpath = kpath .. '/' end
+  local function bb_key(lp) return string.format("l%d_%s", #lp, lp) end
+  local qbarq_type = 'qbarq_g_F_B'    -- TODO make a param for flexible B?
+  local function save_contract(k, arg)
+    local kf = string.format('%s%s', kpath, k)
+    opt_set_kpath(opt, kf)
+    res[k] = qcd.contract_(qbarq_type, arg, opt)
+  end
+
+  -- first item: no link
+  local lpath_stk   = { "" }
+  local frwprop_stk = { frwprop }
+  local l0_saved = false  -- save l0 only once
+
+  -- TODO bb_lpath_list = uniq(sort(bb_lpath_list))
+
+  -- iterate over lpaths, reusing common lp's
+  for i_lp, lp in ipairs(bb_lpath_list) do
+    if '' == lp then
+      if not l0_saved then
+        save_contract(bb_key(lp), { frwprop, bkwprop })
+      end
+    else
+      -- find most recent common lp_frwprop, erase everything else
+      local k0 = #lpath_stk
+      while 0 < k0 and not string_is_prefix(lpath_stk[k0], lp) do 
+        lpath_stk[k0]   = nil
+        frwprop_stk[k0] = nil
+        k0 = k0 - 1
+      end
+      assert(0 < k0)    -- empty lpath [1] is prefix to anything 
+      local lp_frwprop  = frwprop_stk[k0]
+      local slpath_inc  = string.sub(lp, 1+#(lpath_stk[k0]))
+
+      -- build & store new lpath*frwprop
+      for i = 1, #slpath_inc do
+        local ld = string.sub(slpath_inc, i, i)
+        lp_frwprop  = lshift_ldir(dshift_q, ld, lp_frwprop, gf_u_bc)
+      end
+      lpath_stk[1+k0]   = lp
+      frwprop_stk[1+k0] = lp_frwprop
+      save_contract(bb_key(lp), { lp_frwprop, bkwprop })
+
+    end
+    -- XXX debug print
+--    printf("lp='%s'\n", lp)
+--    print_obj(lpath_stk, 'lpath_stk')
+--    print_obj(frwprop_stk, 'frwprop_stk')
+  end
+
+  if opt.result then return res end
+end
+
+-- iterate over bb_linkpath specs
+-- avoid saving l0 more than once
+--    wlink_qbarq_list = {lspec1, ...}
+--              lspec1 = { ldir, lmin, lmax } or { ldir, lmax} with default lmin=1
+-- TODO change input lpspec to match tmd_bfirst ?? or make a different function??
+function iter_bb_lpath(
+    bb_lpath_list, func, opt)
+  opt = opt or {}
+  local res1 = nil
+  local res = {}
+  local function bb_key(lp) 
+    return string.format("l%d_%s", #lp, lp)
+  end
+
+  -- TODO bb_lpath_list = uniq(sort(bb_lpath_list))
+
+  if list_index(bb_lpath_list, '') then -- save zero-link, if present
+    res1 = func('')
+    if res1 then res[bb_key('')] = res1 end
+  end
+
+  for i, lp in pairs(bb_lpath_list) do
+    if '' ~= lp then                    -- exclude repeating zero-link
+      res1 = func(lp) 
+      if res1 then res[bb_key(lp)] = res1 end
+    end
+  end
+
+  if res1 then return res end
+end
+

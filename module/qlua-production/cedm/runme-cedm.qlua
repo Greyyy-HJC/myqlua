@@ -1,0 +1,321 @@
+package.path = './?.qlua;./qlib-lhpc/?.qlua;./qlib/?.qlua;' .. package.path
+require "strict"    -- catch all undefined (nil) variables
+require "stdlib"    -- standard printf, etc
+require "lhpc-std"  -- make_source, etc
+require "ape-smear" -- gauge smear
+require "gauge"
+require "qdpc_io"
+require "setup_util"
+require "latvec"
+
+require "cedm-seq"  -- sequential sources
+require "hadspec"
+
+
+------------------------------------------------------------------------------
+-- INITIALIZATION
+------------------------------------------------------------------------------
+cfgkey  = assert(job_key)
+L = qcd.lattice(latsize, {network=network_geom})
+S = rnd_init(L, rnd_seed)
+
+cur_timer = timer("gauge_read")
+gauge_u = qcd.nersc.read_gauge(L, get_file_gauge(cfgkey))
+-- stub for random field
+--for mu = 0, #L-1 do
+--  gauge_u[1+mu] = toSUn(S:ColorMatrix())
+--end
+cur_timer("done")
+
+-- gauge field for source construction
+wup_gauge_u = APE_smear(gauge_u, ape_a, ape_n, ape_accu, ape_maxiter, t_axis)
+
+-- initialize mdwf (deflated) object and solver
+mdwf  = qcd.MDWF.generic(gauge_u, ferm_bc, 
+            mdwf_L5, mdwf_M5, mdwf_mf,
+            mdwf_b5, mdwf_c5)
+
+-- TODO load eigenvectors
+mdwf_eigcg_df = mdwf  -- FIXME create deflated mdwf object, load e.vectors
+--cur_timer("evec_read")
+--cur_timer("done")
+
+if false then
+  -- 5d test
+  local gauge_u_bc  = gauge_copy(gauge_u)
+  gauge_apply_boundary(gauge_u_bc, ferm_bc)
+  local y     = make_random_dirferm_5d(S, mdwf_L5)
+  local x     = mdwf_invert(y, true, true)
+  local dslash_x = latvec.dslash_moebius(x, gauge_u_bc, mdwf_M5, mdwf_mf, mdwf_b5, mdwf_c5)
+  latvec.print_cmp(y, dslash_x, "y<->Dslash.x")
+  printf("TEST OK SO FAR\n")
+  os.exit(0)
+end
+
+------------------------------------------------------------------------------
+-- AUX FUNCTIONS
+------------------------------------------------------------------------------
+function make_source_point(L, csrc)
+  local cm = L:ColorMatrix()
+  for a = 0, cm:colors() - 1 do
+    cm[{csrc[1], csrc[2], csrc[3], csrc[4],a=a,b=a}] = complex(1,0)
+  end
+  return L:DiracPropagator(cm)
+end
+function smear_func_wup(x) 
+  -- reqiures global wup_a, wup_n, wup_gauge_u, t_axis
+  return wuppertal_smear(wup_gauge_u, wup_a, wup_n, x, t_axis)
+end
+function prop_save_func(fname, x, title)
+  -- requires in the scope:
+  --  prop_volfmt       part_dir for fast
+  --  prop_vol_stride   spacing between ranks doing IO (set equal to the number of ranks per 1 IO node)
+  if nil == title then
+    title = tostring(x)
+  end
+  local tt = timer(string.format("SAVE %s", title))
+  local qio_w = open_qdpc_write(L, fname, "", prop_qio_volfmt, 
+                    {rank_stride=prop_qio_stride})
+  qio_w:DiracPropagator(x, "")
+  qio_w:close()
+  tt("done")
+end
+
+-- compute & save propagators for a cEDM sample performing the final contraction at the sink
+-- TODO make a cycle over sink momenta, flavors,
+-- TODO add switch to save exact/sloppy solves
+function sample_cedm_sink_cur(L, cfgkey, gauge_u, 
+        smear_func, solver_func, prop_save_func,
+        csrc, 
+        psnk, tsnk, 
+        qins, tins, curvec_ins,
+        S2, S1, Tpol_even, Tpol_odd,
+        ama_mode)
+  -- parameters
+  --  L               lattice object
+  --  cfgkey          gauge cfg "key" : string
+  --  gauge_u           gauge field (perhaps not used)
+  --  smear_func      source smearing function x_smeared = smear_func(x_point)
+  --  solver_func     fermion solver x = solver_func(y) <-> Dslash.x = y
+  --  prop_save_func  function to save propagators prop_save_func(filename, x, [title])
+  --  csrc            forward source position for the sample
+  --  psnk, tsnk      sink momentum, timeslice
+  --  qins, tins      insertion momentum, timeslice
+  --  curvec_ins      projection of inserted vector current (4-vector)
+  --  S2, S1          sink and source diquark spin structures
+  --  Tpol_even       nucleon polarization matrix for CP-even correlators
+  --  Tpol_odd        nucleon polarization matrix for CP-odd correlators
+  --  ama_mode        AMA parameter for saving files
+  -- also requires global functions for propagator storage
+  --  get_file_frwprop             F
+  --  get_file_seqprop_cur         C
+  --  get_file_bkwprop_sink_even   B
+  --  get_file_bkwrop_sink_odd     \tilde B
+  --  get_file_bkwprop_doubleseq   E + G
+  -- and variables
+  --  flav_list
+  local tt    -- timer
+  
+  -- calc & save frw prop
+  tt = timer("frwprop")
+  local frwsrc   = smear_func(make_source_point(L, csrc))     ; tt("src")
+  local frwprop  = solver_func(frwsrc)                        ; tt("prop")
+  prop_save_func(get_file_frwprop(cfgkey, ama_mode, csrc),
+                 frwprop, "frwprop")                          
+  tt("done")
+  
+  
+  -- smear for hadspec and backward props
+  local frwprop_sm  = smear_func(frwprop)
+
+
+  -- save hadspec
+  -- TODO adjust the lists of 2pt functions to save
+  local hadspec_file = get_file_hadspec(cfgkey, ama_mode, csrc)
+  tt  = timer(string.format('write[hadspec]: %s\n', hadspec_file))
+  local aff_hadspec = qcd.aff.Writer(hadspec_file)
+  save_hadspec_list(L, aff_hadspec, '/hadpec/SP',
+                   frwprop, frwprop, csrc, hadspec_psnk_list,
+                   t_axis, ferm_bc[1+t_axis], hadspec_baryon_list, hadspec_meson_list)
+  save_hadspec_list(L, aff_hadspec, '/hadspec/SS',
+                   frwprop_sm, frwprop_sm, csrc, hadspec_psnk_list,
+                   t_axis, ferm_bc[1+t_axis], hadspec_baryon_list, hadspec_meson_list)
+  aff_hadspec:close()
+  tt('done')
+
+
+  -- calc & save seq_cur prop
+  assert(#curvec_ins == #L)
+  local gamma_ins = 0.
+  for mu = 0, #curvec_ins-1 do
+    gamma_ins = gamma_ins + curvec_ins[1+mu] * gamma{mu=mu}
+  end
+  tt  = timer("seqprop_cur")
+  local seqsrc_cur = cedm_seqsrc_cur(frwprop, csrc, qins, tins, 
+                                     gamma_ins)               ; tt("src")
+  local seqprop_cur= solver_func(seqsrc_cur)                  ; tt("prop")
+  -- FIXME use destination depending on different gamma_ins
+  prop_save_func(get_file_seqprop_cur(cfgkey, ama_mode, csrc, qins, tins, curvec_ins), 
+                 seqprop_cur, "seqprop_cur")
+  tt("done")
+
+  -- smear for sink-sequential props
+  local seqprop_cur_sm  = smear_func(seqprop_cur)
+
+
+  -- calc & save bkw CP-even backward props
+  local bkwprop_even = {}
+  for i_flav, flav in pairs(flav_list) do
+    local bkwprop_str = string.format("bkwprop_%s_even", flav)
+    tt  = timer(bkwprop_str)
+    local seqsrc_sink_even = cedm_seqsrc_sink(
+            flav, frwprop_sm, frwprop_sm, 
+            csrc, psnk, tsnk, S2, S1, Tpol_even)
+    local seqsrc_adj    = gamma{n=15} * smear_func(
+                          seqsrc_sink_even:adjoin())          ; tt("src")
+    local seqprop_adj   = solver_func(seqsrc_adj)             ; tt("prop")
+    bkwprop_even[flav]  = seqprop_adj:adjoin() * gamma{n=15}
+    local bkwprop_file  = get_file_bkwprop_sink_even(cfgkey, ama_mode,
+                            csrc, psnk, tsnk, flav)
+    prop_save_func(bkwprop_file, bkwprop_even[flav], bkwprop_str)
+    tt("done")
+    
+    -- save memory
+    seqsrc_sink_even = nil
+    seqsrc_adj      = nil
+    seqprop_adj     = nil
+    force_gc(bkwprop_str)
+  end
+  -- ... and the same for CP-odd backward props ; how to DRY?
+  local bkwprop_odd = {}
+  for i_flav, flav in pairs(flav_list) do
+    local bkwprop_str = string.format("bkwprop_%s_odd", flav)
+    tt  = timer(bkwprop_str)
+    local seqsrc_sink_odd = cedm_seqsrc_sink(
+            flav, frwprop_sm, frwprop_sm, 
+            csrc, psnk, tsnk, S2, S1, Tpol_odd)
+    local seqsrc_adj    = gamma{n=15} * smear_func(
+                          seqsrc_sink_odd:adjoin())           ; tt("src")
+    local seqprop_adj   = solver_func(seqsrc_adj)             ; tt("prop")
+    bkwprop_odd[flav]  = seqprop_adj:adjoin() * gamma{n=15}
+    local bkwprop_file  = get_file_bkwprop_sink_odd(cfgkey, ama_mode,
+                            csrc, psnk, tsnk, flav)
+    prop_save_func(bkwprop_file, bkwprop_odd[flav], bkwprop_str)
+    tt("done")
+
+    -- save memory
+    seqsrc_sink_odd = nil
+    seqsrc_adj      = nil
+    seqprop_adj     = nil
+    force_gc(bkwprop_str)
+  end
+
+  -- now, the interesting part: all doubly-sequential CP-odd propagators
+  tt = timer("bkwsrc_2seq")
+  local bkwsrc_2seq = { ["U"] = {}, ["D"] = {} }
+  -- [flav_cur][flav_cedm]
+  -- smear only current-sink sequential
+  bkwsrc_2seq['U']['U'] = (
+          cedm_seqsrc_cur_bkw(bkwprop_odd['U'], csrc, qins, tins, gamma_ins)
+          + smear_func(cedm_seqsrc_sink(
+                'U', seqprop_cur_sm, frwprop_sm, csrc, psnk, tsnk, 
+                S2, S1, Tpol_odd):adjoin() 
+            ):adjoin() 
+          )
+  bkwsrc_2seq['D']['U'] = smear_func(cedm_seqsrc_sink(
+                'U', frwprop_sm, seqprop_cur_sm, csrc, psnk, tsnk,
+                S2, S1, Tpol_odd):adjoin() ):adjoin()
+  bkwsrc_2seq['U']['D'] = smear_func(
+          (  cedm_seqsrc_sink('D', frwprop_sm, seqprop_cur_sm, 
+                              csrc, psnk, tsnk, S2, S1, Tpol_odd)
+           + cedm_seqsrc_sink('D', seqprop_cur_sm, frwprop_sm, 
+                              csrc, psnk, tsnk, S2, S1, Tpol_odd)
+          ):adjoin() ):adjoin()
+  bkwsrc_2seq['D']['D'] = cedm_seqsrc_cur_bkw(
+          bkwprop_odd['D'], csrc, qins, tins, gamma_ins)
+  tt("done")
+
+  local bkwprop_2seq = { ["U"] = {}, ["D"] = {} }
+  for i_flav_cur, flav_cur in pairs(flav_list) do
+    for i_flav_edm, flav_edm in pairs(flav_list) do
+      local bkwprop_str = string.format("bkwprop_2seq_%s_%s", flav_cur, flav_edm)
+      tt = timer(bkwprop_str)
+      bkwprop_2seq[flav_cur][flav_edm] = (
+            solver_func(gamma{n=15} * bkwsrc_2seq[flav_cur][flav_edm]:adjoin() 
+                        ):adjoin() * gamma{n=15})           ; tt("prop")
+      local bkwprop_file = get_file_bkwprop_doubleseq(cfgkey, ama_mode, 
+                            csrc, psnk, tsnk, qins, tins, curvec_ins, 
+                            flav_cur, flav_edm)
+      prop_save_func(bkwprop_file, bkwprop_2seq[flav_cur][flav_edm])
+      bkwsrc_2seq[flav_cur][flav_edm] = nil
+      tt("done")
+    end
+  end
+  force_gc("bkwprop_2seq")
+  
+  -- contractions
+  -- gauge field tensor for clover term
+  -- TODO apply smearing to the gauge field
+  local gauge_clover = {}  -- XXX i>j !
+  for i = 0, #L-1 do gauge_clover[1+i] = {} end
+  for i = 0, #L-1 do
+    gauge_clover[1+i] = {}
+    for j = i + 1, #L-1 do
+      gauge_clover[1+i][1+j]  = clover_term(gauge_u, i, j)
+      gauge_clover[1+j][1+i]  = -gauge_clover[1+i][1+j]
+    end
+  end
+  local frwprop_clover = cedm_seqsrc_edm(frwprop, gauge_clover)
+  local seqprop_cur_clover  = cedm_seqsrc_edm(seqprop_cur, gauge_clover)
+  local c4pt = { ["U"] = {}, ["D"] = {} }
+  for i_flav_cur, flav_cur in pairs(flav_list) do
+    for i_flav_edm, flav_edm in pairs(flav_list) do
+      local res = (bkwprop_2seq[flav_cur][flav_edm] * frwprop_clover):trace()
+      if flav_cur == flav_edm then
+        res = res + (bkwprop_odd[flav_cur] * seqprop_cur_clover):trace()
+      end
+      c4pt[flav_cur][flav_edm] = res
+    end
+  end
+  return c4pt, frwprop, seqprop_cur, bkwprop_even, bkwprop_odd, bkwprop_2seq
+end
+
+
+function make_solver(mdwf_obj, mode)
+  local mdwf_invert = nil
+  -- sic! the tolerance must be squared
+  if 'exact' == mode['approx'] then
+    mdwf_invert = mdwf_eigcg_df:mixed_solver(
+                mixcg_tol1^2, mixcg_maxiter1,   
+                mode['tol']^2, mixcg_maxiter2)   
+  elseif 'sloppy' == mode['approx'] then
+    mdwf_invert = mdwf_eigcg_df:mixed_solver(
+                mixcg_tol1^2, mixcg_maxiter1,   
+                mixcg_tol1^2, mode['ncg']) 
+  end
+  return make_calc_mdwf_prop(mdwf_invert, gauge_u, ferm_bc, 
+                      mdwf_L5, mdwf_M5, mdwf_b5, mdwf_c5)
+end
+
+ama_mode  = ama_mode_list[1]
+mdwf_solver = make_solver(mdwf_eigcg_df, ama_mode)
+csrc0 = {1,2,3,4}
+psnk  = {-1,0,0}
+tsnk  = 1
+qins  = {1,-1,2}
+tins  = 6
+curvec_ins  = { .12, .345, .6, .7834}
+S1    = gamma{mu=0} * gamma{mu=2}
+S2    = S1
+Tpol_even = (1 - gamma{mu=0}*gamma{mu=1}*complex(0,1))
+Tpol_odd  = gamma{n=15} * Tpol_even
+sample_cedm_sink_cur(L, cfgkey, gauge_u,
+        smear_func_wup, mdwf_solver, prop_save_func,
+        csrc0,
+        psnk, tsnk,
+        qins, tins, curvec_ins,
+        S2, S1, Tpol_even, Tpol_odd,
+        ama_mode)
+
+
+-- vim : syn=lua

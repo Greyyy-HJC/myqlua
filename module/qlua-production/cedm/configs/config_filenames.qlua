@@ -1,0 +1,202 @@
+function get_frwprop_file(cfg_key, csrc, ama)
+  return string.format("%s/frw_prop/frw_prop.%s.%s.%s.lime", 
+          data_pdir, cfg_key, ama_str(ama), csrc_str(csrc))
+end
+
+function get_frwprop_grp_file(cfg_key, csrcgrp, ama)
+  return string.format("%s/frw_prop/frw_prop_grp.%s.%s.%s.lime", 
+          data_pdir, cfg_key, ama_str(ama), csrcgrp_str(csrcgrp))
+end
+
+function get_seqprop_nucsink_file(cfg_key, csrc, psnk, tsnk, tpol_tag, flavor, ama)
+  return string.format("%s/bkw_prop/bkw_prop.%s.%s.%s.%s.%s.%s.lime", 
+          data_pdir, cfg_key, ama_str(ama), 
+          csrc_str(csrc), snk_str_old(psnk, tsnk), 
+          tpol_tag, flavor)
+end
+get_bkwprop_file = get_seqprop_nucsink_file
+
+
+function get_seqprop_grp_nucsink_file(cfg_key, csrcgrp, psnk, tsep, tpol_tag, flavor, ama)
+  return string.format("%s/bkw_prop/bkw_prop_grp.%s.%s.%s.%s.%s.%s.lime", 
+          data_pdir, cfg_key, ama_str(ama), 
+          csrcgrp_str(csrcgrp), snk_str(psnk, tsep), 
+          tpol_tag, flavor)
+end
+get_bkwprop_grp_file = get_seqprop_grp_nucsink_file
+
+
+function get_cedmseqprop_file(cfg_key, csrc, gf_tag, ama)
+  return string.format("%s/cedmseq_prop/cedmseq_prop.%s.%s.%s.%s.lime",
+          data_pdir, cfg_key, ama_str(ama), csrc_str(csrc), gf_tag)
+end
+function get_pscseqprop_file(cfg_key, csrc, ama)
+  return string.format("%s/pscseq_prop/pscseq_prop.%s.%s.%s.lime",
+          data_pdir, cfg_key, ama_str(ama), csrc_str(csrc))
+end
+function get_seqprop_vacins_file(cfg_key, csrc, vacins, ama)
+  if 'cedm' == vacins.vacins then 
+    return get_cedmseqprop_file(cfg_key, csrc, vacins.tag, ama)
+  elseif 'psc' == vacins.vacins then 
+    return get_pscseqprop_file(cfg_key, csrc, ama)
+  else error(string.format("unknown vacins='%s'", vacins.vacins)) end
+end
+
+
+function get_cedmseqprop_grp_file(cfg_key, csrcgrp, gf_tag, ama)
+  return string.format("%s/cedmseq_prop/cedmseq_prop_grp.%s.%s.%s.%s.lime",
+          data_pdir, cfg_key, ama_str(ama), csrcgrp_str(csrcgrp), gf_tag)
+end
+function get_pscseqprop_grp_file(cfg_key, csrcgrp, ama)
+  return string.format("%s/pscseq_prop/pscseq_prop_grp.%s.%s.%s.lime",
+          data_pdir, cfg_key, ama_str(ama), csrcgrp_str(csrcgrp))
+end
+function get_seqprop_grp_vacins_file(cfg_key, csrcgrp, vacins, ama)
+  if     'cedm' == vacins.vacins then 
+    return get_cedmseqprop_grp_file(cfg_key, csrcgrp, vacins.tag, ama)
+  elseif 'psc'  == vacins.vacins then 
+    return get_pscseqprop_grp_file(cfg_key, csrcgrp, ama)
+  else error(string.format("unknown vacins='%s'", vacins.vacins)) end
+end
+
+
+function get_cedmsinkseqprop_file(cfg_key, csrc, psnk, tsnk,
+          tpol_tag, flav_cur, flav_ins, gf_tag, ama)
+  return string.format("%s/cedmsinkseq_prop/cedmsinkseq_prop.%s.%s.%s.%s.%s.%s.%s.%s.lime",
+        data_pdir, cfg_key, ama_str(ama), csrc_str(csrc), snk_str_old(psnk, tsnk), 
+        tpol_tag, flav_cur, flav_ins, gf_tag)
+end
+function get_pscsinkseqprop_file(cfg_key, csrc, psnk, tsnk,
+          tpol_tag, flav_cur, flav_ins, ama)
+  return string.format("%s/pscsinkseq_prop/pscsinkseq_prop.%s.%s.%s.%s.%s.%s.%s.lime",
+        data_pdir, cfg_key, ama_str(ama), csrc_str(csrc), snk_str_old(psnk, tsnk), 
+        tpol_tag, flav_cur, flav_ins)
+end
+function get_seqprop_vacins_nucsink_file(cfg_key, csrc, psnk, tsnk,
+          tpol_tag, flav_cur, vacins, ama)
+  if     'cedm' == vacins.vacins then 
+    return get_cedmsinkseqprop_file(cfg_key, csrc, psnk, tsnk, tpol_tag, 
+          flav_cur, vacins.flav, vacins.tag, ama)
+  elseif 'psc'  == vacins.vacins then 
+    return get_pscsinkseqprop_file(cfg_key, csrc, psnk, tsnk, tpol_tag,
+          flav_cur, vacins.flav, ama)
+  else error(string.format("unknown vacins='%s'", vacins.vacins)) end
+end
+
+
+function get_cedmsinkseqprop_grp_file(cfg_key, csrcgrp, psnk, tsep,
+          tpol_tag, flav_cur, flav_ins, gf_tag, ama)
+  return string.format("%s/cedmsinkseq_prop/cedmsinkseq_prop_grp.%s.%s.%s.%s.%s.%s.%s.%s.lime",
+        data_pdir, cfg_key, ama_str(ama), csrcgrp_str(csrcgrp), snk_str(psnk, tsep), 
+        tpol_tag, flav_cur, flav_ins, gf_tag)
+end
+function get_pscsinkseqprop_grp_file(cfg_key, csrcgrp, psnk, tsep,
+          tpol_tag, flav_cur, flav_ins, ama)
+  return string.format("%s/pscsinkseq_prop/pscsinkseq_prop_grp.%s.%s.%s.%s.%s.%s.%s.lime",
+        data_pdir, cfg_key, ama_str(ama), csrcgrp_str(csrcgrp), snk_str(psnk, tsep), 
+        tpol_tag, flav_cur, flav_ins)
+end
+function get_seqprop_grp_vacins_nucsink_file(cfg_key, csrcgrp, psnk, tsep,
+              tpol_tag, flav_cur, vacins, ama)
+  if     'cedm' == vacins.vacins then 
+    return get_cedmsinkseqprop_grp_file(cfg_key, csrcgrp, psnk, tsep,
+          tpol_tag, flav_cur, vacins.flav, vacins.tag, ama)
+  elseif 'psc'  == vacins.vacins then 
+    return get_pscsinkseqprop_grp_file(cfg_key, csrcgrp, psnk, tsep,
+          tpol_tag, flav_cur, vacins.flav, ama)
+  else error(string.format("unknown vacins='%s'", vacins.vacins)) end
+end
+
+
+
+function get_hadspec_file(cfg_key, csrc, ama)
+  return string.format('%s/hadspec/hadspec.%s.%s.%s.aff',
+          data_top, cfg_key, ama_str(ama), csrc_str(csrc))
+end
+
+function get_c2pt_file(cfg_key, csrc, ama)
+  return string.format('%s/c2pt/c2pt.%s.%s.%s.aff',
+          data_top, cfg_key, ama_str(ama), csrc_str(csrc))
+end
+
+function get_bb_file(cfg_key, csrc, psnk, tsep, tpol_tag, flav_cur, ama)
+  return string.format("%s/bb/bb.%s.%s.%s.%s.%s.%s.aff",
+          data_top, cfg_key, ama_str(ama), csrc_str(csrc), snk_str(psnk, tsep),
+          tpol_tag, flav_cur)
+end
+
+function get_tmd_file(cfg_key, csrc, psnk, tsep, tpol_tag, flav_cur, ama)
+  return string.format("%s/tmd/tmd.%s.%s.%s.%s.%s.%s.aff",
+          data_top, cfg_key, ama_str(ama), csrc_str(csrc), snk_str(psnk, tsep),
+          tpol_tag, flav_cur)
+end
+
+function get_bbspace_file(cfg_key, csrc, psnk, tsep, tpol_tag, flav_cur, ama)
+  local ext = ''
+  if 'hdf5' == bbspace_opt.fmt then ext = '.h5'
+  elseif 'qio' == bbspace_opt.fmt then ext = '.lime' end
+  return string.format("%s/bbspace/bbspace.%s.%s.%s.%s.%s.%s%s",
+          data_top, cfg_key, ama_str(ama), csrc_str(csrc), snk_str(psnk, tsep),
+          tpol_tag, flav_cur, ext)
+end
+
+function get_c2pt_cpbar_cedm_file(cfg_key, csrc, psnk, tsep, tpol_tag, flav_ins, ama)
+  -- XXX tag is ignored!
+  return string.format("%s/c2pt_cpbar/c2pt_cpbar.%s.%s.%s.%s.%s.%s.aff",
+          data_top, cfg_key, ama_str(ama), csrc_str(csrc), snk_str(psnk, tsep), 
+          tpol_tag, flav_ins)
+end
+get_c2pt_cpbar_file = get_c2pt_cpbar_cedm_file
+function get_c2pt_cpbar_psc_file(cfg_key, csrc, psnk, tsep, tpol_tag, flav_ins, ama)
+  return string.format("%s/c2pt_cpbar_psc/c2pt_cpbar_psc.%s.%s.%s.%s.%s.%s.aff",
+          data_top, cfg_key, ama_str(ama), csrc_str(csrc), snk_str(psnk, tsep), 
+          tpol_tag, flav_ins)
+end
+function get_c2pt_cpbar_vacins_file(cfg_key, csrc, psnk, tsep, tpol_tag, vacins, ama)
+  if     'cedm' == vacins.vacins then 
+    return get_c2pt_cpbar_cedm_file(cfg_key, csrc, psnk, tsep, tpol_tag, vacins.flav, ama)
+  elseif 'psc'  == vacins.vacins then 
+    return get_c2pt_cpbar_psc_file(cfg_key, csrc, psnk, tsep, tpol_tag, vacins.flav, ama)
+  else error(string.format("unknown vacins='%s'", vacins.vacins)) end
+end
+
+
+function get_c2pt_volcedm_file(cfg_key, csrc, gf_tag, ama)
+  return string.format('%s/c2pt_volcedm/c2pt_volcedm.%s.%s.%s.%s.aff',
+          data_top, cfg_key, ama_str(ama), csrc_str(csrc), gf_tag)
+end
+function get_c2pt_volpsc_file(cfg_key, csrc, ama)
+  return string.format('%s/c2pt_volpsc/c2pt_volpsc.%s.%s.%s.aff',
+          data_top, cfg_key, ama_str(ama), csrc_str(csrc))
+end
+function get_c2pt_vacins_file(cfg_key, csrc, vacins, ama)
+  if     'cedm' == vacins.vacins then 
+    return get_c2pt_volcedm_file(cfg_key, csrc, vacins.tag, ama)
+  elseif 'psc'  == vacins.vacins then 
+    return get_c2pt_volpsc_file(cfg_key, csrc, ama)
+  else error(string.format("unknown vacins='%s'", vacins.vacins)) end
+end
+
+function get_bb_volcedm_file(cfg_key, csrc, psnk, tsep,
+          tpol_tag, flav_cur, flav_ins, gf_tag, ama)
+  return string.format("%s/bb_volcedm/bb_volcedm.%s.%s.%s.%s.%s.%s.%s.%s.aff",
+          data_top, cfg_key, ama_str(ama), csrc_str(csrc), snk_str(psnk, tsep),
+          tpol_tag, flav_cur, flav_ins, gf_tag)
+end
+function get_bb_volpsc_file(cfg_key, csrc, psnk, tsep,
+          tpol_tag, flav_cur, flav_ins, ama)
+  return string.format("%s/bb_volpsc/bb_volpsc.%s.%s.%s.%s.%s.%s.%s.aff",
+          data_top, cfg_key, ama_str(ama), csrc_str(csrc), snk_str(psnk, tsep),
+          tpol_tag, flav_cur, flav_ins)
+end
+function get_bb_vacins_file(cfg_key, csrc, psnk, tsep,
+          tpol_tag, flav_cur, vacins, ama)
+  if     'cedm' == vacins.vacins then 
+    return get_bb_volcedm_file(cfg_key, csrc, psnk, tsep,
+          tpol_tag, flav_cur, vacins.flav, vacins.tag, ama)
+  elseif 'psc'  == vacins.vacins then 
+    return get_bb_volpsc_file(cfg_key, csrc, psnk, tsep,
+          tpol_tag, flav_cur, vacins.flav, ama)
+  else error(string.format("unknown vacins='%s'", vacins.vacins)) end
+end
+

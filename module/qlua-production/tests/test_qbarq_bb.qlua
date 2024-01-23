@@ -1,0 +1,120 @@
+package.path = 'qlib/?.qlua;qlib-lhpc/?.qlua;qlua-production/?.qlua;' .. package.path
+require 'stdlib'
+require 'lhpc-std'
+require 'setup_util'
+require 'latvec'
+require 'hadron/qbarq_wline'
+
+latsize   = {4,4,4,8}
+network_geom = {1,1,1,1}
+t_axis    = #latsize - 1
+rnd_seed  = 1984
+ferm_bc  = {1,1,1,-1}
+
+tot_timer = timer("total")
+L = qcd.lattice(latsize, {network=network_geom})
+print_network_settings()
+print_subgrid_settings(L)
+S = rnd_init(L, rnd_seed)
+rnd = S
+
+
+
+csrc={1,2,3,4}
+tlen=8
+--qext3_list = {{0,0,0}, {0,0,1}}
+qext3_list = make_mom_list(3)
+
+ldir_list = {'x', 'y', 'z', 't', 'X', 'Y', 'Z', 'T'}
+bb_lpath_list = qbarq_make_linkpath_list_bb(
+    {'x', 'y', 'z', 't', 'X', 'Y', 'Z', 'T'}, 0, 2)
+print_obj(bb_lpath_list, 'bb_lpath_list') --; os.exit(0)
+
+gauge_u = latvec.fromfunction({4}, function()return toSUn(S:gaussian_ColorMatrix()) end)
+prop_F = S:gaussian_DiracPropagator()
+prop_B = S:gaussian_DiracPropagator()
+
+
+-- gauge inv. test -- does not work with random props; need solutions to Dslash
+gg_r = toSUn(rnd:gaussian_ColorMatrix())
+prop_F1 = gg_r * prop_F
+prop_B1 = prop_B * gg_r:adjoin()
+gauge_u1= gauge_transform_U(gg_r, gauge_u) 
+
+
+bb_opt = { result = true, bb_max_depth=2,
+        save = {
+          kpath='/bb/',
+          mkey='q', fkey='g' },
+        momproj = {
+          csrc=csrc, 
+          mom_list=qext3_list,
+          t_axis=t_axis,
+          bc_t = 1,
+          tlen=tlen,
+          ft_sign=1 } }
+
+local res1 = nil
+--if true then
+if false then
+  local bb_aff  = qcd.aff.Writer('test_bb_state.aff')
+  bb_opt.save.file = bb_aff
+  local qcs = qcd.contract_state(
+      'bb_g_F_B', { prop_F1, prop_B1, gauge_u1 }, bb_opt)
+  printf("qcs = '%s'\n", tostring(qcs))
+
+  res1 = iter_bb_lpath(bb_lpath_list, 
+      function(bv)
+        printf("iter_bb_lpath[%s]\n", bv)
+        return qcs:step(bv) 
+      end)
+  bb_aff:close()
+end
+
+if true then
+  local function bb_key(lp)
+    return string.format("l%d_%s", #lp, lp)
+  end
+
+  local res_test = iter_bb_lpath(bb_lpath_list, 
+      function(lp)
+        printf("iter_bb_lpath[%s]\n", lp)
+        return lp -- test
+      end)
+  print_obj(res_test, 'res_test')
+end
+
+local res0 = nil
+if true then
+--if false then
+  local bb_aff  = qcd.aff.Writer('test_bb.aff')
+  bb_opt.save.file = bb_aff
+  local bb_opt = table_deepmerge(bb_opt, {save={file=bb_aff}})
+  res0 = contract_save_bb_qbarq(
+      prop_F, prop_B, gauge_u1, bb_lpath_list, 
+      {result=true})
+--  print_obj(res0, 'res0')
+  printf("table_count(res0) = %d\n", table_count(res0))
+  bb_aff:close()
+end
+
+--print_obj(res0, 'res0')
+--print_obj(res1, 'res1')
+if res0 and res1 then
+  -- check that all keys exist
+  for k,v in pairs(res1) do
+    if nil == res0[k] then 
+      printf("ERROR res0[%s] does not exist\n", k)
+    end
+  end
+  -- compare all values
+  for k,v in pairs(res0) do
+    if nil == res1[k] then 
+      printf("ERROR res1[%s] does not exist\n", k)
+    else 
+      latvec.print_cmp(res0[k], res1[k], string.format("res0<>res1[%s]", k))
+    end
+  end
+end
+
+printf("QLUA_RUN_SUCCESS\n")

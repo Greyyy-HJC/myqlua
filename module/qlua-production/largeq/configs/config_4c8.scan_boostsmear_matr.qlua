@@ -1,0 +1,278 @@
+-- XXX this new-style config does NOT use "relative" momenta: all momenta
+-- XXX are defined as absolute
+-- * qpdf/scan_boostsmear_matr.qlua
+package.path = 'qlib/?.qlua;qlib-lhpc/?.qlua;qlua-production/?.qlua;' .. package.path
+require 'strict'
+require 'setup_util'
+require 'latvec'
+require 'stdlib'
+require 'util/strkey'
+require 'lhpc-std'
+require 'qdpc_io'
+require 'ape-smear'
+require 'stout-smear'
+
+require 'rcparams'
+
+rcparams.backend.dslash_solver = 'cpu'
+--rcparams.backend.dslash_solver = 'gpu-quda'
+
+--rcparams.backend.laplacian = 'cpu'
+rcparams.backend.laplacian = 'cpu-clover'
+--rcparams.backend.laplacian = 'gpu-quda'
+
+rcparams.backend.qbarq = 'cpu'
+--rcparams.backend.qbarq = 'gpu-quda'
+
+print_obj(rcparams, 'rcparams')
+
+contract_only = false -- stub
+if contract_only then printf("*** CONTRACT_ONLY ***\n") end
+
+-------------------------------------------------------------------------------
+-- general
+-------------------------------------------------------------------------------
+cfg_key = assert(job_key)
+task_key=rawget(_G, 'task_key') or 'scan_boostsmear_matr'
+subjob_key = rawget(_G, 'subjob_key') or ''
+assert(subjob_key)
+if "" == subjob_key then sample_list = false
+else sample_list = parse_int_range(subjob_key) end
+
+latsize   = {4,4,4,8}
+t_axis    = #latsize - 1
+rnd_seed  = 1984
+
+-------------------------------------------------------------------------------
+-- data file param and locations
+-------------------------------------------------------------------------------
+ens_top   = 'TEST4c8'
+data_top  = 'TEST4c8/data' 
+data_pdir = 'TEST4c8/data_pdir'
+prop_volfmt     = 'single'
+gauge_fmt = 'nersc'
+
+
+-- gauge config
+function get_gauge_file(key)
+  return string.format("%s/gauge/ckpoint_lat.%s",
+        ens_top, key)
+end
+
+-- c2pt
+function get_c2pt_file_tag(cfg_key, csrc, ama, tag) -- XXX different from qbarq_coh!!!
+  return string.format('%s/c2pt/c2pt.%s.%s.%s.%s.aff',
+        data_top, cfg_key, strkey.ama_str(ama), strkey.csrc_str_f(csrc), tag)
+end
+
+function sample_log_file(cfg_key)
+  return string.format("%s/sample_log/%s.%s", data_top, job_key, task_key)
+end
+
+
+-------------------------------------------------------------------------------
+-- setup lattice etc
+-------------------------------------------------------------------------------
+job_timer = timer("total")
+tot_timer = job_timer
+L = qcd.lattice(latsize, {network=network_geom})
+print_network_settings()
+print_subgrid_settings(L)
+if rawget(_G, 'openmp') then
+  printf("OpenMP:num_threads=%d\n", openmp.num_threads())
+  printf("OpenMP:thread_limits=%d\n", openmp.thread_limit())
+end
+
+gauge_file = get_gauge_file(cfg_key)    
+printf("read gauge '%s' [%s]\n", gauge_file, gauge_fmt)
+tt = timer('read_gauge')
+if     'nersc' == gauge_fmt then 
+  gauge_u = qcd.nersc.read_gauge(L, gauge_file)
+elseif 'milc'  == gauge_fmt then
+  gauge_u = qcd.milc.read_gauge(L, gauge_file)
+elseif 'lime' == gauge_fmt then
+  gauge_u = load_qdpc_gauge(L, gauge_file)
+else error(string.format("unknown gauge_fmt='%s'", gauge_fmt)) end
+tt('done')
+
+-------------------------------------------------------------------------------
+-- source parameters
+-------------------------------------------------------------------------------
+ape_alpha   = 2.5
+ape_N       = 2 
+ape_accu    = 1e-12
+ape_maxiter = 150
+
+tt = timer('smear_gauge_ape')
+gauge_u_ape = APE_smear(gauge_u, ape_alpha, ape_N, ape_accu, ape_maxiter, t_axis)   ; tt('done')
+
+-- sic! 4d
+kbxp10  = {  1,  0,  0,  0}
+kbxm10  = { -1,  0,  0,  0}
+kbym10  = {  0, -1,  0,  0}
+kbzm10  = {  0,  0, -1,  0}
+
+do -- scan_boostsmear_matr.qlua
+  -- generate smearing/boost combinations
+  local smear_shape_list = {
+    -- Wuppertal
+    ['G0068x10'] = {type='wuppertal', t_axis=t_axis,
+        wup_U=gauge_u_ape, wup_alpha=0.0676, wup_N=10  },
+    ['G2x10'] = {type='wuppertal', t_axis=t_axis,
+        wup_U=gauge_u_ape, wup_alpha=2, wup_N=10  },
+    ['G2x20'] = {type='wuppertal', t_axis=t_axis,
+        wup_U=gauge_u_ape, wup_alpha=2, wup_N=20  },
+    ['G2x30'] = {type='wuppertal', t_axis=t_axis,
+        wup_U=gauge_u_ape, wup_alpha=2, wup_N=30  },
+  }
+
+  local smear_boost_list = {
+    kbxp20 = list_scal(2, kbxp10),
+  }
+
+  smear_group_list = {}
+  for ksrc_tag, ksrc in pairs(smear_boost_list) do
+    local sm_grp = {}
+    for sm_shape_tag, sm_shape_opt in pairs(smear_shape_list) do
+      local sm_tag = string.format("%s%s", sm_shape_tag, ksrc_tag)
+      sm_grp[sm_tag] = table_join(sm_shape_opt, {boost=ksrc})
+    end
+    list_append(smear_group_list, sm_grp)
+  end
+  print_obj(smear_group_list, 'smear_group_list')
+
+  smear_group_matrix = true
+end
+
+-------------------------------------------------------------------------------
+-- correlator parameters
+-------------------------------------------------------------------------------
+pm1     = {-1, 0, 1}        -- [-1;1]
+pm2     = {-2,-1, 0, 1, 2}  -- [-2;2]
+pm6     = range(-6, 1+6)    -- [-6;6]
+pm10    = range(-10,1+10)   -- [-10;10]
+c2pt_psnk_list = range_prod({pm2, pm1, pm1}) -- 20*5*5
+
+proton_src_S   = gamma{mu=0} * gamma{mu=2}
+proton_snk_S   = proton_src_S
+
+-------------------------------------------------------------------------------
+-- coord sampling & AMA
+-------------------------------------------------------------------------------
+-- * coordinates
+cfg_list = {}
+for s in io.lines('TEST4c8/list.cfg.all') do
+  cfg_list[1+#cfg_list] = s
+end
+do 
+  local cfg_index = table_index(cfg_list, cfg_key)
+  printf("cfg_key='%s' index=%d\n", cfg_key, cfg_index)
+  local csrcgrid  = { 1, 1, 1, 2 }
+  local x0_0= { 0, 0, 0, 0 }
+  local dx_g= { 7,11,13,23 }
+  local sloppy_csrc_list = make_src_grid(
+      csrcgrid, latsize, x0_0, dx_g, cfg_index)
+
+  -- * approx modes
+  ama_list = {
+    { ['approx']    = 'sloppy',
+      ['csrc_list'] = sloppy_csrc_list,
+      ['tol']       = 1e-4 },           -- relax somewhat
+    { ['approx']    = 'exact',
+      ['csrc_list'] = { sloppy_csrc_list[1] }, 
+      ['tol']       = 1e-10 },          -- tighten somewhat
+  }
+end
+
+
+-------------------------------------------------------------------------------
+-- quark action
+-------------------------------------------------------------------------------
+-- * gauge smearing
+stout_rho = 0.125
+stout_n   = 1
+-- * fermion params
+ferm_bc = {1,1,1,-1}    -- untwisted
+m_l     = 0.123
+mtag_l  = 'm123'
+kappa_l = 1. / (8 + 2 * m_l)
+--m_s     = 0.246
+c_sw    = 1.20536588031793
+
+tt = timer('smear_gauge_stout')
+gauge_u_stout = stout_smear_full(gauge_u, stout_rho, stout_n)   ; tt('done')
+gauge_u_lpath = gauge_u_stout
+
+if 'cpu' == rcparams.backend.dslash_solver then
+--if false then
+  -- * QOP-MG parameters
+  require 'mg_param'
+  mg_tol_approx = 1e-4
+  mg_maxiter  = 200
+  mg_param_null = {    
+    blocking      = { {2,2,2,2} },
+    verbose       = {        0  }, 
+    null_vecs     = {       24  },
+    null_vecs_extra={        0  },
+    prehits       = {        0  },
+    posthits      = {        4  },
+    underrelax    = {       1.  },
+    null_maxiter  = {       20  },
+    null_res      = {      0.4  },
+    null_conv     = {      0.8  },
+                                
+    coarse_res    = {      0.1  },
+    coarse_maxiter= {       12  },
+    coarse_ngcr   = {        8  },
+  }
+
+  tt = timer('inig_mg')
+  local mg_param = make_mg_params(
+      kappa_l, c_sw, ferm_bc,
+      mg_tol_approx, mg_maxiter, latsize,
+      mg_param_null, { name = "mg", verbose = 0 })
+  print_obj(mg_param, "mg_param")
+  local mg = qcd.qop.WilsonMG(gauge_u_stout, mg_param)      ; tt('done')
+
+  function make_solver(ama)
+    local scale = 2 * kappa_l
+    if contract_only then return function()end end
+    if ama['approx'] == 'exact' or ama['approx'] == 'sloppy' then
+      return make_solver_general(function(x)
+        return (scale * mg:solve(x, {residual = {rsqmin = ama['tol']^2}}))
+      end)
+    else error(string.format("unknown ama='%s'", ama['approx'])) end
+  end
+elseif 'gpu-quda' == rcparams.backend.dslash_solver then
+  -- * QUDA(-MG) parameters
+  require 'quda'
+  tt = timer('init_quda')
+  qcd.quda.init(L)                                          ; tt('done')
+  local t_boundary
+  if      1 == ferm_bc[1+t_axis] then t_boundary = "PERIODIC"
+  elseif -1 == ferm_bc[1+t_axis] then t_boundary = "ANTI_PERIODIC"
+  else error(string.format("bad ferm_bc_t = '%s'", tostring(ferm_bc[1+t_axis]))) end
+  local QS = nil
+  function make_solver(ama)
+    if contract_only then return function()end end
+    if nil ~= QS then 
+      QS:close()
+      QS = nil
+    end
+    QS = qcd.quda.inverter.simple(
+        -- TODO set sloppy prec->HALF, reliable_delta->0.1
+        gauge_u_stout,
+        { t_boundary          = t_boundary },
+        { clover_coeff        = c_sw * kappa_l,
+          dslash_type         = "CLOVER_WILSON",
+          kappa               = kappa_l,
+          mass_normalization  = "MASS",
+          tol                 = ama['tol'],
+          maxiter             = 10000,
+          verbosity           = "SUMMARIZE",
+          tune                = 'NO',
+        })
+    print_obj(QS, "make_solver")
+    return make_solver_general(function(x) return QS:solve(x) end)
+  end
+end

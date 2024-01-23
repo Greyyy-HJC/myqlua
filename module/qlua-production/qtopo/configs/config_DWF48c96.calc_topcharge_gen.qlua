@@ -1,0 +1,40 @@
+
+latsize={ 48, 48, 48, 96 }
+t_axis = #latsize - 1
+
+ens_top   = '..'
+data_top  = 'data.prod.coh4X'
+data_pdir = 'data_pdir.prod'
+h5opt = {
+  method    = 'phdf5', 
+  metadata  = 'deferred', 
+  chunk     = 'natural', 
+  transfer  = 'collective', 
+  alignment = 1024 * 512, 
+  threshold = 1024 }
+
+gauge_file_fmt = 'nersc'
+qtopo_file_fmt = 'hdf5'
+
+gauge_qio_fmt = 'single'
+qtopo_qio_fmt = 'single'
+
+function get_gauge_file(cfg_key)
+  return string.format("%s/gauge/ckpoint_lat.%s",
+          ens_top, cfg_key)
+end
+function get_gauge_qio_file(cfg_key)
+  return string.format("%s/gauge_qio/ckpoint_lat.%s.lime",
+          data_pdir, cfg_key)
+end
+function get_gauge_qio_file_tag(cfg_key, tag)
+  return string.format("%s/gauge_qio/ckpoint_lat.%s.%s.lime",
+          data_pdir, cfg_key, tag)
+end
+function get_qtopo_h5_file(cfg_key, tag)
+  return string.format("%s/qtopo/qtopo.%s.%s.h5", data_top, cfg_key, tag)
+end
+function get_qtopo_qio_file(cfg_key, tag)
+  return string.format("%s/qtopo/qtopo.%s.%s.qio", data_top, cfg_key, tag)
+end
+

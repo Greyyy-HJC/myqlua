@@ -1,0 +1,271 @@
+-- full nedm calculation:
+--  * propagators :
+--    prop_F 
+--  ** hadspec : traditional (Chroma HSPECTRUM)
+
+-- XXX NOTES
+-- * before running, make sure that directories and links are set
+--   $ mkdir data/hadspec data_pdir/{frw_prop,prop_log}
+--   qlib -> $QLUADIR/qlib 
+--   qlib-lhpc -> $QLUADIR/lhpc
+--   file
+
+-- TODO
+-- * hyp smearing
+-- * MILC gauge reading?
+
+package.path = 'qlua-production/?.qlua;qlib-lhpc/?.qlua;qlib/?.qlua;' .. package.path
+require "strict"    -- catch all undefined (nil) variables
+require "stdlib"    -- standard printf, etc
+require "lhpc-std"  -- make_source, etc
+require "ape-smear" -- gauge smear
+require "hex-smear"
+require "gauge"
+require "qdpc_io"
+require "setup_util"
+require "debug_util"
+require "latvec"
+
+require "hadspec"
+
+------------------------------------------------------------------------------
+-- INITIALIZATION
+------------------------------------------------------------------------------
+tot_timer = timer("total")
+L = qcd.lattice(latsize, {network=network_geom})
+S = rnd_init(L, rnd_seed)
+
+contract_only = false -- stub
+if contract_only then printf("*** CONTRACT_ONLY ***\n") end
+
+------------------------------------------------------------------------------
+-- aux functions
+------------------------------------------------------------------------------
+function have_prop(cfg_key, prop_kind, prop_file)
+  local prop_log = get_prop_log_file(cfg_key, prop_kind)
+  local bn = basename(prop_file)
+  if not io.fexists(prop_log) then return false end
+  for s in io.lines(prop_log) do
+    if s == bn then return true end
+  end
+  return false
+end
+function done_prop(cfg_key, prop_kind, prop_file)
+  local prop_log = get_prop_log_file(cfg_key, prop_kind)
+  local bn = basename(prop_file)
+--  if (0 == os.node()) then os.execute(string.format("mkdir -p %s", dirname(prop_log))) end ; qcd.barrier()
+  local f = io.open(prop_log, "a")
+  f:write(string.format("%s\n", bn))
+  f:flush()
+  f:close()
+end
+function prop_save_func(fname, x, title, prop_prec)
+  -- requires in the scope:
+  --  prop_volfmt       part_dir for fast
+  --  prop_vol_stride   spacing between ranks doing IO (set equal to the number of ranks per 1 IO node)
+  if nil == title then
+    title = tostring(x)
+  end
+  printf("SAVE %s '%s'\n", title, fname)
+  local tt = timer(string.format("SAVE %s", title))
+  printf("$ mkdir %s\n", dirname(fname))
+--  if (0 == os.node()) then os.execute(string.format("mkdir -p %s", dirname(fname))) end ; qcd.barrier()
+  local qio_w = open_qdpc_write(L, fname, "", prop_qio_volfmt, 
+                    {rank_stride=prop_qio_stride})
+  qio_w:DiracPropagator(prop_prec, x, title)
+  qio_w:close()
+  tt("done")
+end
+function prop_load_func(fname, title)
+  -- requires in the scope:
+  --  prop_vol_stride   spacing between ranks doing IO (set equal to the number of ranks per 1 IO node)
+  if nil == title then
+    title = ''
+  end
+  printf("LOAD %s '%s'\n", title, fname)
+  local tt = timer(string.format("LOAD %s", title))
+  local qio_r = open_qdpc_read(L, fname, {rank_stride=prop_qio_stride})
+  local res = qio_r:DiracPropagator()
+  qio_r:close()
+  tt("done")
+  return res
+end
+
+
+------------------------------------------------------------------------------
+-- load or compute propagators
+------------------------------------------------------------------------------
+-- general parameter order :
+--    coord; [polaris/flavor]; [prop(s)]; [gf] ; smear/solve
+-- return (prop_F, is_new)
+function get_prop_F(
+      L, cfg_key, csrc, ama, sample_tag,
+      smear_func, solver_func)
+  local prop_F = nil
+  local prop_file = get_frwprop_file_tag(cfg_key, csrc, ama, sample_tag)
+  local is_new = not have_prop(cfg_key, "prop_F", prop_file) 
+  if is_new then
+    local tt = timer("CALC prop_F")
+    local src_F = smear_func(make_source_point(L, csrc))  ; tt("src")
+    prop_F  = solver_func(src_F)                          ; tt("prop")
+    prop_save_func(prop_file, prop_F, "prop_F", ama['prop_prec'])
+    done_prop(cfg_key, "prop_F", prop_file)
+    tt("done")
+  else
+    prop_F = prop_load_func(prop_file, "prop_F")
+  end
+  return prop_F, is_new
+end
+
+------------------------------------------------------------------------------
+-- function to sample one source location
+------------------------------------------------------------------------------
+function sample_hadspec(
+        L, cfg_key, csrc, ama, sample_tag,
+        hadspec_psnk_list, 
+        smear_func, solver_func, 
+        t_axis, ferm_bc,
+        redo_contract)
+  -- parameters
+  --  L               lattice object
+  --  cfg_key          gauge cfg "key" : string
+  --  csrc            forward source position for the sample
+  --  ama             AMA parameter for saving files
+  --  hadspec_psnk_list  sink momentum for c2pt, c2pt_volcedm
+  --  smear_func      source smearing function x_smeared = smear_func(x_point)
+  --  solver_func     fermion solver x = solver_func(y) <-> Dslash.x = y
+
+  -- also requires global functions for propagator storage
+  --  get_frwprop_file            F
+  --  get_hadspec_file
+  -- and variables
+
+  -- XXX envs : 
+  --    latsize
+  --    hadspec_baryon_list, hadspec_meson_list 
+  local timer_1src  = timer('1src')
+  local tt    -- timer
+  local cur_t
+  local bc_quark_t  = ferm_bc[1+t_axis]
+  local bc_baryon_t = bc_quark_t^3
+  
+  local prop_F, is_new_F = get_prop_F(L, cfg_key, csrc, ama, sample_tag, smear_func, solver_func)
+  tt = timer('smear_prop_F')
+  local prop_F_sm  = smear_func(prop_F)
+  tt('done')
+  if is_new_F or redo_contract then -- contract hadspec, c2pt (CP-even)
+    tt  = timer("save_hadspec") 
+    -- hadspec (all mesons, baryons)
+    local hadspec_file = get_hadspec_file_tag(cfg_key, csrc, ama, sample_tag)
+    printf('[save_hadspec] %s\n', hadspec_file)
+--    if (0 == os.node()) then os.execute(string.format("mkdir -p %s", dirname(hadspec_file))) end ; qcd.barrier()
+
+    if false then
+      local cur_t = timer("save_hadspec_list*2")
+      local aff_hadspec = qcd.aff.Writer(hadspec_file)
+      save_hadspec_list(L, aff_hadspec, '/hadspec/SP',
+                       prop_F, prop_F, csrc, hadspec_psnk_list,
+                       t_axis, bc_quark_t, hadspec_baryon_list, hadspec_meson_list)
+      save_hadspec_list(L, aff_hadspec, '/hadspec/SS',
+                       prop_F_sm, prop_F_sm, csrc, hadspec_psnk_list,
+                       t_axis, bc_quark_t, hadspec_baryon_list, hadspec_meson_list)
+      aff_hadspec:close()
+      cur_t("done")
+    else
+      local cur_t = timer("save_hadspec_list_fast*2")
+      local aff_hadspec = qcd.aff.Writer(hadspec_file .. ".fast")
+      save_hadspec_list_fast(L, aff_hadspec, '/hadspec/SP',
+                       prop_F, prop_F, csrc, hadspec_psnk_list,
+                       t_axis, bc_quark_t, hadspec_baryon_list, hadspec_meson_list)
+      save_hadspec_list_fast(L, aff_hadspec, '/hadspec/SS',
+                       prop_F_sm, prop_F_sm, csrc, hadspec_psnk_list,
+                       t_axis, bc_quark_t, hadspec_baryon_list, hadspec_meson_list)
+      aff_hadspec:close()
+      cur_t("done")
+    end
+  end
+end
+
+
+
+------------------------------------------------------------------------------
+-- MAIN
+------------------------------------------------------------------------------
+
+--for k,v in pairs(qcd) do
+--  printf("[%s] -> %s\n", tostring(k), tostring(v))
+--end
+--print_obj(qcd)
+--os.exit(1)
+
+cur_timer = timer("gauge_read")
+printf("read gauge '%s'\n", get_gauge_file(cfg_key))
+gauge_u = qcd.nersc.read_gauge(L, get_gauge_file(cfg_key))
+print_gauge_norm_det(gauge_u, "gauge_u")
+print_gauge_plaquette(gauge_u, "gauge_u")
+
+
+cur_timer("done")
+
+-- gauge field for source construction
+gauge_u_ape = APE_smear(gauge_u, ape_alpha, ape_N, ape_accu, ape_maxiter, t_axis)
+print_gauge_norm_det(gauge_u_ape, "gauge_u_ape")
+print_gauge_plaquette(gauge_u_ape, "gauge_u_ape")
+
+-- gauge field for solver
+gauge_u_hyp = gauge_hyp_smear_std(gauge_u, 1)
+print_gauge_norm_det(gauge_u_hyp, "gauge_u_hyp")
+print_gauge_plaquette(gauge_u_hyp, "gauge_u_hyp")
+  
+--for mq_tag, mq_l in pairs(mq_list) 
+do  -- main part
+  -- init QOP-MG
+  cur_timer = timer("init_mg")
+  local kappa_l = 1./2./(4. + mq_l)
+  local mg_param = make_mg_params(
+      kappa_l, c_sw, ferm_bc, 
+      mg_tol_approx, mg_maxiter, latsize, 
+      mg_param_null,
+      { name = "mg", verbose = 3 })
+  print_obj(mg_param, "mg_param")
+  local mg = nil
+  if not contract_only then mg = qcd.qop.WilsonMG(gauge_u_hyp, mg_param) end
+  cur_timer("done")
+
+  -- smear param scan loop
+  for wup_tag, wup_param in pairs(wup_param_list) do
+    local sample_tag = string.format("%s_%s", mq_tag, wup_tag)
+    local sample_timer = timer(string.format("scan %s", sample_tag))
+    local wup_alpha, wup_N = unpack(wup_param) 
+    local function smear_func_wup(x) 
+      -- reqiures global wup_a, wup_n, wup_gauge_u, t_axis
+      return wuppertal_smear(gauge_u_ape, wup_alpha, wup_N, x, t_axis)
+    end
+    -- ama loop
+    for i_ama, ama in pairs(ama_list) do
+      -- stamp to discriminate different qmass, ...
+      -- solver func for given AMA mode (note the normalization)
+      local calc_prop = function()end
+      if not contract_only then calc_prop = make_mg_solver(mg, ama, 2 * kappa_l) end
+      cur_timer = timer(string.format('AMA="%s", #src=%d', ama['approx'], #(ama['csrc_list'])))
+
+      -- csrc scan loop
+      for i_csrc, csrc in ipairs(ama['csrc_list']) do
+        sample_hadspec(
+          L, cfg_key, csrc, ama, sample_tag,
+          hadspec_psnk_list, 
+          smear_func_wup, calc_prop, 
+          t_axis, ferm_bc, 
+          true)
+
+      end
+      cur_timer("done")
+    end
+    sample_timer("done")
+  end
+  if not contract_only then mg:close() end
+  mg = nil
+end
+
+tot_timer("done")
+printf("QLUA_RUN_SUCCESS\n")

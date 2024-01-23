@@ -1,0 +1,207 @@
+-- compute & save eigenvectors
+-- 1. Run poly-accelerated Lanczos to convergence
+-- 2. Save eigenvectors
+-- 3. Compute & save 1 exact, 1 sloppy inversion on a gaussian source
+
+require "gauge"
+require "ape-smear"
+require "stdlib"
+require "lhpc-std"
+require "qdpc_io"
+require "latvec"
+require "defl_util"
+require "setup_util"
+require "mdwf_eopc"
+
+tot_timer = timer("total")
+-------------------------------------------------------------------------------
+-- SETUP
+-------------------------------------------------------------------------------
+--L = qcd.lattice(latsize, {network=network_geom})
+print_network_settings()
+print_subgrid_settings(L)
+
+if nil == job_key then 
+  error("nil job_key")
+  os.exit(1)
+end
+cfg_key = job_key
+
+rnd = rnd_init(L, rnd_seed)
+
+-- load & smear gauge
+cur_timer = timer("gauge_read")
+--printf("[read-gauge] '%s'\n", get_gauge_file(cfg_key))
+--gauge_u = qcd.nersc.read_gauge(L, get_gauge_file(cfg_key))
+cur_timer("done")
+
+-- construct Moebius obj
+mdwf = qcd.MDWF.generic(gauge_u, ferm_bc, 
+    mdwf_L5, mdwf_M5, mdwf_mf, mdwf_b5, mdwf_c5, mdwf_opt)
+
+-------------------------------------------------------------------------------
+-- EIGENVECTOR CALCULATION
+-------------------------------------------------------------------------------
+-- run Lanczos
+l_timer = timer("deflator_lanczos")
+mdwf_eigcg_df, lanczos_nconv, lanczos_niter = mdwf:eig_deflator_lanczos(
+      l_nev, l_ncv, l_maxiter, l_tol,
+      { ["eigcg"] = {eigcg_vmax, eigcg_nev, eigcg_tol, eigcg_umax},
+--        ["cheb_accel"] = { l_poly_n, l_poly_a, l_poly_b, l_poly_x0 },
+        ["cheb_accel"] = { l_poly_n, l_poly_a, l_poly_b },
+        ["which"] = "LR", -- need the largest ev of polynomial T_n(A)
+        ["arpack_logfile"] = arpack_logfile(cfg_key),
+        ["inplace"] = true
+        })
+l_timer("done")
+printf("df_lanczos: nconv=%d  n_iter=%d\n", lanczos_nconv, lanczos_niter)
+
+-- print evalues
+do
+  local df_dim = mdwf_eigcg_df:current_dim()
+  local evals = mdwf_eigcg_df:eigenvalues()
+  for i=0, #evals - 1 do
+    printf("eval[%04d]=%e\n", i, evals[i])
+  end
+end
+
+
+-------------------------------------------------------------------------------
+-- EIGENVECTOR WRITE
+-------------------------------------------------------------------------------
+-- save evectors
+--if true then
+if false then
+  df_dim = mdwf_eigcg_df:current_dim()
+  local evecs_perm = mdwf_evec_file(cfg_key, df_dim)
+  local evecs_scratch = mdwf_evec_file_scratch(cfg_key, df_dim)
+
+  cur_timer = timer("deflator_space_save")
+  printf("[evec_save] %s\n", evecs_scratch)
+--  os.execute(string.format('mkdir -p %s', dirname(evecs_scratch))) -- does not work on Hokusai in batch (out of memory)
+  os.mkdir_path(dirname(evecs_scratch))
+  mdwf_eigcg_df:evecs_rawdump(evecs_scratch, df_dim, 
+          {rank_stride=evec_rawdump_stride})
+  cur_timer("done")
+
+  if evecs_scratch ~= evecs_perm then
+    cur_timer = timer("evecs_rawdump_sync")
+    printf("evecs_rawdump_sync: '%s' -> '%s'\n", evecs_scratch, evecs_perm)
+    evecs_rawdump_sync(evecs_scratch, evecs_perm, evec_rawdump_stride)
+    cur_timer("done")
+  end
+else
+  df_dim = mdwf_eigcg_df:current_dim()
+  local evecs_perm = mdwf_evec_file(cfg_key, df_dim)
+  local evecs_scratch = mdwf_evec_file_scratch(cfg_key, df_dim)
+
+  cur_timer = timer("deflator_space_save")
+  printf("[evec_save] %s\n", evecs_scratch)
+  os.mkdir_path(dirname(evecs_scratch))
+  local qdp_w = open_qdpc_write(L, evecs_scratch, "", 
+          evec_volfmt, {rank_stride=evec_qio_stride})
+  local df_save_dim = deflator_save_espace_d5(
+                  mdwf_eigcg_df, mdwf_L5, qdp_w,
+                  evec_pack_eopc, evec_qio_prec)
+  printf("df_dim=%d  df_save_dim=%d\n", df_dim, df_save_dim)
+  qdp_w:close()
+  cur_timer("done")
+
+  if evecs_scratch ~= evecs_perm then
+    printf("ERROR syncing QIO PARTFILE is not implemented\n")
+    error("ERROR syncing QIO PARTFILE is not implemented\n")
+  end 
+end
+
+
+-------------------------------------------------------------------------------
+-- EIGENVALUE CHECK
+-------------------------------------------------------------------------------
+cur_timer = timer("check_eval")
+do
+  df_dim = mdwf_eigcg_df:current_dim()
+  evals = mdwf_eigcg_df:eigenvalues()
+  printf("#evals=%d  df_dim=%d\n", #evals, df_dim)
+
+  local gauge_u_bc = latvec.copy(gauge_u)
+  gauge_apply_boundary(gauge_u_bc, ferm_bc)
+  function m_eopc_gold(x, is_dag)
+    return mdwf_eopc_sym2(x, gauge_u_bc, mdwf_M5, mdwf_mf, mdwf_b5, mdwf_c5, is_dag)
+  end
+  function mxm_gold(x)
+    return m_eopc_gold(m_eopc_gold(x, false), true)
+  end
+  evec_vdAv = {}
+  for i = 0, df_dim - 1 do 
+    local v   = mdwf_eigcg_df:get_vector(i)
+    local Av  = mxm_gold(v)
+    evec_vdAv[1+i] = latvec.vdot(v, Av):real() / latvec.norm2(v)
+    latvec.print_cmp(Av, v, string.format("Av<->v [%04d]", i))
+--    printf("evec_vdAv[%04d]=%21.13e\n", i, evec_vdAv[1+i])
+    v, Av = nil, nil
+    force_gc()
+  end
+
+  local function rdiff(a,b)
+    return math.abs(a-b)*2 / math.abs(a+b)
+  end
+
+  for i=0, #evals - 1 do
+    local j = i
+    local ev1 = evals[j]
+    local ev2 = evec_vdAv[1+i]
+    printf("eval[%04d]=%e  vdAv[%04d]=%e  %e\n",
+           j, ev1, i, ev2, rdiff(ev1, ev2))
+  end
+end
+cur_timer("done")
+
+
+-------------------------------------------------------------------------------
+-- TEST INVERSIONS
+-------------------------------------------------------------------------------
+cur_timer = timer("gauge_smear")
+gauge_u_ape = APE_smear(gauge_u, ape_alpha, ape_N, ape_accu, ape_maxiter, t_axis)
+cur_timer("done")
+-- gen source
+cur_timer = timer("make_source")
+test_src = make_source(gauge_u_ape, test_src_coord, wup_alpha, wup_N, t_axis)
+cur_timer("done")
+
+-- compute sol(sloppy)
+mdwf_solver_sloppy  = mdwf_eigcg_df:mixed_solver(
+                        mixcg_tol1^2, mixcg_maxiter1,
+                        mixcg_tol_sloppy^2, mixcg_maxiter_sloppy)
+cur_timer = timer(string.format("prop_sloppy_inv(eps^2=%e)", mixcg_tol_sloppy))
+test_sol_sloppy = mdwf_solver_sloppy(test_src, true, true)
+cur_timer("done")
+
+-- save src + sol(sloppy)
+--cur_timer = timer("prop_sloppy_save")
+--qcd.ddpairs.write(
+--    "double", frw_prop_file_sloppy(cfg_key, test_src_coord),
+--    "<file_info>EMPTY</file_info>",
+--    test_src, "<src_info>EMPTY</src_info>", test_src_coord[1+t_axis],
+--    test_sol_sloppy, "<prop_info>EMPTY</prop_info>", prop_volfmt)
+--cur_timer("done")
+
+
+-- compute sol(exact)
+mdwf_solver_exact   = mdwf_eigcg_df:mixed_solver(
+                        mixcg_tol1^2, mixcg_maxiter1,
+                        mixcg_tol_exact^2, mixcg_maxiter_exact)
+cur_timer = timer(string.format("prop_exact_inv(eps^2=%e)", mixcg_tol_exact))
+test_sol_exact = mdwf_solver_exact(test_src, true, true)
+cur_timer("done")
+
+-- save src + sol(exact)
+--cur_timer = timer("prop_exact_save")
+--qcd.ddpairs.write(
+--    "double", frw_prop_file_exact(cfg_key, test_src_coord),
+--    "<file_info>EMPTY</file_info>",
+--    test_src, "<src_info>EMPTY</src_info>", test_src_coord[1+t_axis],
+--    test_sol_exact, "<prop_info>EMPTY</prop_info>", prop_volfmt)
+--cur_timer("done")
+
+tot_timer("done")
+printf("QLUA_RUN_SUCCESS\n")

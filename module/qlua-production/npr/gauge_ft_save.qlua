@@ -1,0 +1,112 @@
+-- Fourier-transform gauge links and cut out central Brillouin zone 
+
+package.path = package.path .. ';qlib/?.qlua;qlib-lhpc/?.qlua'
+require "strict"
+require "gaugefix"
+require "stdlib"
+require "lhpc-std"
+require "qdpc_io"
+
+-- move to latvol
+function subvol_scatter(L_src, c0_src, L_dst, c0_dst)
+  -- make int map for scatter: x_dst[s] = x_src[map[s]] so that
+  --   select 'scatter' selects contig.subvol [ c0_src; (c0_src + L_dst)%L_dst )
+  --   and copies it to [c0_dst ; (c0_dst + L_dst)%L_dst ) range on x_dst
+  --   (discontinuity may appear ONLY at c0_dst)
+  -- XXX in all dim, L_dst <= L_src
+  local ndim = #L_src
+  assert (#c0_src == ndim)
+  assert (#L_dst == ndim)
+  assert (#c0_dst == ndim)
+  local sc_map = {}
+  for mu = 0, ndim - 1 do
+    local i = L_dst:pcoord(mu)
+    sc_map[1+mu] = ( (L_dst:pcoord(mu) + L_dst[mu] - c0_dst[1+mu])
+                      % L_dst[mu] + c0_src[1+mu]) % L_src[mu]
+  end
+  return qcd.scatter(L_dst, L_src, sc_map)
+end
+
+
+tot_timer = timer("total")
+
+print_network_settings()
+L = qcd.lattice(latsize, {network=network_geom})
+Lout = qcd.lattice(latsize_out, {network=network_geom})
+print_subgrid_settings(L)
+
+c0_src = {}
+c0_dst = {}
+for mu = 0, #L - 1 do
+  local pmax = math.floor(Lout[mu] / 2)
+  c0_src[1+mu] = L[mu] - pmax -- select range [-pmax; pmax)
+  c0_dst[1+mu] = Lout[mu] - pmax -- and put it into [-pmax ; pmax) ({0} -> {0})
+end
+select_subvol = subvol_scatter(L, c0_src, Lout, c0_dst)
+
+
+
+function do_gauge_ft(cfg_key, csrc)
+  -- NOTE in FT, assume that U_{x,\mu} resides at point x for consistency 
+  -- with scalar fields; to get correct results, multiply FT'ed fields by 
+  -- appropriate phase to "shift" links x -> (x+\hat\mu/2)
+  -- NOTE when working with twisted momenta make sure that 
+  -- the wave number changes in [-pi,pi) interval to avoid discontinuity at zero momentum 
+  local cur_timer
+
+  cur_timer = timer("load gauge")
+  local u   = qcd.nersc.read_gauge(L, get_gauge_file(cfg_key))
+  cur_timer("done")
+
+  cur_timer = timer("load colmat landaufix")
+  local gfix_cm, finfo, rinfo = load_qdpc_colmat(L, get_colmat_landaufix_file(cfg_key))
+  cur_timer("done")
+
+  local a_glue_ft_out = {}
+
+  cur_timer = timer("gauge transf and FT")
+  local csrc_phase  = L:planewave({0,0,0,0}, csrc):conj() -- [k]=exp(-2*pi*i* k.{csrc / L))
+  local twist_phase = L:planewave(csrc, gauge_twist) -- [y]=exp(+2*pi*i* twist.{(y - csrc)/L})
+
+  for mu = 0, #L - 1 do
+    -- transform to Landau gauge
+    local u_gf_mu = gauge_transform_U_dir(gfix_cm, u[1+mu], mu)
+    -- calc gluon matr
+    local x = (u_gf_mu - u_gf_mu:adjoin()) / complex(0,2)
+    x = x - L:ColorMatrix(1./x:colors()) * x:trace()
+    -- Fourier transf 
+    x = qcd.fourier_transf(x * twist_phase, 1) * csrc_phase
+    -- additional factor exp(i p_mu / 2) because the potential A_{x,mu} 
+    -- refers to the center of the link x->x+mu , factor[k] = exp(+pi*i*k/L)
+    -- XXX commented out becase half-integer coord adjustments are done in Python
+    --local phalf_mu = (L:Real(L:pcoord(mu)) + gauge_twist[1+mu]) * math.pi / L[mu]
+    --x = x * L:Complex(L:Real(0), phalf_mu):exp()
+    a_glue_ft_out[1+mu] = select_subvol(x) 
+  end
+  cur_timer("done")
+  
+  cur_timer = timer("save gauge ft")
+  local gauge_ft_name = get_gauge_ft_file(cfg_key)
+  printf("write[gauge_ft]: %s\n", gauge_ft_name)
+  local h5_w = qcd.hdf5.Writer(gauge_ft_name, {method="phdf5"})
+  for mu = 0, #L - 1 do
+    local kpath = string.format('/gauge_ft/dir_%d', mu)
+    h5_w:remove(kpath)
+    h5_w:flush()
+    h5_w:write(kpath, a_glue_ft_out[1+mu], {lattice=Lout, sha256="ignore", precision="double"})
+    h5_w:flush()
+  end
+  h5_w:close()
+  cur_timer("done")
+end
+
+assert(job_key)
+--cfg_key = job_key
+--do_gauge_ft(cfg_key, gauge_ft_csrc)
+
+for i=1,#cfg_key_list do
+  do_gauge_ft(cfg_key_list[i], gauge_ft_csrc)
+  printf("cfg='%s' done\n", cfg_key_list[i])
+end
+
+tot_timer("done")

@@ -1,0 +1,19 @@
+require 'rcparam'
+
+---- stubg for run control params table
+--rcparams = rawget(_G, '_rcParam') or rawget(_G, 'rcparams') or {}
+--
+---- * default parameters: all done on CPU (no special backend)
+---- * generally, parameters should take effect when the top-level 
+----   function is called (eg wup.smearing calling laplacian)
+---- * suggested format for backending: <arch>-<lib>-<version>
+----   arch = cpu|gpu|etc
+----   lib  = arch-specific library
+----   version = mg|etc
+--rcparams.backend = rcparams.backend or {
+--  laplacian     = 'cpu',  -- 'cpu' | 'cpu-clover-lib' | 'gpu-quda'
+--  dslash_solver = 'cpu',  -- 'cpu' | 'gpu-quda'
+--  qbarq         = 'cpu',  -- 'cpu' | 'gpu-quda'
+--}
+--  
+--function contract_backend() return rcparams.backend.qbarq end

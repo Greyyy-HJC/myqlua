@@ -1,0 +1,180 @@
+package.path = 'qlib/?.qlua;qlib-lhpc/?.qlua;qlua-production/?.qlua;' .. package.path
+require 'strict'
+require 'setup_util'
+require 'latvec'
+require 'stdlib'
+
+-- XXX NOTES
+-- * compute pion 2pt functions for the entire time extent (without the coherent trick)
+-- * before running, make sure that directories and links are set
+--   $ mkdir data/hadspec data_pdir/{frw_prop,prop_log}
+--   qlib -> $QLUADIR/qlib 
+--   qlib-lhpc -> $QLUADIR/lhpc
+--   file 'cfg.list.all' : permanent list of configurations (all, not only the ones analyzed) 
+--     : it is used to compute the source grid displacements on every lattice
+
+-------------------------------------------------------------------------------
+-- general
+-------------------------------------------------------------------------------
+assert(job_key)
+cfg_key = job_key -- job# enumerates config#
+
+latsize   = {48,48,48,64}
+t_axis    = #latsize - 1
+rnd_seed  = 1984
+
+
+-------------------------------------------------------------------------------
+-- quark action
+-------------------------------------------------------------------------------
+-- TODO add gauge smearing params
+-- * fermion params
+ferm_bc = {1,1,1,-1}
+c_sw    = 1.0336    -- tadpole 1./u_0^(3/4) using uplaq=0.95689
+mq_tag, mq_l = "m300mev", -0.038888 -- Luchang's temp choice
+
+-- * QOP-MG parameters
+require 'mg_param'
+mg_tol_approx = 1e-4
+mg_maxiter  = 200
+mg_param_null = {    
+    blocking      = { {3,3,3,2}, {2,2,2,2} },
+    verbose       = {        3,         3  }, 
+    null_vecs     = {       24,        24  },
+    null_vecs_extra={        0,         0  },
+    prehits       = {        0,         0  },
+    posthits      = {        4,         4  },
+    underrelax    = {       1.,        1.  },
+    null_maxiter  = {       20,        20  },
+    null_res      = {      0.4,       0.4  },
+    null_conv     = {      0.8,       0.8  },
+                                           
+    coarse_res    = {      0.1,       0.1  },
+    coarse_maxiter= {       12,        12  },
+    coarse_ngcr   = {        8,         8  },
+}
+
+function make_mg_solver(mg, ama, scale)
+  scale = scale or 1.
+  if ama['approx'] == 'exact' or ama['approx'] == 'sloppy' then
+    return make_solver_general(function(x)
+      return (scale * mg:solve(x, {residual = {rsqmin = ama['tol']^2}}))
+    end)
+  else
+    error(string.format("unknown ama='%s'", ama['approx']))
+  end
+end
+
+-------------------------------------------------------------------------------
+-- source smearing
+-------------------------------------------------------------------------------
+ape_alpha   = 2.85
+ape_N       = 25
+ape_accu    = 1e-12
+ape_maxiter = 150
+wup_param_list = {
+  ["G2.5x140"]= { 2.5, 140 },
+  ["G2.5x200"]= { 2.5, 200 },
+}
+
+
+-------------------------------------------------------------------------------
+-- correlator parameters
+-------------------------------------------------------------------------------
+hadspec_psnk_list = make_mom_list(10)
+hadspec_baryon_list = { "proton_1", "proton_3", "proton_4" }
+hadspec_meson_list = { "a0_1", "a0_2", "pion_1", "pion_2" }
+
+
+do
+  -- * sample coordinates
+  local cfg_list = {}
+  for s in io.lines('list.cfg.all.48c64') do
+    cfg_list[1+#cfg_list] = s
+  end
+  local cfg_index = table_index(cfg_list, cfg_key)
+  printf("cfg_key='%s' index=%d\n", cfg_key, cfg_index)
+  local csrcgrid  = { 2, 2, 2, 4 }
+  local x0_1= { 0, 0, 0, 0 }
+  local dx_g= { 7,11,13,23 }
+  local sloppy_csrc_list = make_src_grid(csrcgrid, latsize, x0_1, dx_g, cfg_index)
+
+  -- * approx modes
+  ama_list = {
+    { approx    = 'exact',
+      csrc_list = { sloppy_csrc_list[1] }, 
+      tol       = 1e-9,
+      prop_prec = 'double' },
+    { approx    = 'sloppy',
+      csrc_list = sloppy_csrc_list,
+      tol       = 1e-4,
+      prop_prec = 'float' }
+    }
+end
+
+------------------------------------------------------------------------------
+-- gauge fixing
+------------------------------------------------------------------------------
+gfix_param = {
+  tol     = 1e-8,
+  maxiter = 1000,
+  tol_switch_fletcher = 1e-8, 
+}
+
+------------------------------------------------------------------------------
+-- file locations
+------------------------------------------------------------------------------
+ens_top   = '.'
+data_top  = 'data' 
+data_pdir = 'data_pdir'
+
+prop_qio_stride   = 1
+prop_qio_volfmt   = 'part_dir'
+
+function csrc_str(csrc)
+  return string.format("x%dy%dz%dt%d", csrc[1], csrc[2], csrc[3], csrc[4])
+end
+function snk_str(psnk, tsnk)
+  return string.format("PX%dPY%dPZ%dT%d", psnk[1], psnk[2], psnk[3], tsnk)
+end
+-- AMA-dependent output file names
+function ama_str(ama)
+  if 'exact' == ama['approx'] then
+    return string.format("ex")
+  elseif 'sloppy' == ama['approx'] then
+    return string.format("sl")
+  else
+    error(string.format('unknown ama="%s"', ama['approx']))
+  end
+end
+
+-- gauge file(s)
+function get_gauge_file(key)
+  return string.format("%s/gauge/l4864f21b7373m00125m0250a.%s",
+          ens_top, key)
+end
+function get_gauge_gfix_file(key, gfix_type)
+  return string.format("%s/gauge_gfix/ckpoint_lat.%s.%s",
+          data_top, gfix_type, key)
+end
+function get_colmat_gfix_file(key, gfix_type)
+  return string.format("%s/colmat_gfix/colmat_gfix.%s.%s",
+          data_top, gfix_type, key)
+end
+
+-- propagators
+function get_prop_log_file(cfg_key, prop_kind) 
+  return string.format("%s/prop_log/%s.%s",  
+          data_pdir, cfg_key, prop_kind) 
+end
+function get_frwprop_file_tag(key, csrc, ama, sample_tag)
+  return string.format("%s/frw_prop/frw_prop.%s.%s.%s.%s.lime", 
+          data_pdir, key, ama_str(ama), sample_tag, csrc_str(csrc))
+end
+
+-- data output
+function get_hadspec_file_tag(key, csrc, ama, sample_tag)
+  return string.format('%s/hadspec/hadspec.%s.%s.%s.%s.aff',
+          data_top, cfg_key, ama_str(ama), sample_tag, csrc_str(csrc))
+end
+

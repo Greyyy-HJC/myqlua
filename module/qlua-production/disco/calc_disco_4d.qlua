@@ -1,0 +1,240 @@
+package.path = 'qlib/?.qlua;qlib-lhpc/?.qlua;qlua-production/?.qlua;' .. package.path
+require 'strict'
+require 'stdlib'
+require 'gauge'
+require 'latvec'
+require 'rcparam'
+require 'hadron/qbarq_wline'
+require 'qdpc_io'
+
+------------------------------------------------------------------------------
+-- INITIALIZATION: 
+--  import config(which reads gauge, evecs, sets up ama, make_solver)
+------------------------------------------------------------------------------
+if true then
+--if false then
+  -- perhaps use a list of keys to check that all names have been defined?
+  -- check `k' ~= nil ! otherwise, _G[k] will be set to nil, avoiding 'strict'
+  for k,v in pairs(job_config) do   
+    assert('string' == type(k))
+    if nil == v then 
+      printf("WARNING: job_config.%s = nil\n", k) 
+    end
+    _G[k] = v
+  end
+end
+
+function debug_mem_print(cfg_key, msg)
+  msg = msg or ""
+  os.mkdir_path('logs')
+  if 0 == os.node() then qcd.log_rusage(string.format("%s/%s.rusage", logdir, cfg_key), msg) end
+  print_obj(qcd.memory_usage(), msg)
+end
+
+------------------------------------------------------------------------------
+-- BENCHMARKS
+------------------------------------------------------------------------------
+-- la benchmark
+--if preptest.bmark_la then
+--  for i, la_pp in pairs({
+--          { "gemm", "c",   300,    300,    300 },
+--          { "gemm", "z",   300,    300,    300 },
+-- --         { "gemm", "c",  1000,   1000,   1000 },
+-- --         { "gemm", "z",  1000,   1000,   1000 },
+--  --        { "gemm", "c",  3000,   3000,   3000 },
+--  --        { "gemm", "z",  3000,   3000,   3000 },
+--        }) do
+--    local bm, pd, m,n,k = unpack(la_pp)
+--    local cur_str = string.format("la_benchmark %2s %6s  %6d %6d %6d", bm, pd, m, n, k)
+--    printf("%s\n", cur_str)
+--    local cur_t = timer(cur_str)
+--    qcd.latmat.la_benchmark(bm, pd, m, n, k)
+--    cur_t("done")
+--  end
+--end
+
+
+require 'disco/sample_disco_4d'
+
+function disco_save_qio(L, fname, d)
+  local tt = timer('disco_save_qio')
+
+  local kk_d = {}
+  for k, dk in pairs(d) do list_append(kk_d, k) end
+  table.sort(kk_d)
+  printf("disco_save_qio:keys={%s}\n", list_tostring(kk_d))
+
+  printf("save disco to '%s'\n", fname)
+  os.mkdir_path(dirname(fname))
+  local qio_w = open_qdpc_write(L, fname, "", disco_qio_volfmt, 
+      { rank_stride=disco_qio_stride })
+  
+  for i_k, k in ipairs(kk_d) do
+    printf("k='%s'\n", k)
+    print_obj(d[k], string.format("d[%s]", k))
+    qio_w:Complex(disco_save_prec, d[k], k)
+  end
+
+  qio_w:close()
+  tt('done')
+end
+
+
+do 
+  debug_mem_print(cfg_key, '1')
+  -- dslash to init deflation vecs
+  local gauge_u_stout_bc = gauge_copy(gauge_u_stout)
+  gauge_apply_boundary(gauge_u_stout_bc, quark_bc)
+  local gauge_stout_clover_g = gauge_clover_all(gauge_u_stout)
+
+  local cl_obj = qcd.Clover(gauge_u_stout, quark_kappa, quark_csw, quark_bc)
+  local op_dslash = function(x) 
+    local tt  = timer('op_dslash')
+    -- XXX mass norm
+--    local res = latvec.dslash_wilson_clover(x, gauge_u_stout_bc, quark_mass, quark_csw, gauge_stout_clover_g)
+    local res = cl_obj:D(x) / (2. * quark_kappa)
+    tt('done')
+    return res
+  end
+
+  -- contraction
+  local gauge_u_lpath_bc = gauge_u_stout_bc
+  local ctrFB_func_bb = function(prop_F, prop_B)
+    local tt = timer('ctrFB_func_bb')
+    local res = disco.bb_contract_FB(prop_F, prop_B, gauge_u_lpath_bc, bb_lpath_list)
+    tt('done')
+    return res
+  end
+  -- contraction test
+  if false then  
+    local prop_F = rnd:gaussian_DiracPropagator()   ; tt('1')
+    local prop_B = rnd:gaussian_DiracPropagator()   ; tt('2')
+    for i=1, 20 do
+      local tt = timer('rnd prop')
+      local ctr_res = ctrFB_func_bb(prop_F, prop_B)   ; tt('done')
+    end
+  end
+  debug_mem_print(cfg_key, '2')
+
+  -- read evecs and compute their contribution
+  local defl_qlm_dxd = qcd.latmat.create(L, 'lattice.dirac.fermion', defl_nvec, 
+      {prec=defl_prec})
+  local disco_defl = nil
+  do
+    local tt_tag = "disco:evec"
+    local tt = timer(tt_tag)
+    local evec_file = get_evec_file(cfg_key)
+    local eval_file = get_eval_file(cfg_key)
+    printf("read evec_file='%s'  eval_file='%s'\n", evec_file, eval_file)
+    io.stdout:flush()
+    local epair_iter = disco.epair_read_qio_txt_iter(L, evec_file, eval_file, {nvec=defl_nvec})
+
+    disco_defl = disco.init_probing_qloop_wilson4d_defl(
+        defl_qlm_dxd, ctrFB_func_bb, epair_iter, op_dslash,
+        {VERBOSE=true})
+    print_obj(disco_defl, 'disco_defl')
+
+    -- save disco_hp_tot+disco_defl
+    local disco_fname = get_disco_file(cfg_key, quark_flav, "defl")
+    disco_save_qio(L, disco_fname, disco_defl)
+
+    epair_iter = nil
+    force_gc()
+    print_obj(qcd.memory_usage())
+
+    tt('done')
+    job_config.job_timer(tt_tag)
+  end
+  debug_mem_print(cfg_key, '3')
+
+  -- random vec
+  local probvec_z0 = L:Complex(complex(1,0))
+  L:Subset(qcd.lt(S:gaussian_Real(), 0)):where(function() probvec_z0:set(-1. * probvec_z0) end)
+  L:Subset(qcd.lt(S:gaussian_Real(), 0)):where(function() probvec_z0:set(complex(0,1)*probvec_z0) end)
+  disco_save_qio(L, get_disco_file(cfg_key, quark_flav, "z0"), {z0=probvec_z0})
+  debug_mem_print(cfg_key, '4')
+
+  -- iterate over AMA
+  for i_ama, ama in ipairs(ama_list) do
+    -- init & check solver (must be mass norm)
+    local solver_func = make_solver(ama)
+    do
+      local df_rhs = rnd:gaussian_DiracFermion()
+      local df_sol = solver_func(df_rhs)
+      local df_rhs2= op_dslash(df_sol)
+      latvec.print_cmp(df_rhs2, df_rhs, "x<>Dshash(solve(x))")
+      assert(math.abs(df_rhs2:norm2() / df_rhs:norm2() - 1.) < 10 * ama.tol
+          or 'random' == rcparam.get('backend.dslash_solver'))
+    end
+
+    -- need to compensate for div.factor due to color-spin dilution in disco.run_probing_qloop_wilson4d_defl
+    local Ncs = 3*4  
+
+    -- iterate over hp_stops
+    local n_hp_start = 0
+    local n_hp = n_hp_start
+    local disco_hp_tot = nil
+    local n_probvec_tot = 0
+
+    debug_mem_print(cfg_key, '5')
+    for i_hp_stop, n_hp_stop in ipairs(ama.hp_stops) do
+      local tt_tag = string.format("disco:%s[%d..%d)", strkey.ama_str(ama), n_hp, n_hp_stop)
+      local tt = timer(tt_tag)
+      assert(n_hp < n_hp_stop)
+      
+      -- iterator+counter for probing vectors
+      local probvec_iter = disco.dilute_colspin_latdirferm_iter(L, probvec_z0, 
+          disco.hierprobvec_latreal_iter(L, n_hp, n_hp_stop))
+      local cnt_probvec = 0
+      local probvec_iter_cnt = function()
+        local x = probvec_iter()
+        if nil ~= x then cnt_probvec = cnt_probvec + 1 end
+        return x
+      end
+
+      local disco_hp = disco.run_probing_qloop_wilson4d_defl(
+          defl_qlm_dxd, ctrFB_func_bb, probvec_iter_cnt, solver_func, 
+          {VERBOSE=true, defl_nbatch=defl_nbatch})
+      printf("calc_disco_4d: vectors:  counted=%d  expected=%d\n", 
+          cnt_probvec, Ncs * (n_hp_stop - n_hp))
+      assert(Ncs * (n_hp_stop - n_hp) == cnt_probvec)
+      debug_mem_print(cfg_key, '6')
+
+      -- total contribution from hierprobvec (no defl.vector contribution in disco_hp_tot)
+      if nil == disco_hp_tot then disco_hp_tot = disco_hp
+      else disco_hp_tot = disco.table_axpby(1, disco_hp, 1, disco_hp_tot) end
+      n_probvec_tot = n_probvec_tot + cnt_probvec
+      debug_mem_print(cfg_key, '7')
+
+      -- total defl+probvec; disco_hp_tot must be divided by the number of HP vectors 
+      local disco_defl_hp = disco.table_axpby(1, disco_defl, Ncs / n_probvec_tot, disco_hp_tot)
+      debug_mem_print(cfg_key, '8')
+
+      -- save disco_hp_tot+disco_defl
+      local disco_fname = get_disco_file(cfg_key, quark_flav, 
+          string.format("defl_hp%dn%d_%s", n_hp_start, n_hp_stop, strkey.ama_str(ama)))
+      disco_save_qio(L, disco_fname, disco_defl_hp)
+
+      n_hp = n_hp_stop
+
+      probvec_iter  = nil   ; probvec_iter_cnt  = nil
+      disco_hp      = nil   ; disco_defl_hp     = nil
+      force_gc()
+      print_obj(qcd.memory_usage())
+      debug_mem_print(cfg_key, '9')
+
+      tt('done')
+      job_config.job_timer(tt_tag)
+    end -- hp_stops
+
+    solver_func = nil
+    force_gc()
+    print_obj(qcd.memory_usage())
+    debug_mem_print(cfg_key, '10')
+  end -- AMA
+end
+debug_mem_print(cfg_key, '11')
+
+qcd.qprof_print()
+job_config.job_timer('done')
+printf("QLUA_RUN_SUCCESS\n")

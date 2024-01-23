@@ -1,0 +1,199 @@
+-- full pdecay calculation:
+--  * propagators :
+--    prop_F prop_B prop_B
+--  ** c2pt : prop_F^3 
+--  ** bb : prop_F*prop_F*prop_B
+
+
+package.path = 'qlua-production/?.qlua;qlib-lhpc/?.qlua;qlib/?.qlua;' .. package.path
+require "strict"    -- catch all undefined (nil) variables
+require "stdlib"    -- standard printf, etc
+require "lhpc-std"  -- make_source, etc
+require "ape-smear" -- gauge smear
+require "gauge"
+require "qdpc_io"
+require "setup_util"
+require "latvec"
+
+require "hadspec"
+require "hex-smear"
+require "madwf_sns"
+
+require "hadron/baryon_corr"
+require "pdecay/pdecay_ops"
+require "util/geom"
+
+require 'dwf'
+require 'dwf_split'
+
+tot_timer = timer("total")
+
+printf("init _grid.zmobius_solver\n")
+tt = timer('_grid.init')  ; _grid.init(L, {verbose=true, log='Error,Warning,Message,Iterative'})   ; tt('done')
+--tt = timer('_grid.init')  ; _grid.init(L, {verbose=true, log='Error,Warning'})   ; tt('done')
+print_obj(_grid)
+printf("call _grid.zmobius_solver\n")
+
+
+
+-------------------------------------------------------------------------------
+-- new TEST
+function mk_dfN(mdwf_L5, nrhs)
+  local src_df5l = {}
+  for i = 1, nrhs do 
+    local src_df5 = {}
+    for s = 1, mdwf_L5 do src_df5[s] = rnd:gaussian_DiracFermion() end
+    src_df5l[i] = src_df5
+  end
+  return src_df5l
+end
+--print_obj(_G, "_G")
+function usualCG_test(solver, nrhs, opt)
+  opt = opt or {}
+  local src_df5l = opt.src or mk_dfN(mdwf_L5, nrhs)
+  local tt = timer('usualCG_test')
+  print_obj(src_df5l, "src_df5l")
+  tt('make_src')
+--  sol_df5l = grid_splitCG_solver(src_df5l)      ; tt('splitCG')
+  local sol_df5l = {}
+  for i, src in ipairs(src_df5l) do
+    sol_df5l[i] = solver(src)
+    tt('solve')
+  end
+  print_obj(sol_df5l, "sol_df5l")
+  
+  local gauge_u_bc = latvec.copy(gauge_u)
+  gauge_apply_bc(gauge_u_bc, ferm_bc)
+  for i, src in ipairs(src_df5l) do 
+    local Dsol_df5i = latvec.dslash_moebius(sol_df5l[i], gauge_u_bc, mdwf_M5, mdwf_mf, mdwf_b5, mdwf_c5)
+    tt('latvec_moebius')
+    latvec.print_cmp(Dsol_df5i, src, string.format("Dsol<>src[%d]", i))
+  end
+end
+
+function splitCG_test(solver, nrhs, opt)
+  local tt = timer('splitCG_test')
+  opt = opt or {}
+  local src_df5l = opt.src or mk_dfN(mdwf_L5, nrhs)
+  tt('make_src')
+  print_obj(src_df5l, "src_df5l")
+
+  local sol_df5l = solver(src_df5l)      ; tt('solve')
+  print_obj(sol_df5l, "sol_df5l")
+  
+  local gauge_u_bc = latvec.copy(gauge_u)
+  gauge_apply_bc(gauge_u_bc, ferm_bc)
+  for i, src in ipairs(src_df5l) do 
+    local Dsol_df5i = latvec.dslash_moebius(sol_df5l[i], gauge_u_bc, mdwf_M5, mdwf_mf, mdwf_b5, mdwf_c5)
+    tt('latvec_moebius')
+    latvec.print_cmp(Dsol_df5i, src, string.format("Dsol<>src[%d]", i))
+  end
+end
+
+
+test_tol            = 1e-5
+test_maxiter        = 10
+test_tol_restart    = 1e-4
+test_maxiter_restart= 5
+test_split_geom     = {1,1,1,2}
+test_nrhs           = 2
+function test_usual_solver(src)
+  return _grid.zmobius_solver(gauge_u, ferm_bc,
+      mdwf_L5, mdwf_M5, mdwf_mf, mdwf_b5, mdwf_c5,
+      test_tol, test_maxiter, src,
+      { pctype=mdwf_opt.pctype, parity=mdwf_opt.parity,
+        defl = {mdwf_qlmx, mdwf_eval},
+        tol_restart=test_tol_restart, maxiter_restart=test_maxiter_restart, verbose=1,})
+end
+function test_split_solver(src)
+  return _grid.split_solver(gauge_u, ferm_bc,
+      mdwf_L5, mdwf_M5, mdwf_mf, mdwf_b5, mdwf_c5,
+      test_tol, test_maxiter, src, test_split_geom,
+      { pctype=mdwf_opt.pctype, parity=mdwf_opt.parity,
+        defl = {mdwf_qlmx, mdwf_eval},
+        tol_restart=test_tol_restart, maxiter_restart=test_maxiter_restart, verbose=1,})
+end
+
+do -- GridState
+  local usual_state_solver = _grid.init_solver(gauge_u, ferm_bc, 
+      mdwf_L5, mdwf_M5, mdwf_mf, mdwf_b5, mdwf_c5, test_tol, test_maxiter,
+      { 
+        pctype=mdwf_opt.pctype, parity=mdwf_opt.parity,
+        -- no split
+        defl = {mdwf_qlmx, mdwf_eval},
+        tol_restart=test_tol_restart, maxiter_restart=test_maxiter_restart,
+        verbose=1,})
+
+  local split_state_solver = _grid.init_solver(gauge_u, ferm_bc, 
+      mdwf_L5, mdwf_M5, mdwf_mf, mdwf_b5, mdwf_c5, test_tol, test_maxiter,
+      { 
+        pctype=mdwf_opt.pctype, parity=mdwf_opt.parity,
+        split_geom=test_split_geom,
+        defl = {mdwf_qlmx, mdwf_eval}, 
+        tol_restart=test_tol_restart, maxiter_restart=test_maxiter_restart, 
+        verbose=1, 
+        })
+  
+  function test_usual_state_solver(src, ...)
+    return usual_state_solver:solve(src, ...)
+  end
+  function test_split_state_solver(srcl, ...)
+    return split_state_solver:solve(srcl, ...)
+  end
+
+  mdwf_splitsolver = make_split_calc_mdwf_prop(
+      split_state_solver:nrhs(), test_split_state_solver, 
+      gauge_u, ferm_bc, mdwf_L5, mdwf_M5, mdwf_b5, mdwf_c5)
+  mdwf_usualsolver = make_calc_mdwf_prop(
+      test_usual_state_solver, 
+      gauge_u, ferm_bc, mdwf_L5, mdwf_M5, mdwf_b5, mdwf_c5)
+end
+
+--if true then
+if false then  
+  local src = mk_dfN(mdwf_L5, test_nrhs)
+  usualCG_test(test_usual_solver, test_nrhs, {src=src})
+  splitCG_test(test_split_solver, test_nrhs, {src=src})
+  usualCG_test(test_usual_state_solver, test_nrhs, {src=src})
+  splitCG_test(test_split_state_solver, test_nrhs, {src=src})
+end
+-------------------------------------------------------------------------------
+--if true then
+if false then
+--if false then
+  local dpN = 2
+  local src_dpN = {}
+  for i=1, dpN do list_append(src_dpN, rnd:gaussian_DiracFermion()) end ; print_obj(src_dpN, 'src_dpN')
+--  for i=1, dpN do list_append(src_dpN, rnd:gaussian_DiracPropagator()) end ; print_obj(src_dpN, 'src_dpN')
+
+  local sol_dpN_usual = {} ; for i,v in ipairs(src_dpN) do sol_dpN_usual[i] = mdwf_usualsolver(src_dpN[i]) end ; print_obj(sol_dpN_usual, 'sol_dpN_usual')
+  local sol_dpN_split = mdwf_splitsolver(src_dpN)   ; print_obj(sol_dpN_split, 'sol_dpN_split')
+
+  latvec.print_cmp(sol_dpN_usual, sol_dpN_split, "sol_dpN_usual<>split")
+end
+
+-------------------------------------------------------------------------------
+-- XXX testing old-version solvers: state-less, single vs split
+if true then
+--if false then  
+  local src_dpN = mk_dfN(mdwf_L5, test_nrhs)
+  local sol_dpN_usual, sol_dpN_split
+
+  printf("|src_dpN|2=%e\n", latvec.norm2(src_dpN))
+  sol_dpN_usual = {} ; for i,v in ipairs(src_dpN) do sol_dpN_usual[i] = test_usual_solver(src_dpN[i]) end ; print_obj(sol_dpN_usual, 'sol_dpN_usual')
+  sol_dpN_split = test_split_solver(src_dpN)   ; print_obj(sol_dpN_split, 'sol_dpN_split')
+  latvec.print_cmp(sol_dpN_usual, sol_dpN_split, "sol_dpN_usual<>split")
+
+  printf("|src_dpN|2=%e\n", latvec.norm2(src_dpN))
+  sol_dpN_usual = {} ; for i,v in ipairs(src_dpN) do sol_dpN_usual[i] = test_usual_state_solver(src_dpN[i]) end ; print_obj(sol_dpN_usual, 'sol_dpN_usual_state')
+  sol_dpN_split = test_split_state_solver(src_dpN)   ; print_obj(sol_dpN_split, 'sol_dpN_split_state')
+  latvec.print_cmp(sol_dpN_usual, sol_dpN_split, "sol_dpN_usual<>split")
+end
+-------------------------------------------------------------------------------
+
+
+_grid.close()
+
+tot_timer("done")
+printf("QLUA_RUN_SUCCESS\n")
+-- vim : syn=lua

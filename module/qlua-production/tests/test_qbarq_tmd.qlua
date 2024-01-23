@@ -1,0 +1,243 @@
+package.path = 'qlib/?.qlua;qlib-lhpc/?.qlua;qlua-production/?.qlua;' .. package.path
+require 'stdlib'
+require 'lhpc-std'
+require 'setup_util'
+require 'latvec'
+require 'hadron/qbarq_wline'
+
+with_res    = true
+with_dev    = true
+with_host   = true
+with_check  = true
+
+-- use GPU mg solver
+rcparam.set('backend.dslash_solver', 'gpu-quda-mg')
+-- perform deflation on GPU using cublas(Xt)
+rcparam.set('backend.la', 'gpu-cublas')
+rcparam.set('backend.gpu_blockdim', 512)        
+-- perform contractions on GPU
+--rcparam.set('backend.qbarq', 'gpu-quda')
+
+print_obj(rcparams, 'rcparams')
+
+--latsize   = {4,4,4,8}
+--network_geom = {1,1,1,1}
+latsize   = {32,32,32,24}
+network_geom = {1,1,2,4}
+t_axis    = #latsize - 1
+rnd_seed  = 1984
+ferm_bc  = {1,1,1,-1}
+logdir = os.getenv('logdir')
+if nil == logdir or '' == logdir then logdir = '.' end
+
+tot_timer = timer("total")
+L = qcd.lattice(latsize, {network=network_geom})
+print_network_settings()
+print_subgrid_settings(L)
+S = rnd_init(L, rnd_seed)
+rnd = S
+
+if (   'gpu-quda' == rcparam.get('backend.dslash_solver')
+    or 'gpu-quda' == rcparam.get('backend.qbarq')
+    or with_dev ) then
+  require 'quda'
+  tt = timer('init_quda')
+  qcd.quda.init(L)                                          ; tt('done')
+  quda_verbosity = "SUMMARIZE"
+  _quda.setVerbosityQuda(quda_verbosity)
+end
+
+
+nonleg_lpyz_max4_lmin0 = {
+  -- XXX need to specify lmin=0 explicitly to save zero-link (saved only once)
+  { 'y', 0, 4 },  -- nonleg b_ldir, b_lmin, b_lmax
+  { 'Y', 0, 4 },  -- nonleg b_ldir, b_lmin, b_lmax
+  { 'z', 0, 4 },  -- nonleg b_ldir, b_lmin, b_lmax
+  { 'Z', 0, 4 },  -- nonleg b_ldir, b_lmin, b_lmax 
+}
+nonleg_lpyz_max3 = { 
+  { 'y',  3 },  -- nonleg b_ldir, b_lmax
+  { 'Y',  3 },  -- nonleg b_ldir, b_lmax
+  { 'z',  3 },  -- nonleg b_ldir, b_lmax
+  { 'Z',  3 },  -- nonleg b_ldir, b_lmax
+}
+nonleg_lpyz_max2 = { 
+  { 'y', 2 },  -- nonleg b_ldir, b_lmax
+  { 'Y', 2 },  -- nonleg b_ldir, b_lmax
+  { 'z', 2 },  -- nonleg b_ldir, b_lmax
+  { 'Z', 2 },  -- nonleg b_ldir, b_lmax
+}
+
+tmd_lpspec_list = { 
+  -- only the 'b' link, including zero-length, with len(b_lpath)<=4
+  { '', false, nonleg_lpyz_max4_lmin0 },
+
+  -- legs in positive x direction
+  -- all with len(v_lpath)<=2 in (+x), with len(b_lpath)<=3 in (+-y,z)
+  { 'xx',   true, nonleg_lpyz_max3 },
+  -- all with 2<len(v_lpath)<=4 in (+x), with len(b_lpath)<=2 in (+-y,z)
+  { 'xxxx', true, nonleg_lpyz_max2 },
+
+  -- repeat for leg in negative x direction
+  -- all with len(v_lpath)<=2 in (-x), with len(b_lpath)<=3 in (+-y,z)
+  { 'XX',   true, nonleg_lpyz_max3 },
+  -- all with 2<len(v_lpath)<=4 in (-x), with len(b_lpath)<=2 in (+-y,z)
+  { 'XXXX', true, nonleg_lpyz_max2 },
+}
+--output_key = 'v<leg_lp_spec>_b<nonleg_lp_spec>'
+
+csrc={1,2,3,4}
+tlen = latsize[1+t_axis]
+--qext3_list = {{0,0,0}, {0,0,1}}
+qext3_list = make_mom_list(3)
+
+tmd_lpspec_list_bfirst = tmd_lpspec_expand({
+  -- XXX short run test
+  { 'y',   'z',   vl={ rev='xx' } },
+
+--  { rev=true, 'yy',   'zz',   vl={ rev=true, 'xxxx' } },
+  -- XXX long run test
+--  { rev=true, 'yyy',  'zzz',  vl={ rev=true, 'xx',  } },
+--  { rev=true, 'yyyy', 'zzzz', vl={ rev=true,        } },
+--  { rev=true, 'qq', 'rr', 'ss', vl={ rev=true, 'uu', 'vv', 'ww' } },
+--  { rev=true, 'uu', 'vv', 'ww', vl={ rev=true, 'qq', 'rr', 'ss'} },
+
+--  { 'qq', vl={'rr'}}, 
+--  { 'ss', vl={'uu'}},
+--  { 'vv', vl={'ww'}},
+--  { 'rr', vl={'qq'}}, 
+--  { 'uu', vl={'ss'}},
+--  { 'ww', vl={'vv'}},
+
+--  { 'qq', vl={'ww'}}, 
+--  { 'rr', vl={'ww'}}, 
+--  { 'ww', vl={'ss'}},
+--  { 'ww', vl={'uu'}},
+
+--    {rev=true, 'x', vl={''}},
+--    {rev=true, 'y', vl={''}},
+--    {rev=true, 'z', vl={''}},
+--    {rev=true, 't', vl={''}},
+--    {rev=true, 'qqqq', vl={''}},
+--    {rev=true, 'rrrr', vl={''}},
+--    {rev=true, 'ssss', vl={''}},
+--    {rev=true, 'uuuu', vl={''}},
+--    {rev=true, 'vvvv', vl={''}},
+--    {rev=true, 'wwww', vl={''}},
+
+  -- XXX engel's test for noderiv
+--  { rev=true, 'y'         , vl={ rev=true, string.rep('x',20), string.rep('z',20), --[[string.rep('v',14), string.rep('w',14)]] } },
+--  { rev=true, 'yy'        , vl={ rev=true, string.rep('x',15), string.rep('z',15), --[[string.rep('v',11), string.rep('w',11)]] } },
+--  { rev=true, 'yyy'       , vl={ rev=true, string.rep('x',14), string.rep('z',14), --[[string.rep('v',10), string.rep('w',10)]] } },
+--  { rev=true, 'yyyy'      , vl={ rev=true, string.rep('x',13), string.rep('z',13), --[[string.rep('v', 9), string.rep('w', 9)]] } },
+--  { rev=true, 'yyyyy'     , vl={ rev=true, string.rep('x',12), string.rep('z',12), --[[string.rep('v', 9), string.rep('w', 9)]] } },
+--  { rev=true, 'yyyyyy'    , vl={ rev=true, string.rep('x',10), string.rep('z',10), --[[string.rep('v', 8), string.rep('w', 8)]] } },
+--  { rev=true, 'yyyyyyy'   , vl={ rev=true, string.rep('x', 9), string.rep('z', 9), --[[string.rep('v', 7), string.rep('w', 7)]] } },
+--  { rev=true, 'yyyyyyyy'  , vl={ rev=true, string.rep('x', 8), string.rep('z', 8), --[[string.rep('v', 6), string.rep('w', 6)]] } },
+--  { rev=true, 'yyyyyyyyy' , vl={ rev=true, string.rep('x', 7), string.rep('z', 7), --[[string.rep('v', 5), string.rep('w', 5)]] } },
+--  { rev=true, 'zzzzzzzzzzzzzzzz' , vl={ } },
+--  { rev=true, 'yyyyyyyyyyyyyyyy' , vl={ } },
+--  --[[{ rev=true, 'ssssssssssss' , vl={ } },]]
+--  --[[{ rev=true, 'uuuuuuuuuuuu' , vl={ } },]]
+
+  -- XXX engel's test for deriv
+--  { rev=true, 'y'         , vl={ rev=true, string.rep('z',20) } },
+--  { rev=true, 'yy'        , vl={ rev=true, string.rep('z',15) } },
+--  { rev=true, 'yyy'       , vl={ rev=true, string.rep('z',14) } },
+--  { rev=true, 'yyyy'      , vl={ rev=true, string.rep('z',13) } },
+--  { rev=true, 'yyyyy'     , vl={ rev=true, string.rep('z',12) } },
+--  { rev=true, 'yyyyyy'    , vl={ rev=true, string.rep('z',10) } },
+--  { rev=true, 'yyyyyyy'   , vl={ rev=true, string.rep('z', 9) } },
+--  { rev=true, 'yyyyyyyy'  , vl={ rev=true, string.rep('z', 8) } },
+--  { rev=true, 'yyyyyyyyy' , vl={ rev=true, string.rep('z', 7) } },
+--  { rev=true, 'zzzzzzzzzzzzzzzz' , vl={ } },
+--  { rev=true, 'yyyyyyyyyyyyyyyy' , vl={ } },
+--  --[[{ rev=true, 'ssssssssssss' , vl={ } },]]
+--  --[[{ rev=true, 'uuuuuuuuuuuu' , vl={ } },]]
+
+})
+print_obj(tmd_lpspec_list_bfirst, 'tmd')
+
+tmd_opt = { 
+        backend='INVALID-overwrite',
+        result = with_res,
+        save = {
+          kpath='/tmd/',
+          mkey='q', fkey='g' },
+        momproj = {
+          csrc=csrc, 
+          mom_list=qext3_list,
+          t_axis=t_axis,
+          bc_t = 1,
+          tlen=tlen,
+          ft_sign=1 } }
+print_obj(tmd_opt, 'tmd_opt')
+
+
+for i_test = 1, 1 do
+  -- generate fields
+  gauge_u = latvec.fromfunction({4}, function()return toSUn(S:gaussian_ColorMatrix()) end)
+  prop_F = S:gaussian_DiracPropagator()
+  prop_B = S:gaussian_DiracPropagator()
+
+  -- gauge inv. test
+  gg_r = toSUn(rnd:gaussian_ColorMatrix())
+  prop_F1 = gg_r * prop_F
+  prop_B1 = prop_B * gg_r:adjoin()
+  gauge_u1= gauge_transform_U(gg_r, gauge_u) 
+
+  local res1 = nil
+  if with_dev then
+    local function tmd_key(v_slp, b_slp)
+      return string.format("vl%d_%s_bl%d_%s", #v_slp, v_slp, #b_slp, b_slp)
+    end
+
+    local tt = timer(string.format('tmd_state[%d]', i_test))
+    tmd_aff  = qcd.aff.Writer(string.format('%s/test_tmd_state.aff', logdir))
+    tmd_opt.save.file = tmd_aff
+    local qcs = qcd.contract_state(
+        'tmd_g_F_B', { prop_F1, prop_B1, gauge_u1 }, table_merge(tmd_opt, {backend='gpu-quda'}))
+    printf("qcs = '%s'\n", tostring(qcs))
+
+    res1 = iter_tmdspec_bfirst(tmd_lpspec_list_bfirst, 
+        function(bv)
+          return qcs:step(bv[1], bv[2]) 
+        end)
+    tmd_aff:close()
+    tt('done')
+    print_obj(res1, 'res1')
+  end
+
+  local res0 = nil
+  if with_host then
+    local tt = timer(string.format('tmd_gold[%d]', i_test))
+    tmd_aff  = qcd.aff.Writer(string.format('%s/test_tmd.aff', logdir))
+    tmd_opt.save.file = tmd_aff
+    res0 = general_save_tmd_qbarq_bfirst(prop_F, prop_B, gauge_u, 
+        tmd_lpspec_list_bfirst, table_merge(tmd_opt, {backend='cpu'}))
+    tmd_aff:close()
+    tt('done')
+    print_obj(res0, 'res0')
+  end
+
+  if with_check then 
+    if res0 and res1 then
+      -- check that all keys exist
+      for k,v in pairs(res1) do
+        if nil == res0[k] then 
+          printf("ERROR res0[%s] does not exist\n", k)
+        end
+      end
+      -- compare all values
+      for k,v in pairs(res0) do
+        if nil == res1[k] then 
+          printf("ERROR res1[%s] does not exist\n", k)
+        else 
+          latvec.print_cmp(res0[k], res1[k], string.format("res0<>res1[%s]", k))
+        end
+      end
+    end
+  end
+end
+
+printf("QLUA_RUN_SUCCESS\n")

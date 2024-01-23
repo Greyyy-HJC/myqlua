@@ -1,0 +1,122 @@
+-- compute & save eigenvectors
+-- 1. Run poly-accelerated Lanczos to convergence
+-- 2. Save eigenvectors
+-- 3. Compute & save 1 exact, 1 sloppy inversion on a gaussian source
+
+require "gauge"
+require "ape-smear"
+require "stdlib"
+require "lhpc-std"
+require "qdpc_io"
+require "latvec"
+require "defl_util"
+require "setup_util"
+
+tot_timer = timer("total")
+-------------------------------------------------------------------------------
+-- SETUP
+-------------------------------------------------------------------------------
+L = qcd.lattice(latsize, {network=network_geom})
+print_network_settings()
+print_subgrid_settings(L)
+
+if nil == job_key then 
+  error("nil job_key")
+  os.exit(1)
+end
+cfg_key = job_key
+
+rnd = rnd_init(L, rnd_seed)
+
+-- load & smear gauge
+cur_timer = timer("gauge_read")
+gauge_u = qcd.nersc.read_gauge(L, get_gauge_file(cfg_key))
+cur_timer("done")
+cur_timer = timer("gauge_smear")
+gauge_u_ape = APE_smear(gauge_u, ape_alpha, ape_N, ape_accu, ape_maxiter, t_axis)
+cur_timer("done")
+
+-- construct Moebius obj
+mdwf = qcd.MDWF.generic(gauge_u, ferm_bc, mdwf_L5, mdwf_M5, mdwf_mf, mdwf_b5, mdwf_c5)
+
+-------------------------------------------------------------------------------
+-- EIGENVECTOR CALCULATION
+-------------------------------------------------------------------------------
+-- run Lanczos
+l_timer = timer("deflator_lanczos")
+mdwf_eigcg_df, lanczos_nconv, lanczos_niter = mdwf:eig_deflator_lanczos(
+      l_nev, l_ncv, l_maxiter, l_tol,
+      { ["eigcg"] = {eigcg_vmax, eigcg_nev, eigcg_tol, eigcg_umax},
+        ["cheb_accel"] = { l_poly_n, l_poly_a, l_poly_b, l_poly_x0 },
+        ["which"] = "LR", -- need the largest ev of polynomial T_n(A)
+        ["arpack_logfile"] = arpack_logfile(cfg_key),
+        ["inplace"] = true
+        })
+l_timer("done")
+printf("df_lanczos: nconv=%d  n_iter=%d\n", lanczos_nconv, lanczos_niter)
+
+-- print evalues
+evals = mdwf_eigcg_df:eigenvalues()
+for i=0, #evals - 1 do
+  printf("eval[%04d]=%e\n", i, evals[i])
+end
+
+-------------------------------------------------------------------------------
+-- EIGENVECTOR WRITE
+-------------------------------------------------------------------------------
+-- save evectors
+cur_timer = timer("deflator_space_save")
+df_dim = mdwf_eigcg_df:current_dim()
+qdp_w = open_qdpc_write(L, mdwf_evec_file(cfg_key, df_dim), "", evec_volfmt)
+df_save_dim = deflator_save_espace_d5(
+                  mdwf_eigcg_df, mdwf_L5, qdp_w, 
+                  evec_pack_eopc, evec_qio_prec)
+printf("df_dim=%d  df_save_dim=%d\n", df_dim, df_save_dim)
+qdp_w:close()
+cur_timer("done")
+
+
+-------------------------------------------------------------------------------
+-- TEST INVERSIONS
+-------------------------------------------------------------------------------
+-- gen source
+cur_timer = timer("make_source")
+test_src = make_source(gauge_u_ape, test_src_coord, wup_alpha, wup_N, t_axis)
+cur_timer("done")
+
+-- compute sol(sloppy)
+mdwf_solver_sloppy  = mdwf_eigcg_df:mixed_solver(
+                        mixcg_tol1, mixcg_maxiter1,
+                        mixcg_tol_sloppy, mixcg_maxiter_sloppy)
+cur_timer = timer(string.format("prop_sloppy_inv(eps^2=%e)", mixcg_tol_sloppy))
+test_sol_sloppy = mdwf_solver_sloppy(test_src)
+cur_timer("done")
+
+-- save src + sol(sloppy)
+cur_timer = timer("prop_sloppy_save")
+qcd.ddpairs.write(
+    "double", frw_prop_file_sloppy(cfg_key, test_src_coord),
+    "<file_info>EMPTY</file_info>",
+    test_src, "<src_info>EMPTY</src_info>", test_src_coord[1+t_axis],
+    test_sol_sloppy, "<prop_info>EMPTY</prop_info>", prop_volfmt)
+cur_timer("done")
+
+
+-- compute sol(exact)
+mdwf_solver_exact   = mdwf_eigcg_df:mixed_solver(
+                        mixcg_tol1, mixcg_maxiter1,
+                        mixcg_tol_exact, mixcg_maxiter_exact)
+cur_timer = timer(string.format("prop_exact_inv(eps^2=%e)", mixcg_tol_exact))
+test_sol_exact = mdwf_solver_exact(test_src)
+cur_timer("done")
+
+-- save src + sol(exact)
+cur_timer = timer("prop_exact_save")
+qcd.ddpairs.write(
+    "double", frw_prop_file_exact(cfg_key, test_src_coord),
+    "<file_info>EMPTY</file_info>",
+    test_src, "<src_info>EMPTY</src_info>", test_src_coord[1+t_axis],
+    test_sol_exact, "<prop_info>EMPTY</prop_info>", prop_volfmt)
+cur_timer("done")
+
+tot_timer("done")

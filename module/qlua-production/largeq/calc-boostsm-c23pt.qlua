@@ -1,0 +1,362 @@
+package.path = 'qlib/?.qlua;qlib-lhpc/?.qlua;qlua-production/?.qlua;' .. package.path
+require "stdlib"
+require "lhpc-std"
+require "latvec"
+require "qdpc_io"
+
+require "gauge"
+require "wuppertal-smear"
+require "ape-smear"
+require "stout-smear"
+
+require "hadspec"
+require "hadron/baryon_corr"
+
+-- examples
+-- sm_tag='GN2x50'
+-- ksrc_q={  1,  0,  0}, ksrc_tag='bxp10'
+-- ksnk_q={  0,-.5,  0}, ksrc_tag='bym05'
+-- (...
+--    'bxp10', {1,0,0}, c2pt_symm_psnkrel_list
+--    {
+--      -- qext_x=[-9;0], qext_{y,z}=[-1;1]
+--      { 'bxm10', {-1, 0, 0}, c2pt_skew_psnkrel_list, c3pt_psnk, 
+--        range_prod(range(-3, 7), pm1, pm1) }, 
+--      -- qext_x=[-9;0], qext_y=[-4;-2], qext_z=[-1;1]
+--      { 'bym10', { 0,-1, 0}, c2pt_skew_psnkrel_list, c3pt_psnk,
+--        range_prod(range(-6, 4), pm1, pm1) } }
+-- where
+--  kbxp10 = { 1, 0, 0}
+--  kbxm10 = {-1, 0, 0}
+--  kbym10 = { 0,-1, 0}
+--  pm1 = {-1, 0, 1}    for some variation around on-axis momenta
+--  c3pt_psnk = {0,0,0} is optimal for the given boosted momentum 
+--  c2pt_skew_psnkrel_list  is needed only for disco, and {{0,0,0}} should be enough
+
+function do_hadspec_bb_boosted_cohsrc_group(
+          L, cfg_key, ama, csrcgrp,
+          hslab_len,            -- how many timeslices to include into hadspec; should be (Lt / csrcgrid_nt)
+          ksrc_tag, ksrc_q,     -- boosting/twisting momentum for source quarks and tag for output
+          c2pt_symm_psnkrel_list, -- list of momenta to save in "forward" boosted(ksnk==ksrc) c2pt
+          c3pt_psnk_desc_list,  -- [ (ksnk_tag, ksnk_q, c2pt_skew_psnkrel_list,
+                                --    c3pt_psnkrel, c3pt_qextrel_list)
+          tsep_list, 
+          flav_list,
+          snk_S, src_S,
+          Tpol_tag, Tpol,
+          gauge_u, 
+          sm_tag, smear_func, -- symmetric Gaussian smearing
+          solver_func,
+          t_axis, bc_quark    -- 0 <= t_axis < #L
+          -- FIXME do I need to alternate signs for bkwprop_coh with `csrc_group_sign' ?
+) 
+  -- Boosts, twists, phases, in solvers, smearing, mom.proj
+  -- XXX use p for hadron momenta, k for quark boosting
+  -- p_qqq = 3*k_q
+  -- * boosting/twisting phase for momentum k: latcomplex = exp(i*k*x)
+  --          f_boosted(k) = c_twph * f_smooth,
+  -- * boosting is a trick to make good quarks sources for high-p hadron states;
+  --    boosted fields with mom. k = twisted with mom. k, oscillate ~exp(i*k*x), 
+  --    and have non-trivial BC with if momentum k is fractional;
+  --    solver has boosted fields in rhs and lhs:
+  --          sol_boosted = solver_func(src_boosted)
+  --    for fractional k, solver BCs are determined by that of exp(i*k*x).
+  -- * boosted/twisted fields have non-trivial BC with if momentum k is fractional;
+  -- * un-twisted fields are fields "at rest", do not have addl. oscillations, 
+  --          f === f_untwisted = f_boosted(k) * c_twph:conj()
+  --    their BCs are periodic to have zero momentum component ;
+  --    Gaussian smoothing/smearing is applied to these fields 
+  --    so that the result is centered around zero momentum 
+  --          f_untwisted = smear_func(f_untwisted)
+  -- * momentum projection at the sink is performed on untwisted fields, 
+  --    also to avoid complications of fractional momenta; the baryon actual momentum 
+  --          psnk_actual = (psnk + psnk_tw_qqq), psnk_tw_qqq = 3*k_q
+  --          c_twph_qqq = c_twph^3
+  --    proper momentum projection is then
+  --          save_c2pt({c2pt_boosted * c_twph_qqq:conj() * c_twph_qqq[csrc]}, 
+  --                    ..., psnk_list, )
+  --    where c_twph_qqq[csrc] factor compensates for the coord.phase shift in the phase
+  --    no special treatment needed at the current insertion because the forward 
+  --    and backward propatators are boosted (untwisted)
+  --    
+  --  Phases of propagators, sources, etc, assuming  
+  -- XXX at the moment assume that backward and forward propagators have the same BC and need the same solver
+  --     this is true for half-integer momentum
+--  local function frwsmear_tw(x, c_tw)
+--    -- smearing kernel applied from the left 
+--    -- for forward src, as in Frwprop = Dslash^{-1} . S . Frwsrc
+--    return c_tw * smear_func(x * c_tw:conj())
+--  end
+--  local function bkwsmear_tw(x, c_tw)
+--    -- smearing kernel applied from the right
+--    -- for backward src, as in Bkwprop = Bkwsrc . S . Dslash^{-1}
+--    -- XXX x must be a colmat or dirprop, otherwise no adjoin method 
+--    return c_tw:XXX * smear_func(x:adjoin() * c_tw:XXX):adjoin()
+--  end
+  local timer_func_top = timer('do_hadspec_bb_boosted_cohsrc_group')
+  local tt      -- local timer
+  printf("cfg_key='%s'  #src_snk_dt=%d\n", cfg_key, #tsep_list)
+  local lt          = L[t_axis]           -- time extent
+  local bc_quark_t  = bc_quark[1+t_axis]   -- quark BC
+  local bc_baryon_t = bc_quark_t*bc_quark_t*bc_quark_t  -- qqq BC
+  local bc_quark_tpos = table_copy(bc_quark)
+  bc_quark_tpos[1+t_axis] = 1   -- for baryon_save_bb
+
+  -- TODO extract BC from the solver, check for consistency with ksrc_q
+
+  assert(0 < #csrcgrp)
+  local timer_1srcgrp = timer(string.format('1srcgrp[%d]', #csrcgrp))
+  local csrc_coh0 = csrcgrp[1]
+  local tsrc_coh0 = csrc_coh0[1+t_axis]
+  local tsnk_full = (lt + tsrc_coh0 - 1) % lt -- full Lt for saving BB
+
+  -- build hyperslab subsets for constructing frwprop_grp
+  local csrc_hslab = {}
+  do
+    local mask = {}
+    for i_csrc, csrc in pairs(csrcgrp) do
+      -- check consistency : must have the same x,y,z
+      -- otherwise, need to adj.phase in c2pt momproj FIXME?
+      for mu = 0, #L-1 do assert(t_axis == mu or csrc[1+mu] == csrc_coh0[1+mu]) end
+      printf('csrc[%02d]={%3d,%3d,%3d,%3d}\n', i_csrc, csrc[1], csrc[2], csrc[3], csrc[4])
+      local tsrc  = csrc[1+t_axis]
+      mask[i_csrc]= qcd.lt((lt + L:pcoord(t_axis) - tsrc) % lt, hslab_len)
+      -- FIXME need .all() method
+      for j_csrc = 1, i_csrc-1 do assert(0 == (mask[j_csrc] * mask[i_csrc]):sum()) end
+      csrc_hslab[i_csrc] = L:Subset(mask[i_csrc])
+    end -- for csrc
+  end -- do
+
+  -- source quark and qqq field boosting/twisting phases 
+  -- XXX the origin of the twisting phase HAS to be at spatial {0,0,0} because 
+  --    that's where the solver will also have discontinuity if k_tw is fractional
+  local src_twph_q  = L:planewave({0,0,0,0}, ksrc_q)    -- origin at 0
+  -- baryon source phase shift (quark_ph)^3 rel.to csrc
+  local src_twph_qqq                                    -- origin at csrc
+  do local x = (src_twph_q * src_twph_q[csrc_coh0]:conj()) ; src_twph_qqq = x*x*x end
+
+  -- calc, group forward propagators 
+  local frwprop_grp = L:DiracPropagator()
+  for i_csrc, csrc in pairs(csrcgrp) do
+    -- TODO optimize save on smearing by working only on tsep subset 
+    -- TODO can group all sources and smear at the same time
+    -- TODO finally, smear latcolmat instead of latdirprop
+    tt = timer("frwprop")
+    local frwsrc  = src_twph_q * smear_func(
+            make_source_point(L, csrc) * src_twph_q:conj())         ; tt("src")
+    local frwprop = solver_func(frwsrc)                             ; tt("inv")
+    csrc_hslab[i_csrc]:where(function()frwprop_grp:set(frwprop)end) ; tt("done")
+  end -- for csrc
+
+  -- calc&save c2pt for all 16 spin-pol Tgn
+  do  -- save c2pt for ksnk==ksrc
+    local frwprop_grp_sm  = src_twph_q * smear_func(frwprop_grp * src_twph_q:conj())
+    local c2pt_list_SP  = {}    -- SP is only here (independent of ksnk)
+    local c2pt_list_SS  = {}
+    for gn = 0, 15 do
+      -- XXX one c2pt output contains c2pt's for all csrc in csrcgrp in separate hslabs
+      c2pt_list_SP[string.format('proton_Tg%d', gn)] = (src_twph_qqq:conj() *
+              baryon_sigma_twopt(frwprop_grp, frwprop_grp, 
+                                 snk_S, src_S, gamma({n=gn})))
+      c2pt_list_SS[string.format('proton_Tg%d', gn)] = (src_twph_qqq:conj() *
+              baryon_sigma_twopt(frwprop_grp_sm, frwprop_grp_sm, 
+                                 snk_S, src_S, gamma({n=gn})))
+    end -- for gn
+    local bsm_tag_symm  = string.format('%s_%s_%s', sm_tag, ksrc_tag, ksrc_tag)
+    local hadspec_file  = get_hadspec_file_tag(cfg_key, csrc_coh0, ama, bsm_tag_symm)
+    printf('write[hadspec]: %s\n', hadspec_file)
+    local aff_hadspec   = qcd.aff.Writer(hadspec_file)
+    save_2pt_list(L, aff_hadspec, string.format('/cfg%s/hadspec/SP', cfg_key),
+                  c2pt_list_SP, csrc_coh0, c2pt_symm_psnkrel_list, t_axis, bc_baryon_t)
+    save_2pt_list(L, aff_hadspec, string.format('/cfg%s/hadspec/SS', cfg_key),
+                  c2pt_list_SS, csrc_coh0, c2pt_symm_psnkrel_list, t_axis, bc_baryon_t)
+    aff_hadspec:close()
+  end -- do
+
+  -- loop over sink boost/momenta
+  for i_psnk, psnk_desc in pairs(c3pt_psnk_desc_list) do
+    local ksnk_tag, ksnk_q, c2pt_skew_psnkrel_list, c3pt_psnkrel, c3pt_qextrel_list = unpack(psnk_desc)
+    local bsm_tag_skew = string.format('%s_%s_%s', sm_tag, ksrc_tag, ksnk_tag)
+    -- check for BC consistency between ksrc_q, ksnk_q
+    for mu=0, #L-1 do
+      local ph = 2. * math.pi * (ksrc_q[1+mu] - ksnk_q[1+mu])
+      local exp_ph = complex(math.cos(ph), math.sin(ph))
+      if 1e-8 < (1. - exp_ph):abs() then
+        error(string.format("mu=%d : mismatch ksnk[%d]=%s, ksrc[%d]=%s", 
+                  mu, tostring(ksnk_q[1+mu]), mu, tostring(ksrc_q[1+mu])))
+      end
+    end -- for mu
+
+    -- source quark and qqq field boosting/twisting phases ; see XXX for src_twph_q
+    local snk_twph_q  = L:planewave({0,0,0,0}, ksnk_q)    -- origin at 0
+    -- baryon sink shift (quark_ph)^3 rel.to csrc
+    local snk_twph_qqq                                    -- origin at csrc
+    do local x=(snk_twph_q * snk_twph_q[csrc_coh0]:conj()) ; snk_twph_qqq = x*x*x end
+    
+    -- ksnk-twisted smeared forward prop 
+    local frwprop_grp_sm  = snk_twph_q * smear_func(frwprop_grp * snk_twph_q:conj())
+    
+    do  -- save c2pt for ksnk!=ksrc
+      local c2pt_list_SS  = {}
+      for gn = 0, 15 do
+        c2pt_list_SS[string.format('proton_Tg%d', gn)] = (snk_twph_qqq:conj() *
+                baryon_sigma_twopt(frwprop_grp_sm, frwprop_grp_sm, 
+                                   snk_S, src_S, gamma({n=gn})))
+      end
+      local hadspec_file = get_hadspec_file_tag(cfg_key, csrc_coh0, ama, bsm_tag_skew)
+      printf('write[hadspec]: %s\n', hadspec_file)
+      local aff_hadspec = qcd.aff.Writer(hadspec_file)
+      save_2pt_list(L, aff_hadspec, string.format('/cfg%s/hadspec/SS', cfg_key),
+                    c2pt_list_SS, csrc_coh0, c2pt_skew_psnkrel_list, t_axis, bc_baryon_t)
+      aff_hadspec:close()          
+    end 
+
+    -- loop over c3pt parameters
+    for i_tsep, tsep in pairs(tsep_list) do
+      for iflav, flav in pairs(flav_list) do
+        tt = timer(string.format('bkwprop_cohsrc[%d]', #csrcgrp))
+        -- FIXME can save two extra :adjoin() calls, but code is more readable this way
+        -- FIXME boost-smear together or separately? 
+        --    smear_time(together) = 16*smear_time(separately)
+        local bkwsrc_grp_sm = L:DiracPropagator()
+        for i_csrc, csrc in pairs(csrcgrp) do
+          -- create and tslice-fill the cohsrc
+          local tsrc = csrc[1+t_axis]
+          local tsnk = (tsrc + tsep) % lt
+          local bc_c3pt_factor = 1.
+          if tsnk < tsrc then bc_c3pt_factor = bc_baryon_t end
+          L:Subset({axis=t_axis, position=tsnk}):where(
+                  function()
+                    local b = ( baryon_sigma_seqsource_func[flav](frwprop_grp_sm, 
+                                                                  frwprop_grp_sm, 
+                                                                  snk_S, src_S, Tpol)
+                              -- proj to p' = psinkrel+3*ksnk
+                              * ( snk_twph_qqq * L:planewave(csrc_coh0, c3pt_psnkrel) ):conj())
+                    -- adjoint smearing of backward source created with q (instead of qbar)
+                    local b_sm = ( snk_twph_q * smear_func( snk_twph_q:conj() * b:adjoin() ) ):adjoin()
+                    -- correct each of coherent 3pt for the BC_t
+                    bkwsrc_grp_sm:set(b_sm * bc_c3pt_factor)
+                  end)
+        end -- for csrc
+        tt("cohsrc")
+        local bkwprop_grp = solver_func(gamma{n=15} * bkwsrc_grp_sm:adjoin()):adjoin() * gamma{n=15}
+        tt("inv")
+
+        -- save bb, phases shift the origin of qext to (psnk_tw-psrc_tw)
+        -- (F*)B -> (F*)B * snk_twph_qqq * src_twph_qqq:conj() 
+        tt = timer("save_bb")
+        local bb_file = get_bb_file_tag(cfg_key, csrc_coh0, ama, c3pt_psnkrel, tsep, Tpol_tag, flav, bsm_tag_skew)
+        printf('write[bb]: %s\n', bb_file)
+        local aff_bb = qcd.aff.Writer(bb_file)
+        baryon_save_bb(
+                L, csrc_coh0, tsnk_full, c3pt_psnkrel, 
+                aff_bb, string.format('/cfg%s/bb/SS/proton_%s/%s', cfg_key, Tpol_tag, flav),    -- output
+                0, 1, -- [min, max] links
+                -- XXX THINK LONG AND HARD ABOUT MOMENTUM PROJECTIONS
+                { frwprop_grp }, 
+                { bkwprop_grp * snk_twph_qqq * src_twph_qqq:conj() }, 
+                gauge_u,
+                c3pt_qextrel_list,                  -- momenta
+                t_axis, 
+                bc_quark_tpos)    -- sic! the BC_t is taken into account in bkwsrc_grp
+        aff_bb:close()
+        tt("done")
+        
+      end -- for flav
+    end -- for tsep
+  end -- for psnk_desc
+  timer_1srcgrp("done")
+  timer_func_top("done")
+end
+
+-------------------------------------------------------------------------------
+-- main
+-------------------------------------------------------------------------------
+
+-- init
+total_timer = timer("total")
+
+cfg_key = assert(job_key)
+
+L = qcd.lattice(latsize, {network=network_geom})
+print_network_settings()
+print_subgrid_settings(L)
+
+
+do
+  -- read gauge field 
+  local cur_timer
+  local gf_file = get_gauge_file(cfg_key)
+  cur_timer = timer('gauge_load')
+  printf('read[gauge]: "%s"\n', gf_file)
+  local qio_r   = open_qdpc_read(L, gf_file)
+  local gauge_u = qio_r:ColorMatrix(4)
+  qio_r:close()
+  cur_timer('done')
+
+  -- smear gauge field
+  cur_timer = timer('gauge_smear')
+  local gauge_u_ape = APE_smear(gauge_u, ape_alpha, ape_N, ape_accu, ape_maxiter, t_axis)
+  cur_timer('done')
+  local function wup_smear_func(x) 
+    -- reqiures global wup_a, wup_n, wup_gauge_u, t_axis
+    return wuppertal_smear(gauge_u_ape, wup_alpha, wup_N, x, t_axis)
+  end
+
+  -- solver with smeared field
+  cur_timer = timer("stout_smear")
+  local gauge_u_stout  = stout_smear_full(gauge_u, stout_rho, stout_n)
+  cur_timer("done")
+
+  -- init QOP-MG
+  cur_timer = timer("init_mg")
+  check_mg_param(mg_param, {network=network_geom})
+  print_obj(mg_param, "mg_param")
+  -- self-check : ferm bc correspond to boost_p in spatial dir
+  -- do_hadspec_bb_boosted_cohsrc_group checks that ksrc_q and ksnk_q have the same BC
+  for mu=1,3 do     
+    local ph = 2. * math.pi * boost_p[mu]
+    local exp_ph = complex(math.cos(ph), math.sin(ph))
+    if 1e-8 < (ferm_bc[mu] - exp_ph):abs() then
+      error(string.format("mu=%d : mismatch ferm_bc=%s, exp_ph=%s", 
+                          tostring(ferm_bc[mu]), tostring(exp_ph)))
+    end
+  end
+  local mg = qcd.qop.WilsonMG(gauge_u_stout, mg_param)
+  cur_timer("done")
+  
+  -- ama loop
+  for i_ama, ama in pairs(ama_list) do
+    -- init solver for given AMA mode
+    local mg_prec = { residual = { rsqmin = ama['tol']^2, relmin = 0 } }
+    print_obj(mg_prec, "mg_prec")
+    local solver_func  = make_mg_solver(mg, ama, 2 * kappa_l)
+    cur_timer = timer(string.format('AMA="%s", #src=%d', ama['approx'], #(ama['csrcgrp_list'])))
+    -- wup scan loop
+    for i_csrcgrp, csrcgrp in pairs(ama['csrcgrp_list']) do
+      -- TODO make config and populate parameters
+      do_hadspec_bb_boosted_cohsrc_group(
+          L, cfg_key, ama, csrcgrp,
+          hslab_len_t,                  -- how many timeslices to include into hadspec; should be (Lt / csrcgrid_nt)
+          c3pt_ksrc_tag, c3pt_ksrc_q,   -- boosting/twisting momentum for source quarks and tag for output
+          c2pt_symmboost_psnkrel_list,  -- list of momenta to save in "forward" boosted(ksnk==ksrc) c2pt
+          c3pt_snk_desc_list,           -- [ (ksnk_tag, ksnk_q, c2pt_skew_psnkrel_list, 
+                                        --    c3pt_psnkrel, c3pt_qextrel_list) ...]
+          c3pt_tsep_list,
+          c3pt_flav_list,
+          c3pt_snk_S, c3pt_src_S, 
+          c3pt_Tpol_tag, c3pt_Tpol,
+          gauge_u_stout,
+          wup_smear_tag, wup_smear_func,-- symmetric Gaussian smearing
+          solver_func,
+          t_axis,                       -- 0 <= t_axis < #L
+          ferm_bc
+          )
+
+    end
+    cur_timer("done")
+  end
+end
+
+total_timer("done")
+printf("QLUA_RUN_SUCCESS\n")

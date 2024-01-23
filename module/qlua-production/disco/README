@@ -1,0 +1,13 @@
+disco data will be computed with "stops": 
+* including contribution of eigenvectors
+* including contribution of HP vectors from 0 to ama.hp_stops[i]
+
+For example, calc_disco_4d.qlua will save
+* exact:  
+	Sum_{evecs} qbarq + (1/Nex)Sum_{HP:[0,Nex)} Sum_{ic,is} qbarq for Nex=32
+* sloppy: 
+	Sum_{evecs} qbarq + (1/Nsl)Sum_{HP:[0,Nsl)} Sum_{ic,is} qbarq for Nsl=32, 512
+and bias-corrected result will be 
+	Res[sl,Nsl=512] + (Res[ex,Nex=32] - Res[sl,Nsl=32])
+
+Disco Data is saved as 16* LatticeCmplex data records, with dictionary(lex)-ordered keys 

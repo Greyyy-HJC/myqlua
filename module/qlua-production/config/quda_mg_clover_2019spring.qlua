@@ -1,0 +1,272 @@
+require 'config/econfig'
+
+econfig = rawget(_G, 'econfig') or {}
+
+econfig.quda_clover_mg = function(ekey, opt)
+  -- XXX must specify 
+  --    * opt.quark_mass | opt.flav
+  --    * opt.tol
+  opt = opt or {}
+  local verbosity = opt.verbosity or "SUMMARIZE"
+  local etab = assert(econfig.ensemble_param[ekey])
+  local quark_mass  = assert(opt.quark_mass or etab.quark_mass[opt.flav])
+  local quark_kappa = 1. / (8. + 2. * quark_mass)
+  local quark_csw   = assert(opt.quark_csw or etab.quark_csw)
+  local quark_clov_coeff = quark_kappa * quark_csw
+  local quark_bc = etab.quark_bc
+  local tol         = assert(opt.tol)
+  local t_boundary
+  if      1 == quark_bc[4] then t_boundary = "PERIODIC"
+  elseif -1 == quark_bc[4] then t_boundary = "ANTI_PERIODIC"
+  else error(string.format("bad quark_bc[4]=%s", tostring(quark_bc[4]))) end
+
+  --local nMG_level = 3 -- XXX ???
+  local MG_schwarz_type = "INVALID"
+  local MG_solve_type = "DIRECT_PC"
+
+  local MG_coarse_grid_solution_type
+  if     "DIRECT"    == MG_solve_type then MG_coarse_grid_solution_type = "MAT"
+  elseif "DIRECT_PC" == MG_solve_type then MG_coarse_grid_solution_type = "MATPC" end
+
+  local quda_prec = "DOUBLE"
+  local quda_prec_sloppy = "SINGLE"
+  local quda_prec_precondition = "HALF"
+  local quda_prec_null = "HALF"
+  local quda_halo_prec = "HALF"
+
+  local block_size1, block_size2
+  if     'TEST8c16_isoClover' == ekey then
+     block_size1 = {2,2,2,2}
+     block_size2 = {2,2,2,2}
+  elseif 'JLab_isoClover_D5' == ekey or 'TEST32c64_isoClover' == ekey then
+     block_size1 = {4,4,4,4}
+     block_size2 = {2,2,2,2}
+  elseif 'JLab_isoClover_D6' == ekey then
+     block_size1 = {3,3,3,4}
+     block_size2 = {2,2,2,2}
+  elseif 'Hotqcd_hisqsea_a060_48c64' == ekey or 'TEST48c64_isoClover' == ekey then
+     block_size1 = {3,3,3,8}
+     block_size2 = {2,2,2,1}
+  elseif 'Hotqcd_hisqsea_a040_64c64' == ekey or 'TEST64c64_isoClover' == ekey then
+     block_size1 = {4,4,4,4}
+     block_size2 = {4,4,4,2}
+  elseif 'Hotqcd_hisqsea_a076_64c64' == ekey then
+     block_size1 = {4,4,4,4}
+     block_size2 = {4,4,4,2}
+  elseif 'Hotqcd_hisqsea_a076_64c64_16nodes' == ekey then
+     block_size1 = {4,4,4,4}
+     block_size2 = {4,4,2,2}
+  elseif 'Hotqcd_hisqsea_a076_64c64_8nodes' == ekey then
+     block_size1 = {4,4,4,4}
+     block_size2 = {4,2,2,2}
+  else error(string.format("unknown ekey='%s'", ekey)) end
+  
+  return {
+      gauge_params = {
+        type                      = "WILSON",
+        gauge_order               = "QDP",
+        anisotropy                = 1.0,
+        t_boundary                = t_boundary,
+      },
+      ------------------------------------------------
+      multrigrid_params = {
+        setup_type                = "NULL",
+        pre_orthonormalize        = "NO",
+        post_orthonormalize       = "YES",
+        compute_null_vector       = "YES",
+        generate_all_levels       = "YES",
+        run_verify                = "YES",
+        setup_minimize_memory     = "NO",
+        ------------------------------------------------
+        levels = {
+	  {
+	    geo_block_size            = block_size1,  -- Block size
+	    spin_block_size           = 2,             -- 2 for level 0, 1 afterwards
+	    n_vec                     = 24,            -- Number of Null vectors, 24 or 32 usually work well
+	    precision_null            = quda_prec_null,        -- Precision to store the Null-space vectors
+	    nu_pre                    = 2,             -- Number of pre-smoother applications
+	    nu_post                   = 2,             -- Number of post-smoother applications
+	    omega                     = 1.00,           -- Over/under relaxation factor for the smoother at each level, 0.8-1.0
+	    verbosity                 = verbosity,   -- Verbosity on each level of the multigrid
+	    setup_inv_type            = "BICGSTAB", --"BICGSTAB",    -- Inverter to use in the setup phase
+	    num_setup_iter            = 1,             -- experimental, keep to one for now
+	    setup_tol                 = 5e-6,          -- Tolerance to use in the setup phase, usually set to5e-6
+	    setup_maxiter             = 2000,           -- Maximum number of iterations for each setup solver, usually set to 500 
+	    coarse_solver             = "GCR",         -- The solver that wraps around the coarse grid correction and smoother (levels 1+)
+	    coarse_solver_tol         = 0.25,          -- Tolerance for the solver that wraps around the coarse grid correction and smoother (levels 1+)
+	    coarse_solver_maxiter     = 100,         -- Tolerance for the solver that wraps around the coarse grid correction and smoother (levels 1+)
+	    smoother                  = "MR",          -- Smoother to use on each level
+	    smoother_tol              = 0.3,          -- Tolerance to use for the smoother / solver on each level
+	    smoother_schwarz_type     = MG_schwarz_type, --,"INVALID"    -- Whether to use additive or multiplicative Schwarz preconditioning in the smoother
+            smoother_schwarz_cycle    = 1,
+	    smoother_solve_type       = "DIRECT_PC",   -- The type of smoother solve to do on each grid (e/o preconditioning or not)
+	    smoother_halo_precision   = quda_halo_prec,
+	    coarse_grid_solution_type = MG_coarse_grid_solution_type,       -- The type of residual to send to the next coarse grid, and thus the type of solution to receive back from this coarse grid, if smoother_solve_type == DIRECT_PC then set to MATPC, otherwise to MAT
+	    cycle_type                = "RECURSIVE",   -- Set always to "RECURSIVE"
+	    global_reduction          = "YES",          -- Whether to use global reductions or not for the smoother / solver at each level - experimental. If smoother_schwarz_type != FALSE, this must be set to NO
+	    location                  = "CUDA",        -- MG Solver location
+	    setup_location            = "CUDA",        -- Location where each level should be done
+	    mu_factor                 = 1.,             -- twisted mass coarse level mu-factor, irrelevant here
+	       
+	    setup_ca_basis              = "POWER_BASIS",
+	    setup_ca_basis_size         = 4,
+	    setup_ca_lambda_min         = 0.0,
+	    setup_ca_lambda_max         = -1.0,
+	    coarse_solver_ca_basis      = "POWER_BASIS",
+	    coarse_solver_ca_basis_size = 4,
+	    coarse_solver_ca_lambda_min = 0.0,
+	    coarse_solver_ca_lambda_max = -1.0,
+	  }, -- level 0
+          ------------------------------------------------
+          {
+	    geo_block_size            = block_size2,  -- Block size
+	    spin_block_size           = 1,             -- 2 for level 0, 1 afterwards
+	    n_vec                     = 24,            -- Number of Null vectors, 24 or 32 usually work well
+	    precision_null            = quda_prec_null,        -- Precision to store the Null-space vectors
+	    nu_pre                    = 2,             -- Number of pre-smoother applications
+	    nu_post                   = 2,             -- Number of post-smoother applications
+	    omega                     = 1.00,           -- Over/under relaxation factor for the smoother at each level, 0.8-1.0
+	    verbosity                 = verbosity,   -- Verbosity on each level of the multigrid
+	    setup_inv_type            = "BICGSTAB", --"BICGSTAB",    -- Inverter to use in the setup phase
+	    num_setup_iter            = 1,             -- experimental, keep to one for now
+	    setup_tol                 = 5e-6,          -- Tolerance to use in the setup phase, usually set to5e-6
+	    setup_maxiter             = 2000,           -- Maximum number of iterations for each setup solver, usually set to 500 
+	    coarse_solver             = "GCR",         -- The solver that wraps around the coarse grid correction and smoother (levels 1+)
+	    coarse_solver_tol         = 0.25,          -- Tolerance for the solver that wraps around the coarse grid correction and smoother (levels 1+)
+	    coarse_solver_maxiter     = 100,         -- Tolerance for the solver that wraps around the coarse grid correction and smoother (levels 1+)
+	    smoother                  = "MR",          -- Smoother to use on each level
+	    smoother_tol              = 0.3,          -- Tolerance to use for the smoother / solver on each level
+	    smoother_schwarz_type     = MG_schwarz_type, --,"INVALID"    -- Whether to use additive or multiplicative Schwarz preconditioning in the smoother
+            smoother_schwarz_cycle    = 1,
+	    smoother_solve_type       = "DIRECT_PC",   -- The type of smoother solve to do on each grid (e/o preconditioning or not)
+	    smoother_halo_precision   = quda_halo_prec,
+	    coarse_grid_solution_type = MG_coarse_grid_solution_type,       -- The type of residual to send to the next coarse grid, and thus the type of solution to receive back from this coarse grid, if smoother_solve_type == DIRECT_PC then set to MATPC, otherwise to MAT
+	    cycle_type                = "RECURSIVE",   -- Set always to "RECURSIVE"
+	    global_reduction          = "YES",          -- Whether to use global reductions or not for the smoother / solver at each level - experimental. If smoother_schwarz_type != FALSE, this must be set to NO
+	    location                  = "CUDA",        -- MG Solver location
+	    setup_location            = "CUDA",        -- Location where each level should be done
+	    mu_factor                 = 1.,             -- twisted mass coarse level mu-factor, irrelevant here
+
+	    setup_ca_basis              = "POWER_BASIS",
+	    setup_ca_basis_size         = 4,
+	    setup_ca_lambda_min         = 0.0,
+	    setup_ca_lambda_max         = -1.0,
+	    coarse_solver_ca_basis      = "POWER_BASIS",
+	    coarse_solver_ca_basis_size = 4,
+	    coarse_solver_ca_lambda_min = 0.0,
+	    coarse_solver_ca_lambda_max = -1.0,
+	  }, -- level 1
+          ------------------------------------------------
+	  {
+	    verbosity                 = verbosity,         -- Verbosity on each level of the multigrid
+	    smoother                  = "GCR",            -- Smoother to use on each level
+	    smoother_tol              = 0.3,              -- Tolerance to use for the smoother / solver on each level
+	    smoother_schwarz_type     = MG_schwarz_type, --"INVALID", -- Whether to use additive or multiplicative Schwarz preconditioning in the smoother
+            smoother_schwarz_cycle    = 2,
+	    smoother_solve_type       = "DIRECT_PC",      -- The type of smoother solve to do on each grid (e/o preconditioning or not)
+	    smoother_halo_precision   = quda_halo_prec,
+	    coarse_grid_solution_type = MG_coarse_grid_solution_type,          -- The type of residual to send to the next coarse grid, and thus the type of solution to receive back from this coarse grid. If smoother_solve_type == DIRECT_PC then set to MATPC, otherwise to MAT
+	    cycle_type                = "RECURSIVE",      -- Set always to "RECURSIVE"
+	    global_reduction          = "YES",             -- Whether to use global reductions or not for the smoother / solver at each level - experimental. If smoother_schwarz_type != FALSE, this must be set to NO
+	    location                  = "CUDA",           -- MG Solver location
+	    setup_location            = "CUDA",           -- Location where each level should be done
+	    mu_factor                 = 1.,
+
+	    setup_ca_basis              = "POWER_BASIS",
+	    setup_ca_basis_size         = 4,
+	    setup_ca_lambda_min         = 0.0,
+	    setup_ca_lambda_max         = -1.0,
+	    coarse_solver_ca_basis      = "POWER_BASIS",
+	    coarse_solver_ca_basis_size = 4,
+	    coarse_solver_ca_lambda_min = 0.0,
+	    coarse_solver_ca_lambda_max = -1.0,
+	  }, -- finest level
+        } -- levels table
+      }, -- multrigrid_params
+      ------------------------------------------------
+      invert_params = {
+        kappa                             = quark_kappa,
+        clover_coeff                      = quark_clov_coeff,
+        mu                                = 0.0,
+        Ls                                = 1,
+        sp_pad                            = 0,
+        cl_pad                            = 0,
+        cpu_prec                          = quda_prec,
+        cuda_prec                         = quda_prec,
+        cuda_prec_sloppy                  = quda_prec_sloppy,
+        cuda_prec_precondition            = quda_prec_precondition,
+        preserve_source                   = "NO",
+        gamma_basis                       = "DEGRAND_ROSSI",
+        dirac_order                       = "QDP",
+        clover_cpu_prec                   = quda_prec,
+        clover_cuda_prec                  = quda_prec,
+        clover_cuda_prec_sloppy           = quda_prec_sloppy,
+        clover_cuda_prec_precondition     = quda_prec_precondition,
+        compute_clover                    = 1,
+        compute_clover_inverse            = 1,
+        clover_order                      = "PACKED",
+        input_location                    = "CPU",
+        output_location                   = "CPU",
+        dslash_type                       = "CLOVER_WILSON",
+        dagger                            = "NO",
+        mass_normalization                = "KAPPA",
+        solution_type                     = "MAT",             
+        solve_type                        = MG_solve_type,
+        matpc_type                        = "EVEN_EVEN",
+        inv_type                          = "GCR",
+        verbosity                         = verbosity,
+        verbosity_precondition            = verbosity,
+        inv_type_precondition             = "MG",
+        pipeline                          = 0,
+        gcrNkrylov                        = 10,
+        tol                               = tol,
+        residual_type                     = "L2_RELATIVE",
+        tol_hq                            = 0.0,
+        maxiter                           = 100,
+        reliable_delta                    = 1e-4,
+        schwarz_type                      = "ADDITIVE", --MG_schwarz_type,
+        precondition_cycle                = 1,
+        tol_precondition                  = 0.1,
+        maxiter_precondition              = 1,
+        omega                             = 1.0
+      }, -- invert_params
+      ------------------------------------------------
+      inner_params = {
+        kappa                             = quark_kappa,
+        clover_coeff                      = quark_clov_coeff,
+        mu                                = 0.0,
+        Ls                                = 1,
+        sp_pad                            = 0,
+        cl_pad                            = 0,
+        cpu_prec                          = quda_prec,
+        cuda_prec                         = quda_prec,
+        cuda_prec_sloppy                  = quda_prec_sloppy,
+        cuda_prec_precondition            = quda_prec_precondition,
+        preserve_source                   = "NO",
+        gamma_basis                       = "DEGRAND_ROSSI",
+        dirac_order                       = "DIRAC_ORDER",
+        clover_cpu_prec                   = quda_prec,
+        clover_cuda_prec                  = quda_prec,
+        clover_cuda_prec_sloppy           = quda_prec_sloppy,
+        clover_cuda_prec_precondition     = quda_prec_precondition,
+        clover_order                      = "PACKED",
+        input_location                    = "CPU",
+        output_location                   = "CPU",
+        dslash_type                       = "CLOVER_WILSON",
+        dagger                            = "NO",
+        mass_normalization                = "KAPPA",
+        matpc_type                        = "EVEN_EVEN",
+        solution_type                     = "MAT",
+        solve_type                        = "DIRECT",
+        -- Ignored by MG setup, but set to pass Init test
+        inv_type                          = "GCR",
+        tol                               = 1e-10,
+        maxiter                           = 1000,
+        reliable_delta                    = 1e-10,
+        gcrNkrylov                        = 10,
+        verbosity                         = verbosity,
+        verbosity_precondition            = verbosity
+      }
+    } -- JLab_isoClover_D5
+end
+

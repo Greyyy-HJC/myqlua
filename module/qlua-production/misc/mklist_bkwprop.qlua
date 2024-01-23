@@ -1,0 +1,37 @@
+require 'stdlib'
+cfg_key = assert(job_key)
+
+for i_ama_mode, ama_mode in pairs(ama_mode_list) do
+  for i_csrc, csrc in pairs(ama_mode['csrc_list']) do
+    local tsrc = csrc[1+t_axis]
+--    printf('%s\n', get_frwprop_file(cfg_key, csrc, ama_mode))
+    
+    for i_src_snk_dt, src_snk_dt in pairs(src_snk_dt_list) do
+      for ib, baryon in pairs(bb_baryon_list) do
+        local lt = latsize[1+t_axis]
+        local time_rev = nil
+        local tsnk = nil
+        local bwd_proj_sign = nil
+        if (baryon == 'proton_negpar_3') then
+          time_rev = true
+          tsnk = (lt + tsrc - src_snk_dt) % lt
+          bwd_proj_sign = 'plus'
+        elseif (baryon =='proton_3' or baryon == 'proton_1') then
+          time_rev = false
+          tsnk = (tsrc + src_snk_dt) % lt
+          bwd_proj_sign = 'minus'       -- sic! source is conjugated and has gamma5's around
+        else
+          io.stderr:write(string.format('unknown baryon "%s"\n', baryon))
+          os.exit(1)
+        end
+        for ip, psnk in pairs(bb_psnk_list) do
+          for iflav, flav in pairs(bb_flav_list) do
+            printf('%s\n', get_bkwprop_file(cfg_key, csrc, tsnk, psnk,
+                   baryon, flav, ama_mode))
+          end
+        end
+      end
+    end
+  end
+end
+

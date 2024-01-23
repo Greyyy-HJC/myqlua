@@ -1,0 +1,193 @@
+function colmat_set_su2(cm, a4, a, b, neg)
+  -- set the ([a,b],[a,b]) 2x2 submatrix of cm to a4.((neg?-1:1)*isigma,1)
+  assert(4 == #a4)
+  local I = complex(0,1)
+  if neg then
+    cm[{a=a,b=a}] =  a4[4] -I*a4[3]
+    cm[{a=a,b=b}] = -a4[2] -I*a4[1]
+    cm[{a=b,b=a}] =  a4[2] -I*a4[1]
+    cm[{a=b,b=b}] =  a4[4] +I*a4[3]
+  else 
+    cm[{a=a,b=a}] =  a4[4] +I*a4[3]
+    cm[{a=a,b=b}] =  a4[2] +I*a4[1]
+    cm[{a=b,b=a}] = -a4[2] +I*a4[1]
+    cm[{a=b,b=b}] =  a4[4] -I*a4[3]
+  end
+end
+function colmat_set_su2_norm(cm, a4, a, b, neg)
+  -- set the ([a,b],[a,b]) 2x2 submatrix of cm to (a4/|a4|).(isigma,1)
+  assert(4 == #a4)
+  local a4n = (a4[1]*a4[1] + a4[2]*a4[2] + a4[3]*a4[3] + a4[4]*a4[4]):sqrt()
+  colmat_set_su2(cm, { a4[1]/a4n, a4[2]/a4n, a4[3]/a4n, a4[4]/a4n }, a, b, neg)
+end
+function colmat_set_su2_iexp(cm, a3, a, b, neg)
+  -- set the ([a,b],[a,b]) 2x2 submatrix of cm to exp(i*a3.sigma)
+  assert(3 == #a3)
+  local a3n = (a3[1]*a3[1] + a3[2]*a3[2] + a3[3]*a3[3]):sqrt()
+  local a3c = a3n:cos()
+  local a3s2n =L:Real(0)
+  L:Subset(qcd.ne(0, a3n)):where(function()a3s2n:set(a3n:sin() / a3n)end)
+  colmat_set_su2(cm, { a3[1] * a3s2n, a3[2] * a3s2n, a3[3] * a3s2n, a3c}, a, b, neg)
+end
+
+function gauge_set_su2_instanton(U, csrc, Rlat, ia_sign, a, b, ms)
+  -- set the ([a,b],[a,b]) submatrices of gauge field gf[mu] to 
+  --  classical instanton/antiinstanton at csrc with size rho
+  --    ms    half-size of the internal area (regular-gauge inst)
+  assert(0 < #U)
+  local L = U[1].lattice
+  assert(#L == #U)
+  assert(4 == #L)
+  assert(#csrc == #L)
+
+  if not ms then
+    ms = {}
+    for mu = 0, #L - 1 do 
+      assert(4 <= L[mu])
+      ms[1+mu] = math.floor(L[mu]/4) 
+    end
+  end
+  assert(#ms == #L)
+  for mu = 0, #L - 1 do assert(2*ms[1+mu] < L[mu]) end
+
+  local dy = {}
+  local ti, ti_lo, ti_hi = {}, {}, {}
+  local ti_all = L:Int(1)
+  local dti_any= L:Int(0)
+  local nzmask  = {}
+  local nzmask_all = L:Int(1)
+  for mu = 0, #L - 1 do
+    local l_mu = L[mu]
+    assert(0 == l_mu % 2)  -- don't want extra trouble
+    -- (-L/2) <= dy <= L/2-1
+    dy[1+mu]    = (L:pcoord(mu) - csrc[1+mu] + (3 * l_mu) / 2) % l_mu - l_mu / 2  
+    nzmask[1+mu]= qcd.ne(0, (dy[1+mu] + l_mu/2) % l_mu)
+    nzmask_all  = nzmask_all * nzmask[1+mu]
+    ti_lo[1+mu] = qcd.eq(-ms[1+mu], dy[1+mu])
+    ti_hi[1+mu] = qcd.eq( ms[1+mu], dy[1+mu])
+    ti[1+mu]    = qcd.le(-ms[1+mu], dy[1+mu]) * qcd.le(dy[1+mu], ms[1+mu])
+    ti_all      = ti_all * ti[1+mu]
+    dti_any     = dti_any + ti_lo[1+mu] + ti_hi[1+mu]
+  end
+  dti_any   = qcd.ne(0, dti_any)  -- make mask
+  local dti = dti_any * ti_all    -- boundary of ti
+  local to  = qcd.eq(0, ti_all)
+  
+  local function xmap(y, mu)
+    local l_mu = L[mu]
+    return (l_mu*l_mu * 2.) * y / (l_mu*l_mu / 4. - y*y)
+  end
+  local function dxmap(y, mu) 
+    local l_mu  = L[mu]
+    local y2    = y * y
+    local den   = l_mu*l_mu / 4. - y2
+    return (l_mu*l_mu * 2.) * (l_mu*l_mu / 4. + y2) / (den*den)
+  end
+  local rho = xmap(Rlat, 0)
+  printf("Rlat=%f  rho=%f\n", Rlat, rho)
+  local xx  = latvec.fromfunction({4}, function()return L:Real()end)    -- mapped y_mu->x_mu comp
+  local xxh = {}    -- mapped y_mu+mu/2->xh_mu comp
+  local pxyh = {}   -- mapped dx/dy[mu] at y_mu+mu/2
+  local x
+  for mu = 0, #L - 1 do
+    local dy_r  = L:Real(dy[1+mu])
+    -- -(L/2-1/2) <= dy <= +(L/2-1/2)
+    local dyh_r = dy_r + .5
+    xx[1+mu]    =  xmap(dy_r,  mu)
+    xxh[1+mu]   =  xmap(dyh_r, mu)
+    pxyh[1+mu]  = dxmap(dyh_r, mu)
+  end
+
+  local cmap= {{ 4, 3, 2}, { 3, 4, 1}, { 2, 1, 4}, { 1, 2, 3}}
+  local s1  = {{-1, 1,-1}, {-1,-1, 1}, { 1,-1,-1}, { 1, 1, 1}}
+  local s2  = {{ 1, 1,-1}, {-1, 1, 1}, { 1,-1, 1}, {-1,-1,-1}}
+  local smap_reg, smap_sin
+  local neg
+  if      1 == ia_sign then 
+    neg = false
+    smap_reg, smap_sin = s1, s2
+  elseif -1 == ia_sign then 
+    neg = true
+    smap_reg, smap_sin = s2, s1
+  else error(string.format("bad ia_sign=%s", tostring(ia_sign))) end
+
+  -- gauge transformation U^{reg}_{x,mu} = g_x U^{sing}_{x,mu} g_{x,x+mu}^{-1}
+  local cm_tmp = L:ColorMatrix()
+  local gf_tr = L:ColorMatrix(1.)
+  assert(2 <= gf_tr:colors())
+  L:Subset(dti):where(function()
+    -- sic! need this workaround to be sure the mask is used 
+    --  (compare latcolmat-x.c Qs(q_M_set)[:set] vs Qs(q_M_put)[:__newindex]
+    cm_tmp:set(gf_tr)
+    colmat_set_su2_norm(cm_tmp, xx, a, b, neg)
+    gf_tr:set(cm_tmp)
+  end)
+--  latvec.print_cmp(gf_tr * gf_tr:adjoin(), L:ColorMatrix(1.), "gf_tr.gf_gr^H<>1")   --**
+
+  for mu = 0, #L - 1 do
+    local xh  = list_copy(xx)
+    xh[1+mu]  = xxh[1+mu]
+    local xh2 = L:Real(0.)
+    for nu = 0, #L-1 do xh2 = xh2 + xh[1+nu]*xh[1+nu] end
+
+    -- for Ureg links; XXX exclude ti_hi->ti_hi+1 links (those will be set to Using below anyway)
+    local ti_mu = ti_all * qcd.eq(0, ti_hi[1+mu]) 
+    -- for Using links; XXX include ti_hi->ti_hi+1 links
+    local to_mu = qcd.eq(0, ti_mu)
+
+    local gf_mu  = U[1+mu]
+    -- set U^{reg} links first
+    L:Subset(ti_mu):where(function()
+      local v_reg = pxyh[1+mu] / (xh2 + rho*rho) 
+      local a_reg = {L:Real(0), L:Real(0), L:Real(0)}
+      for k=1, 3 do a_reg[k]:set(v_reg * smap_reg[1+mu][k] * xh[cmap[1+mu][k]]) end
+      cm_tmp:set(gf_mu)
+      colmat_set_su2_iexp(cm_tmp, a_reg, a, b)    -- sic! no sign change in case of antiinstanton
+      gf_mu:set(cm_tmp)
+    end)
+
+    -- transform Ureg to Using on dti (affected links outside dti are set to Using below)
+    gf_mu = gf_tr:adjoin() * gf_mu * gf_tr:shift(mu, "from_forward")
+
+    -- set U^{sing} links, except where zmask[1+nu], nu\ne mu
+    local mask_outer = to_mu
+    for nu = 0, #L - 1 do if nu ~= mu then mask_outer = mask_outer * nzmask[1+nu] end end
+    L:Subset(mask_outer):where(function()
+      local v_sin = rho*rho * pxyh[1+mu] / xh2 / (xh2 + rho*rho)
+      local a_sin = {L:Real(0), L:Real(0), L:Real(0)}
+      for k=1,3 do a_sin[k]:set(v_sin * smap_sin[1+mu][k] * xh[cmap[1+mu][k]]) end
+      cm_tmp:set(gf_mu)
+      colmat_set_su2_iexp(cm_tmp, a_sin, a, b)    -- sic! no sign change in case of antiinstanton
+      gf_mu:set(cm_tmp)
+    end)
+    U[1+mu] = gf_mu
+
+    -- Ureg vs Using
+    if true then
+      local tio_mu = L:Int(0)
+      for nu = 0, #L - 1 do if nu ~= mu then tio_mu = tio_mu + ti_lo[1+nu] + ti_hi[1+nu] end end
+      local tio_mu = qcd.ne(0, tio_mu * ti_mu)
+      local cm_reg = L:ColorMatrix(1)
+      local cm_sin = L:ColorMatrix(1)
+      local gf_tr_sh = gf_tr:shift(mu, "from_forward")
+      L:Subset(tio_mu):where(function()
+        local v_reg = pxyh[1+mu] / (xh2 + rho*rho) 
+        local a_reg = {L:Real(0), L:Real(0), L:Real(0)}
+        for k=1, 3 do a_reg[k]:set(v_reg * smap_reg[1+mu][k] * xh[cmap[1+mu][k]]) end
+        colmat_set_su2_iexp(cm_reg, a_reg, a, b)
+        cm_reg:set(gf_tr * cm_reg * gf_tr_sh:adjoin())
+
+        local v_sin = rho*rho * pxyh[1+mu] / xh2 / (xh2 + rho*rho)
+        local a_sin = {L:Real(0), L:Real(0), L:Real(0)}
+        for k=1,3 do a_sin[k]:set(v_sin * smap_sin[1+mu][k] * xh[cmap[1+mu][k]]) end
+        colmat_set_su2_iexp(cm_sin, a_sin, a, b)
+        
+        printf("[%d] |cm_reg|2=%f  |cm_sin|2=%f\n", mu, cm_reg:norm2(), cm_sin:norm2())
+        printf("[%d] |cm_reg-cm_sin|2=%f  |cm_reg+cm_sin|2=%f\n", mu, (cm_reg-cm_sin):norm2(), (cm_reg+cm_sin):norm2())
+      end)
+    end --**
+
+  end
+  return U
+end
+

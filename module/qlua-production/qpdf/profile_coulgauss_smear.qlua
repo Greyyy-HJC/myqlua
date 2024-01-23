@@ -1,0 +1,59 @@
+package.path = 'qlua-production/?.qlua;qlib-lhpc/?.qlua;qlib/?.qlua;' .. package.path
+require 'strict'    -- catch all undefined (nil) variables
+require 'stdlib'    -- standard printf, etc
+require 'lhpc-std'  -- make_source, etc
+require 'ape-smear' -- gauge smear
+require 'hex-smear'
+require 'gauge'
+require 'qdpc_io'
+require 'setup_util'
+require 'debug_util'
+require 'latvec'
+
+require 'hadspec'
+
+require 'hadron/baryon_corr'
+require 'smear/coulgauss_smear'
+
+
+------------------------------------------------------------------------------
+-- INITIALIZATION
+------------------------------------------------------------------------------
+tot_timer = timer("total")
+L = qcd.lattice(latsize, {network=network_geom})
+S = rnd_init(L, rnd_seed)
+
+-- zero field, trivial gauge
+cm1 = L:ColorMatrix(1.)
+gauge_u = { cm1, cm1, cm1, cm1 }
+colmat_gfix = cm1
+
+-- TODO move to config
+test_csrc = {1,2,3,0}
+coulgauss_iter = 3
+
+do
+  for cg_tag, cg_w in pairs(coulgauss_width_list) do
+    local sample_tag = string.format("%s", cg_tag)
+    local sample_timer = timer(string.format("scan %s", sample_tag))
+    local smear_func_coulgauss = make_gauss_smear_func(L, {cg_w, cg_w, cg_w, 0}, colmat_gfix)
+    
+    local h5file = string.format('%s/smear_profile/scan_smear_profile.%s.h5', data_top, sample_tag)
+    os.mkdir(dirname(h5file))
+    local h5_w = qcd.hdf5.Writer(h5file, {method="phdf5"})
+
+    local src = make_source_point(L, test_csrc)    -- FIXME can do complex scalar instead, much faster
+    for i_cg = 1, coulgauss_iter do
+      src = smear_func_coulgauss(src)
+      src2 = qcd.dot(src, src):real()    -- square
+      local kpath = string.format('/%s/n%d', sample_tag, i_cg)
+      h5_w:remove(kpath)
+      h5_w:write(kpath, src2, {lattice=L, sha256="ignore", precision="double"})
+      h5_w:flush()
+    end
+    h5_w:close()
+    sample_timer('done')
+  end
+end
+tot_timer('done')
+printf("QLUA_RUN_SUCCESS\n")

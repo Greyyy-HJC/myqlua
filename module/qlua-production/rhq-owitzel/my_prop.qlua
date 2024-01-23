@@ -1,0 +1,69 @@
+require "stdlib"
+require "MDWFutils"
+require "WriteMDWFpropagator"
+
+-- file_name = "/lqcdproj/nucstrucdwf/mdwf_48c96_ml0.00078/gauge/ckpoint_lat.880"
+file_name = "./ckpoint_lat.IEEE64BIG.495"
+rsd_cg = 1e-16
+max_cg = 8000
+src_vec = {0,0,0,0}
+mval = 0.04
+M5 = 1.8
+Ls = 16
+bc = {1,1,1,1}
+b5 = 1.5
+c5 = 0.5
+precision = "float"
+
+
+-- moments = {{0,0,0}, {1,0,0}, {0,1,0}, {1,0,1}}
+moments = {{0,0,0}}
+
+
+L, volume, S = InitLattice(24,24,24,64)
+
+U, GaugeInfo = LoadGaugefield(file_name, L, volume)
+
+
+--  mdwf 
+b5_vector = {}
+c5_vector = {}
+for i = 1, Ls do
+   b5_vector[i] = b5
+   c5_vector[i] = c5
+end
+
+DW = qcd.MDWF.generic(U, bc, Ls, M5, mval, b5_vector, c5_vector)
+mx_solver = DW:mixed_solver(rsd_cg, max_cg, rsd_cg, max_cg)
+
+src = MakePointSource(src_vec)
+
+-- Find the quark propagator for this source and compute the mesonic 2pt function
+--q_prop = mx_solver(src)
+--q_prop =  dwf_solver_5D(L, mx_solver, src, Ls, U, mval)
+
+--------
+mdwf_prop = make_calc_mdwf_prop(mx_solver, U, Ls, M5, b5, c5)  -- wrapper
+q_prop = mdwf_prop(src) -- solution, 4d 'DiracPropagator' 
+
+ComputeMeson2pt(q_prop, q_prop, moments, src_vec[4])
+
+
+
+-- Write QIO propagator
+P={}
+P["ACTION"] = 'NEF'
+P["OVERMASS"] = M5
+P["MASS"] = mval
+P["LS"] = Ls
+P["B5"] = b5
+P["C5"] = c5
+P["RSDCG"] = rsd_cg
+P["MAXCG"] = max_cg
+P["SRCVEC"] = Table2String(src_vec)
+P["TIMESLICE"] = src_vec[4]
+P["FERMION_BC"] = Table2String(bc)
+
+QIOwrite_MDWF_point_source_propagator("./MDWFprop24c_0.04_495.qio", q_prop, P, GaugeInfo, precision)
+printf("Done.\n")
+

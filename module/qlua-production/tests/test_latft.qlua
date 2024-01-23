@@ -1,0 +1,42 @@
+package.path = 'qlib/?.qlua;qlib-lhpc/?.qlua;qlua-production/?.qlua;' .. package.path
+require 'stdlib'
+require 'lhpc-std'
+require 'setup_util'
+require 'latvec'
+
+latsize   = {6,8,4,12}
+network_geom = {1,1,1,1}
+t_axis    = #latsize - 1
+rnd_seed  = 1984
+ferm_bc  = {1,1,1,-1}
+
+tot_timer = timer("total")
+L = qcd.lattice(latsize, {network=network_geom})
+print_network_settings()
+print_subgrid_settings(L)
+S = rnd_init(L, rnd_seed)
+rnd = S
+
+
+
+table_deepupdate(_rcParam, { la = { comment = 'test'} } )
+table_deepupdate(_rcParam, { la = { backend = 'gpu-cublas' } })
+table_deepupdate(_rcParam, { la = { backend = 'cpu' } })
+print_obj(_rcParam, '_rcParam')
+
+-- FT in xyzt
+prop      = S:gaussian_DiracPropagator()
+prop_ft   = qcd.fourier_transf(prop,     1)
+prop2     = qcd.fourier_transf(prop_ft, -1) / L:volume()
+latvec.print_cmp(prop, prop2, "prop<>prop2")
+
+-- FT along array index
+nferm      =  { S:gaussian_DiracFermion(),  S:gaussian_DiracFermion()}
+nferm_ft   = qcd.fourier_transf_array(nferm,     1)
+nferm2     = latvec.scal_left(1./ #nferm, qcd.fourier_transf_array(nferm_ft, -1))
+print_obj(nferm, 'nferm')
+print_obj(nferm_ft, 'nferm_ft')
+print_obj(nferm2, 'nferm2')
+latvec.print_cmp(nferm, nferm2, "nferm<>nferm2")
+
+printf("QLUA_RUN_SUCCESS\n")

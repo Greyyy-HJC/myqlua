@@ -1,0 +1,418 @@
+require 'stdlib'
+require 'latvec'
+require 'iter'
+require 'disco/hadamard_vecs'
+require 'hadron/qbarq_wline'
+
+disco = rawget(_G, 'disco') or {}
+
+--============= iterators over vectors ==============
+function disco.hierprobvec_latreal_iter(L, i0, imax, istep)
+  -- iterate over hierarchical probing vectors [i0:imax:istep] on lattice L
+  local cnt_iter = iter.range(i0, imax, istep)
+  local hvf = disco.make_hadamard_vector_func(L)
+  return function()
+    local cnt = cnt_iter()
+    if nil == cnt then return nil end -- stop iteration
+    return L:Real(hvf(cnt))
+  end
+end
+
+function disco.dilute_colspin_latdirferm_iter(L, z0, pvr_iter)
+  -- for each real/complex-valued vectors from pvr_iter, iterate over spin*color diluted DiracFermions
+  local j_cs = 0
+  local nc, ns = 3, 4
+  local n_cs = nc * ns
+  local hpz
+  return function()
+    if 0 == j_cs then -- create new coord vec if necessary
+      local v = pvr_iter()
+      if nil == v then return end -- stop iteration
+      hpz = z0 * v
+    end 
+    local ic, is = math.floor(j_cs / ns), (j_cs % ns)
+    local res = L:DiracFermion()  -- zero
+    res[{c=ic,d=is}] = hpz
+    j_cs = (j_cs + 1) % n_cs
+    return res
+  end
+end
+
+function disco.epair_read_qio_txt_iter(L, evec_file_lime, eval_file_txt, opt)
+  -- read eigenvectors from QIO file consecutively
+  -- does QIO reader know when EOF?
+  --  evec_file_lime
+  --  eval_file_txt
+  local func_name_ = 'disco.epair_read_qio_txt_iter'
+  opt = opt or {}
+  
+  -- read all evals at once
+  local evals = {}
+  printf("%s: read evals from '%s'\n", func_name_, eval_file_txt)
+  io.stdout:flush()
+  for s in io.lines(eval_file_txt) do
+    local sn = iter.imap_list(tonumber, string.gmatch(s, "%S+"))
+    list_append(evals, sn[2])
+  end
+  print_obj(evals, 'evals')
+
+  -- open evec qio file
+  printf("%s: read evecs from '%s'\n", func_name_, evec_file_lime)
+  io.stdout:flush()
+  local evec_qio_r = open_qdpc_read(L, evec_file_lime, {volmap='lex'}) -- XXX should match the lattice if storing evecs on scratch
+
+  -- iterator func
+  local nvec = opt.nvec or -1
+  local cnt = 0
+  return function()
+    if (0 <= nvec and nvec <= cnt) or (#evals <= cnt) then return nil end -- stop iter
+    local tt = timer(string.format("read evec [%04d]", cnt))
+    local evec = evec_qio_r:DiracFermion()                  ; tt('done')
+    cnt = cnt + 1
+    return evec, evals[cnt]
+  end
+end
+
+--============= actual contraction function ===============
+local function bb_lpath_maxlen(lp_list)
+  local lmax = 0
+  for i, lp in ipairs(lp_list) do
+    if lmax < #lp then lmax = #lp end
+  end
+  return lmax
+end
+
+function disco.bb_contract_FB(prop_F, prop_B, gauge_u_bc, bb_lpath_list, qcs_opt)
+  -- compute bb contractions from propagators Tr[\Gamma.Wl.F.B] 
+  --   and save according to qcs_opt
+  -- return: pos.space latcomplex[i_G16]
+  qcs_opt = qcs_opt or {}
+
+  local aff_w, qcs_momproj, qcs_save
+--  if nil == qcs_opt.momproj or nil == qcs_opt.save then
+--    local L = prop_F.lattice
+--    assert(4 == #L)
+--    -- default output AFF: a hack to avoid segfault
+--    aff_w = qcd.aff.Writer('x.aff')
+--    qcs_momproj = { csrc={0,0,0,0,},  mom_list={{0,0,0}},
+--        t_axis=#L-1,  bc_t = 1,  tlen=L[#L-1],  ft_sign=1 }
+--    qcs_save = { file=aff_w,  kpath='/x/',  mkey='q',  fkey='g' }
+--  end
+  assert(latvec.print_fpclassify(latvec.locnorm2(prop_B):sqrt(), 
+         {tit='disco.bb_contract_FB:prop_B', verbose=true, min_abs=1e-50, max_abs=1e+50}))
+  assert(latvec.print_fpclassify(latvec.locnorm2(prop_F):sqrt(), 
+         {tit='disco.bb_contract_FB:prop_F', verbose=true, min_abs=1e-50, max_abs=1e+50}))
+  local qcs_opt1 = table_deepmerge(
+      { backend       = rcparam.get('backend.qbarq'), },    -- can be overridden by qcs_opt FIXME put also in C
+      qcs_opt, 
+      { result        = true,                               -- to get pos.space 
+        bb_max_depth  = bb_lpath_maxlen(bb_lpath_list),}    -- max links (depth)
+      )
+  local qcs = qcd.contract_state('bb_g_F_B', {prop_F, prop_B, gauge_u_bc}, qcs_opt1)
+  local res = {}
+  for i, lp in ipairs(bb_lpath_list) do
+    local k = string.format("l%d_%s", #lp, lp)
+    res[k] = qcs:step(lp)
+  end
+  if aff_w then aff_w:close() end
+
+  -- important for freeing GPU RAM
+  qcs = nil     
+  force_gc()
+
+  return res
+end
+--============= contraction of vectors from an iterator ===============
+local function pvpair2dppair(uvp_list, opt)
+  -- convert { {df_a1,df_b1,..}, {df_a2,df_b2,...},... (max Ncs)} -> {dp_a, dp_b, ...}
+  -- pad number of df to Nc*Ns if necessary
+  opt = opt or {}
+  local Nc  = opt.Nc or 3
+  local Ns  = opt.Ns or 4
+  local Ncs = Nc * Ns
+  assert(12 == Ncs)         -- currently hardcoded constraint
+
+  assert(0 < #uvp_list)
+  local n_dp = #(uvp_list[1])
+  assert(0 < n_dp)
+  for i, uvp in ipairs(uvp_list) do assert(#uvp == n_dp) end
+  local dp_list = {}
+  for j = 1, n_dp do
+    local dfl = iter.lmap_list(function(xl)return xl[j] end, uvp_list)
+    assert(0 < #dfl)
+    assert(#dfl <= Ncs)
+    if #dfl < Ncs then list_pad(dfl, Ncs, latvec.zero_like(dfl[1])) end
+    list_append(dp_list, latvec.dfl2dp(dfl))
+  end
+  return dp_list
+end
+
+local function ctrFB_func_ibatch(ctrFB_func, uvp_iter, opt)
+  opt = opt or {}
+  local Nc  = opt.Nc or 3
+  local Ns  = opt.Ns or 4
+  local Ncs = Nc * Ns
+  assert(12 == Ncs)         -- currently hardcoded constraint
+
+  local res = {}
+  for uvp_list in iter.ichop(Ncs, uvp_iter) do
+    local dpp = pvpair2dppair(uvp_list, {Nc=Nc, Ns=Ns})
+    local ctr = ctrFB_func(dpp[1], dpp[2]:adjoin())
+    for k, v in pairs(ctr) do
+      if res[k] then res[k] = latvec.add(res[k], v)
+      else res[k] = v end
+    end
+  end
+  return res
+end
+
+function disco.init_probing_qloop_wilson4d_defl(qlmx, ctrFB_func, epair_iter, op_func,  opt)
+  -- iterate over eigenpairs to populate deflation eigenspace and compute contraction
+  -- XXX side effect: insert vectors to qlmx [0 ; nvec)
+  -- their contributions to the disconnected contractions
+  -- eigenspace V, \Lambda is for operator (A^H . A) = V . \Lambda . V^H 
+  -- that is used to make SVD of the operator in the deflation subspace:
+  --        [A]_d = U . \Sigma . V^H, 
+  -- where U = A . V . \Sigma^{-1}, \Sigma=+\sqrt{\Lambda}
+  -- the contribution
+  --
+  --  qlmx          QLM object to import eigenvectors to
+  --  ctrFB_func(F,B) contract forward and backward "propagators"
+  --                F = (v1,v2,...,v12), B^\dag = (u1,u2,...,u12)
+  --                TODO modify interface to handle eigenvector lists instead of props
+  --  op_func(x)    apply operator
+  --  epair_iter()  call repeatedly to obtain (evec, eval) pairs; 
+  --            nil is returned if no epairs left
+  --
+  -- XXX function does not check limits; 
+  local func_name_ = 'disco.init_probing_qloop_wilson4d_defl'
+  opt = opt or {}
+  local L = qlmx.lattice
+  local nvec = opt.nvec or 0    -- default : no limit; stop at (nil,nil) epair
+  if (0 < nvec) then epair_iter = iter.ifirst(nvec, epair_iter) end
+
+  -- iterator over eigenvectors with side-effect: importing u-vec to qlmx
+--  local eval_list = {}
+  local ivec = 0
+  local pvpair_iter = iter.imap(
+      -- FIXME eigenvalue is not even needed: can be computed as uvec:norm2()
+      function(evec, eval)
+--        list_append(eval_list, eval)
+        local sigma = math.sqrt(math.abs(eval))
+        local uvec = op_func(evec) / sigma    -- FIXME normalize instead?
+        qlmx:insert(ivec, uvec)
+        if opt.VERBOSE then
+          printf("%s: pvpair_iter: [%4d]  |v|2=%13.8e  |u|2=%13.8e  Lambda=%13.8e\n",
+              func_name_, ivec, evec:norm2(), uvec:norm2(), eval)
+        end
+        ivec = ivec + 1
+        return {evec, uvec/sigma}
+      end,
+      epair_iter)
+
+  return ctrFB_func_ibatch(ctrFB_func, pvpair_iter)
+end
+
+function disco.run_probing_qloop_wilson4d_defl(qlmx, ctrFB_func, probvec_df_iter, solver_func, opt)
+  --    qlmx      qcd.latmat object with deflation evecs
+  --    ctrFB_func
+  -- XXX returns SUM over supplied dirferm probing vectors
+  -- XXX normalization must be done externally according to the dilution/probing scheme
+  local func_name_ = 'disco.run_probing_qloop_wilson4d_defl'
+  opt = opt or {}
+  local L = qlmx.lattice
+  local defl_nbatch = opt.defl_nbatch
+
+  -- iterator over deflated vectors, deflation is in batches
+  local defl_probvec_df_iter = iter.imap_batch(defl_nbatch, 
+      function(xl) 
+        if opt.VERBOSE then 
+          printf("%s: defl_probvec_df_iter: deflate %d vecs\n", func_name_, #xl) 
+        end
+        return qlmx:ortho_veclist(xl) 
+      end,
+      probvec_df_iter)
+
+  -- iterator over {DslashInv.v, v} pairs
+  -- XXX side effect: count vectors
+  local cnt_vec = 0
+  local pvpair_iter = iter.imap(
+      function(v)
+        if opt.VERBOSE then 
+          printf("%s: pvpair_iter: %d\n", func_name_, cnt_vec)
+        end
+        cnt_vec = cnt_vec + 1
+        return {solver_func(v), v}
+      end,
+      defl_probvec_df_iter)
+
+  local res = ctrFB_func_ibatch(ctrFB_func, pvpair_iter)
+
+  -- normalize & return
+  if 0 < cnt_vec then 
+    printf("INFO: %s: iterated over %d vectors\n", func_name_, cnt_vec)
+  return res
+  else 
+    printf("WARN: %s: no vectors\n", func_name_)
+  end
+end
+
+function disco.run_probing_qloop_wilson4d(ctrFB_func, probvec_df_iter, solver_func, opt)
+  -- same as disco.run_probing_qloop_wilson4d_defl but without deflation (strange quarks etc)
+  --    qlmx      qcd.latmat object with deflation evecs
+  --    ctrFB_func
+  -- XXX returns SUM over supplied dirferm probing vectors
+  -- XXX normalization must be done externally according to the dilution/probing scheme
+  local func_name_ = 'disco.run_probing_qloop_wilson4d'
+  opt = opt or {}
+  local defl_nbatch = opt.defl_nbatch
+
+  -- iterator over {DslashInv.v, v} pairs
+  -- XXX side effect: count vectors
+  local cnt_vec = 0
+  local pvpair_iter = iter.imap(
+      function(v)
+        if opt.VERBOSE then 
+          printf("%s: pvpair_iter: %d\n", func_name_, cnt_vec)
+        end
+        cnt_vec = cnt_vec + 1
+        return {solver_func(v), v}
+      end,
+      probvec_df_iter)
+
+  local res = ctrFB_func_ibatch(ctrFB_func, pvpair_iter)
+
+  -- normalize & return
+  if 0 < cnt_vec then 
+    printf("INFO: %s: iterated over %d vectors\n", func_name_, cnt_vec)
+  return res
+  else 
+    printf("WARN: %s: no vectors\n", func_name_)
+  end
+end
+
+-- scal disco data)))
+function disco.table_scal(a, x)
+  local res = {}
+  for k, xk in pairs(x) do
+    res[k] = latvec.scal_left(a, xk)
+  end
+  return res
+end
+
+-- add disco data
+function disco.table_axpby(a, x, b, y)
+  -- set of all keys in y
+  local kk_y = {}
+  for k, yk in pairs(y) do kk_y[k] = true end
+
+  local res = {}
+  for k, xk in pairs(x) do
+    res[k] = latvec.scalsum_left(a, xk, b, y[k])
+    kk_y[k] = nil
+  end
+  
+  assert(nil == next(kk_y)) -- check that no keys left
+  return res
+end
+
+
+
+--============= test of syntax etc ==================
+--if true then
+if false then
+  local latsize = {4,4,4,8}
+  local network_geom = {1,1,1,2}
+  local L = qcd.lattice(latsize, {network=network_geom})
+  local t_axis    = #latsize - 1
+  local rnd_seed  = 1984
+  local ferm_bc  = {1,1,1,-1}
+
+  print_network_settings()
+  print_subgrid_settings(L)
+  local S = rnd_init(L, rnd_seed)
+  local rnd = S
+
+  local gauge_u = latvec.fromfunction({4}, function()return toSUn(S:gaussian_ColorMatrix()) end)
+  local gauge_u_bc = gauge_copy(gauge_u)
+  gauge_apply_boundary(gauge_u_bc, ferm_bc)
+
+
+  local function ctrFB_func_test(F, B) 
+    print_obj({F,B}, 'cntr_func_param')
+    return {Ftr = F:trace(), Btr=B:trace()}
+  end
+
+
+
+  local defl_nvec = 20
+  local qlmx = qcd.latmat.create(L, 'lattice.dirac.fermion', defl_nvec, {prec='single'})
+
+
+  -- contract epairs
+  local epair_iter_rnd
+  do 
+    local epair_cnt = 0
+    local epair_max = defl_nvec
+    epair_iter_rnd = function()
+      epair_cnt = epair_cnt + 1
+      if epair_max < epair_cnt then return nil end
+      return rnd:gaussian_DiracFermion(), (1 - .5 / epair_cnt)
+    end
+  end
+--  if true then 
+  if false then 
+    cnt = 0
+    for evec,eval in epair_iter_rnd do
+      print_obj(evec, string.format('evec(#%d, %f)', cnt, eval))
+      cnt = cnt + 1
+    end
+    os.exit(0)
+  end
+
+  local op_func_test = function(x)
+    printf('call op_func\n')
+    return x
+  end
+  local res_defl = disco.init_probing_qloop_wilson4d_defl(qlmx, ctrFB_func_test, epair_iter_rnd, op_func_test, 
+      {VERBOSE=true})
+  print_obj(res_defl, 'res_defl')
+
+
+  -- contract probvecs
+  local r0 = L:Real(1.)
+  L:Subset(qcd.lt(S:gaussian_Real(), 0)):where(function() r0:set(-r0) end)
+--  printf("norm2(r0)=%f  sum(z0)=%s\n", r0:norm2(), tostring(r0:sum()))
+
+  local probvec_iter = disco.dilute_colspin_latdirferm_iter(L, L:Complex(r0), 
+      disco.hierprobvec_latreal_iter(L, 4))
+--  if true then 
+  if false then 
+    cnt = 0
+    for vec in probvec_iter do
+      print_obj(vec, string.format('vec(#%d)', cnt))
+      cnt = cnt + 1
+    end
+    os.exit(0)
+  end
+  local solver_func_test = function(x)
+    printf('call solver_func\n')
+    return x 
+  end
+  local res_prob = disco.run_probing_qloop_wilson4d_defl(qlmx, ctrFB_func_test, probvec_iter, solver_func_test,
+      {VERBOSE=true, defl_nbatch=16})
+  print_obj(res_prob, 'res_prob')
+  printf("QLUA_RUN_SUCCESS\n")
+end
+
+
+
+hierprobvec_real_iter   = depr_warn(disco.hierprobvec_latreal_iter)
+probvec_dirferm_iter    = depr_warn(disco.dilute_colspin_latdirferm_iter)
+bb_contract_FB          = depr_warn(disco.bb_contract_FB)
+epair_read_qio_txt_iter = depr_warn(disco.epair_read_qio_txt_iter)
+disco4d_wilson_init     = depr_warn(disco.init_probing_qloop_wilson4d_defl)
+disco4d_wilson_iterate  = depr_warn(disco.run_probing_qloop_wilson4d_defl)
+disco_scal              = depr_warn(disco.table_scal)
+disco_axpby             = depr_warn(disco.table_axpby)
+

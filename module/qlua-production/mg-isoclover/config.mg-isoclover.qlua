@@ -1,0 +1,201 @@
+package.path='qlib/?.qlua;qlib-lhpc/?.qlua;' . .package.path
+require "stdlib"
+require "setup_util"
+require "strict"
+
+latsize   = {32,32,32,96}
+network_geom  = {2,2,2,4}
+
+-- quark action
+ferm_bc = {1,1,1,-1}    -- fully-periodic BC to avoid fractional momenta
+m_l     = -0.2850
+m_s     = -0.2450
+kappa_l = 1. / (8 + 2 * m_l)
+c_sw    = 1.24930970916466
+
+mg_tol_approx = 1e-4
+mg_maxiter  = 200
+
+mg_param = make_mg_params(
+      kappa_l, c_sw, ferm_bc, 
+      mg_tol_approx, mg_maxiter,
+      latsize, 
+      {    -- ALCC D5
+        blocking      = { {4,4,4,4}, {2,2,2,2} },
+        verbose       = {        3,         3  }, 
+        null_vecs     = {       24,        24  },
+        null_vecs_extra={        6,         6  },
+        prehits       = {        0,         0  },
+        posthits      = {        4,         4  },
+        underrelax    = {       1.,        1.  },
+        null_maxiter  = {       20,        20  },
+        null_res      = {      0.4,       0.4  },
+        null_conv     = {      0.8,       0.8  },
+                                               
+        coarse_res    = {      0.1,       0.1  },
+        coarse_maxiter= {       12,        12  } 
+        coarse_ngcr   = {        8,         8  }
+      },
+      { name = "mg-alcc-d5",
+        verbose = 3 })
+
+stout_rho = 0.125
+stout_n   = 1
+
+arjun_iter  = 120
+arjun_coarse_iter = 12
+
+function make_mg_params(
+    kappa, csw, ferm_bc, 
+    tol, maxiter, 
+    latsize, mgtab,
+    param)
+  local def = {
+      verbose           =   0,   -- Chroma#Verbose
+      blocking          = {2,2,2,2},
+      null_vecs         =  24,   -- Chroma#NumNullVecs->24
+      null_vecs_extra   =   0,   -- Chroma#NumExtraVecs->0
+      prehits           =   0,   -- Chroma#NumPreHits->0
+      posthits          =   4,   -- Chroma#NumPostHits->4
+      underrelax,       =  1.,   -- Chroma#Underrelax->1.0
+      null_res          = 0.4,   -- Chroma#NullResidual->0.4
+      null_maxiter      = 100,   -- Chroma#NullMaxIter->100
+      null_conv         = 0.5,   -- Chroma#NullConvergence->0.5
+      coarse_res        = 0.2,   -- Chroma#CoarseResidual->0.2
+      coarse_maxiter    =  12,   -- Chroma#CoarseMaxIter->12
+      coarse_ngcr       =   8,   -- Chroma#CoarseNumGCRVecs->8
+
+      -- WTF 
+      restart           = 202,
+      max_restarts      = 5,
+      name              = "mg-wilson"
+  }
+  param = param or {}
+  local function vec_div(ls, block)
+    local res = {}
+    assert(#ls == #block)
+    for i = 1, #ls do
+      assert(0 == ls[i] % block[i])
+      res[i] = ls[i] / block[i]
+    end
+  end
+  local function get_i(k, i)
+    local res = mgtab[k][i]
+    if nil ~= res then res = def[k] end
+    assert(res)
+    return res
+  end
+
+  local res = {
+    name      = param.name or def.name,
+    verbose   = param.verbose or def.verbose, -- for -2
+    residual  = { rsqmin  = tol },
+    inverter = {            
+       max_iter     = maxiter,
+       restart      = param.restart or def.restart,
+       max_restarts = param.max_restarts or def.max_restarts,
+       evenodd      = "evenodd" -- or "odd" or "even"
+    },
+    boundary = ferm_bc, 
+    clover = { 
+       clov_s     = param.c_sw_s or csw,
+       clov_t     = param.c_sw_t or csw
+    },
+    global = { -- for -1
+       verbose    = param.verbose or def.verbose,
+       profile    = 1,
+       kappa      = kappa,
+       kappanv    = param.kappanv or kappa,
+       itmax      = maxiter,
+       ngcr       = param.ngcr or def.ngcr
+    }
+  }
+
+  local mg = {}
+  local c_ls = ls
+  for i=1, #mgtab.blocking do
+    for ka, kb in pairs({
+          verbose    = "verbose"            -- Chroma#Verbose,
+          null_vecs  = "nvecs",             -- Chroma#NumNullVecs
+          prehits    = "npre",              -- Chroma#NumPreHits
+          posthits   = "npost",             -- Chroma#NumPostHits
+          underrelax = "scale",             -- Chroma#Underrelax
+          null_res      = "setup_res",         -- Chroma#NullResidual
+          null_maxiter  = "setup_maxit",     -- Chroma#NullMaxIter
+          null_conv     = "setup_change_fac",  -- Chroma#NullConvergence
+          coarse_res    = "cres",              -- Chroma#CoarseResidual
+          coarse_maxiter= "itmax",             -- Chroma#CoarseMaxIter
+          coarse_ngcr   = "ngcr",              -- Chroma#CoarseNumGCRVecs
+          }) do
+      mg[i][kb] = get_i(i, ka)
+    end
+    c_ls = vec_div(c_ls, get_i(i, "blocking"))
+    mg[i].lattice = c_ls
+    mg[i].setup_nvecs = mg[i].nvecs + get_i(i, "null_vecs_extra")
+  end
+  res.multigrid = mg
+  return res
+end
+
+
+
+qopmg_param = {
+  name = "mg-wilson-test", -- optional for tostring()
+  verbose = 3, -- for -2
+  residual = {            -- 
+     rsqmin     = mg_tol_approx   -- Chroma#Residual
+     -- relmin = 0
+  },
+  inverter = {            -- WTF
+     max_iter   = mg_maxiter,
+     restart    = 202,    -- WTF
+     max_restarts = 5,
+     evenodd    = "evenodd" -- or "odd" or "even"
+  },
+  boundary = ferm_bc, -- boundary conditions XXX
+  clover = { -- should be together with kappas, but it's not how it is done in examples
+     clov_s     = c_sw_s,
+     clov_t     = c_sw_t,
+  },
+  global = { -- for -1
+     -- nlevels is #multigrid
+     -- nc is U[1]:colors()
+     verbose    = 3,
+     profile    = 1,
+     kappa      = kappa_l,
+     kappanv    = kappa_l,
+     itmax      = mg_maxiter,
+     ngcr       = 8,    -- arjun: 120, chroma.default=8
+  },
+  multigrid = { -- start with 0
+    { verbose           =    3,
+      lattice           = latsize_mg1,
+      nvecs             =   24,   -- Chroma#NumNullVecs->24
+      npre              =    0,   -- Chroma#NumPreHits->0
+      npost             =    4,   -- Chroma#NumPostHits->4
+      scale             =   1.,   -- Chroma#Underrelax->1.0
+      setup_res         =  0.4,   -- Chroma#NullResidual->0.4
+      setup_maxit       =  100,   -- Chroma#NullMaxIter->100
+      setup_change_fac  =  0.5,   -- Chroma#NullConvergence->0.5
+      setup_nvecs       =   30,   -- XXX nvecs + mg_setup_extra_nvecs
+      ngcr              =    8,   -- Chroma#CoarseNumGCRVecs->8
+      cres              =  0.1,   -- Chroma#CoarseResidual->0.2
+      itmax             =   50,   -- Chroma#CoarseMaxIter->12
+    },
+    { lattice = vec_div(vec_div(latSize, block1), block2),
+      verbose = 3,
+      nvecs = 24,
+      npre =  0,
+      npost =  4,
+      scale = 1,
+      cres = 0.1,
+      itmax = 50,
+      ngcr = 8,
+      setup_res =  0.4,
+      setup_maxit = 100,
+      setup_change_fac = 0.5
+      --- setup_nvecs 
+    }
+  }
+};
+

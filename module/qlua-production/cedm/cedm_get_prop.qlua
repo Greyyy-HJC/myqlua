@@ -1,0 +1,421 @@
+-- XXX NOTES
+-- XXX propagators are defined and stored according to CEDM writeup conventions
+--    ie the backward propagator prop_B has the last Dslash applied on the right
+
+require 'cedm/cedm-seq'  -- sequential sources
+require 'hadron/baryon_corr'
+require 'util/file'
+
+  
+function have_prop(cfg_key, prop_kind, prop_file)
+  return log_have_tag(get_prop_log_file(cfg_key, prop_kind), basename(prop_file))
+end
+
+function done_prop(cfg_key, prop_kind, prop_file)
+  return log_done_tag(get_prop_log_file(cfg_key, prop_kind), basename(prop_file))
+end
+
+-- FIXME pass L as arg
+function prop_save_func(fname, x, title, prop_prec)
+  -- requires in the scope:
+  --  prop_volfmt       part_dir for fast
+  --  prop_vol_stride   spacing between ranks doing IO (set equal to the number of ranks per 1 IO node)
+  if nil == title then
+    title = tostring(x)
+  end
+  printf("SAVE %s '%s'\n", title, fname)
+  local tt = timer(string.format("SAVE %s", title))
+  os.mkdir_path(dirname(fname))
+  local qio_w = open_qdpc_write(L, fname, "", prop_qio_volfmt, 
+                    {rank_stride=prop_qio_stride})
+  qio_w:DiracPropagator(prop_prec, x, title)
+  qio_w:close()
+  tt("done")
+end
+
+-- FIXME pass L as arg
+function prop_load_func(fname, title)
+  -- requires in the scope:
+  --  prop_vol_stride   spacing between ranks doing IO (set equal to the number of ranks per 1 IO node)
+  if nil == title then
+    title = ''
+  end
+  printf("LOAD %s '%s'\n", title, fname)
+  local tt = timer(string.format("LOAD %s", title))
+  local qio_r = open_qdpc_read(L, fname, {rank_stride=prop_qio_stride})
+  local res = qio_r:DiracPropagator()
+  qio_r:close()
+  tt("done")
+  return res
+end
+
+
+------------------------------------------------------------------------------
+-- load or compute propagators
+------------------------------------------------------------------------------
+
+---------- forward(F) props ----------
+-- return (prop_F, is_new)
+function get_prop_F(
+      L, cfg_key, csrc, ama, 
+      smear_func, solver_func)
+  local prop_F = nil
+  local prop_file = get_frwprop_file(cfg_key, csrc, ama)
+  local is_new = not have_prop(cfg_key, "prop_F", prop_file) 
+  if is_new then
+    local tt = timer("CALC prop_F")
+    local tsrc = csrc[1+t_axis]
+    local src_F_pt = make_source_point(L, csrc)
+    local src_F = L:DiracPropagator()
+    L:Subset({axis=#L-1, position=tsrc}):where(function() src_F:set(
+          smear_func(src_F_pt, {pos=tsrc})) end)                      ; tt("src")
+    prop_F  = solver_func(src_F)                          ; tt("prop")
+    if do_save_prop.F then
+      prop_save_func(prop_file, prop_F, "prop_F", ama['prop_prec'])
+      done_prop(cfg_key, "prop_F", prop_file)
+    end
+    tt("done")
+  else
+    prop_F = prop_load_func(prop_file, "prop_F")
+  end
+  return prop_F, is_new
+end
+
+---------- vacins-sequential(C) props ----------
+-- return (prop_C, is_new)
+function get_prop_volcedm_C(
+      L, cfg_key, csrc, ama,
+      prop_F, 
+      gf_clov, gf_tag, 
+      smear_func, solver_func)
+  local prop_C = nil
+  local prop_file = get_cedmseqprop_file(cfg_key, csrc, gf_tag, ama)
+  local is_new = not have_prop(cfg_key, "prop_C", prop_file)
+  if is_new then
+    local tt = timer("CALC prop_C")
+    local src_C = cedm_seqsrc_edm(prop_F, gf_clov)    ; tt("src")
+    prop_C = solver_func(src_C)                       ; tt("prop")
+    if do_save_prop.C then
+      prop_save_func(prop_file, prop_C, "prop_C", ama['prop_prec'])
+      done_prop(cfg_key, "prop_C", prop_file)
+    end
+    tt("done")
+  else
+    prop_C = prop_load_func(prop_file, "prop_C")
+  end
+  return prop_C, is_new
+end
+
+-- return (prop_C, is_new)
+function get_prop_volpsc_C(
+      L, cfg_key, csrc, ama,
+      prop_F, 
+      smear_func, solver_func)
+  local prop_C = nil
+  local prop_file = get_pscseqprop_file(cfg_key, csrc, ama)
+  local is_new = not have_prop(cfg_key, "prop_C", prop_file)
+  if is_new then
+    local tt = timer("CALC prop_C")
+    local src_C = seqsrc_psc(prop_F)              ; tt("src")
+    prop_C = solver_func(src_C)                       ; tt("prop")
+    if do_save_prop.C then
+      prop_save_func(prop_file, prop_C, "prop_C", ama['prop_prec'])
+      done_prop(cfg_key, "prop_C", prop_file)
+    end
+    tt("done")
+  else
+    prop_C = prop_load_func(prop_file, "prop_C")
+  end
+  return prop_C, is_new
+end
+
+
+---------- nucleon sink-sequential aka backward (B) props ----------
+-- return (prop_B, is_new)
+function get_prop_B(
+      L, cfg_key, csrc, ama, psnk, tsnk, 
+      S2, S1, Tpol, tpol_tag, flav_bkw, 
+      prop_F_sm, 
+      smear_func, solver_func)
+  local prop_B = nil
+  local prop_file = get_bkwprop_file(cfg_key, csrc, psnk, tsnk, tpol_tag, flav_bkw, ama)
+  local is_new = not have_prop(cfg_key, "prop_B", prop_file)
+  if is_new then
+    local tt = timer("CALC prop_B")
+    local src_B_pt = cedm_seqsrc_sink(flav_bkw, prop_F_sm, prop_F_sm, 
+          csrc, psnk, tsnk, S2, S1, Tpol)
+    local src_B_adj = L:DiracPropagator()
+    L:Subset({axis=#L-1, position=tsnk}):where(function() src_B_adj:set(
+          gamma{n=15} * smear_func(src_B_pt:adjoin(), {pos=tsnk})) end)           ; tt("src")
+    prop_B = solver_func(src_B_adj):adjoin() * gamma{n=15}            ; tt("prop")
+    if do_save_prop.B then
+      prop_save_func(prop_file, prop_B, "prop_B", ama['prop_prec'])
+      done_prop(cfg_key, "prop_B", prop_file)
+    end
+    tt("done")
+  else
+    prop_B = prop_load_func(prop_file, "prop_B")
+  end
+  return prop_B, is_new
+end
+
+-- return (prop_B, is_new)
+function get_propgrp_B(
+      L, cfg_key, csrcgrp, ama, psnk, tsep, 
+      S2, S1, Tpol, tpol_tag, flav_bkw, 
+      propgrp_F_sm, 
+      smear_func, solver_func)
+  local prop_B = nil
+  local csrc_coh0 = csrcgrp[1]
+  local prop_file = get_bkwprop_grp_file(cfg_key, csrcgrp, 
+              psnk, tsep, tpol_tag, flav_bkw, ama)
+  local is_new = not have_prop(cfg_key, "prop_B", prop_file)
+  if is_new then
+    local tt = timer("CALC prop_B")
+    local src_B_adj = L:DiracPropagator()  -- zero
+    local tsnk_list = {}
+    for i_csrc, csrc in pairs(csrcgrp) do
+      local tsnk = (csrc[1+t_axis] + tsep) % latsize[1+t_axis]
+      list_append(tsnk_list, tsnk)
+      -- XXX tsnk must be in the correct slab of propgrp_F_sm, propgrp_C_sm
+      -- XXX sic! cedm_seqsrc_sink already uses subsets, no need for further opt
+      local src_B_pt = cedm_seqsrc_sink(flav_bkw, propgrp_F_sm, propgrp_F_sm,
+                                       csrc, psnk, tsnk, S2, S1, Tpol)
+      L:Subset({axis=#L-1, position=tsnk}):where(function() src_B_adj:set(
+            gamma{n=15} * src_B_pt:adjoin())end)
+    end
+    src_B_adj = smear_func(src_B_adj, {pos=tsnk_list})
+    prop_B = solver_func(src_B_adj):adjoin() * gamma{n=15}            ; tt("prop")
+    if do_save_prop.B then
+      prop_save_func(prop_file, prop_B, "prop_B", ama['prop_prec'])
+      done_prop(cfg_key, "prop_B", prop_file)
+    end
+    tt("done")
+  else
+    prop_B = prop_load_func(prop_file, "prop_B")
+  end
+  return prop_B, is_new
+end
+
+-- return (prop_B, is_new)
+function get_propgrpemul_B(
+      L, cfg_key, csrcgrp, ama, psnk, tsep, 
+      S2, S1, Tpol, tpol_tag, flav_bkw, 
+      propgrp_F_sm, 
+      smear_func, solver_func)
+  local is_new_grp = false
+  local propgrp_B = L:DiracPropagator()
+  for i_csrc, csrc in pairs(csrcgrp) do
+    local tsnk = (csrc[1+t_axis] + tsep) % latsize[1+t_axis]
+    local prop_B, is_new = get_prop_B(L, cfg_key, csrc, ama, psnk, tsnk,
+                  S2, S1, Tpol, tpol_tag, flav_bkw, 
+                  propgrp_F_sm, smear_func, solver_func)
+    propgrp_B = propgrp_B + prop_B
+    is_new_grp= is_new_grp or is_new
+  end
+  return propgrp_B, is_new_grp
+end
+
+
+
+---------- nucleon sink- and vacins-sequential (EpG) props ----------
+-- return (prop_EpG, is_new)
+function get_prop_volcedm_EpG(
+    L, cfg_key, csrc, ama, psnk, tsnk, 
+    S2, S1, Tpol, tpol_tag, flav_cur, flav_cedm,
+    prop_F_sm, -- frw(F), smeared
+      prop_C_sm, -- frw cedm-seq (C), smeared
+      prop_B5, -- bkw(\tilde B), unsmeared
+    gf_clov, gf_tag,
+    smear_func, solver_func)
+  local prop_EpG = nil
+  local prop_file = get_cedmsinkseqprop_file(cfg_key, csrc, psnk, tsnk, 
+                        tpol_tag, flav_cur, flav_cedm, gf_tag, ama)
+  local is_new = not have_prop(cfg_key, "prop_EpG", prop_file)
+  if is_new then
+    local tt = timer("CALC prop_EpG")
+    -- G source(cEDM-sink-seq), smeared from right
+    local src_EpG_pt = cedm_seqsrc_ins_sink(flav_cur, flav_cedm, 
+        prop_F_sm, prop_C_sm, csrc, psnk, tsnk, S2, S1, Tpol)
+    local src_EpG_adj = L:DiracPropagator()
+    L:Subset({axis=#L-1, position=tsnk}):where(function() src_EpG_adj:set(
+        gamma{n=15} * smear_func(src_EpG_pt:adjoin(), {pos=tsnk})) end)
+    -- E source(sink-cEDM-seq), no smearing
+    if flav_cur == flav_cedm then 
+      src_EpG_adj = src_EpG_adj + gamma{n=15} * cedm_seqsrc_edm_bkw(prop_B5, gf_clov):adjoin()
+    end
+    tt("src")
+    prop_EpG = solver_func(src_EpG_adj):adjoin() * gamma{n=15} ; tt("prop")
+    if do_save_prop.EpG then
+      prop_save_func(prop_file, prop_EpG, "prop_EpG", ama['prop_prec'])
+      done_prop(cfg_key, "prop_EpG", prop_file)
+    end
+    tt("done")
+  else
+    prop_EpG = prop_load_func(prop_file, "prop_EpG")
+  end
+  return prop_EpG, is_new
+end
+
+-- return (prop_EpG, is_new)
+function get_propgrp_volcedm_EpG(
+    L, cfg_key, csrcgrp, ama, psnk, tsep, 
+    S2, S1, Tpol, tpol_tag, flav_cur, flav_cedm,
+    propgrp_F_sm, -- frw(F), smeared
+      propgrp_C_sm, -- frw cedm-seq (C), smeared
+      propgrp_B5, -- bkw(\tilde B), unsmeared
+    gf_clov, gf_tag,
+    smear_func, solver_func)
+  -- prop_Bcpb must have the same flav_cur==flav_cedm
+  local prop_EpG = nil
+  local csrc_coh0 = csrcgrp[1]
+  local prop_file = get_cedmsinkseqprop_grp_file(cfg_key, csrcgrp, psnk, tsep, 
+                        tpol_tag, flav_cur, flav_cedm, gf_tag, ama)
+  local is_new = not have_prop(cfg_key, "prop_EpG", prop_file)
+  if is_new then
+    local tt = timer("CALC prop_EpG")
+    -- G source(cEDM-sink-seq), smeared from right
+    local src_EpG_adj = L:DiracPropagator() -- zero
+    local tsnk_list = {}
+    for i_csrc, csrc in pairs(csrcgrp) do
+      local tsnk = (csrc[1+t_axis] + tsep) % latsize[1+t_axis]
+      list_append(tsnk_list, tsnk)
+      -- XXX tsnk must be in the correct slab of propgrp_F_sm, propgrp_C_sm
+      -- XXX sic! cedm_seqsrc_sink already uses subsets, no need for further opt
+      local src_EpG_pt = cedm_seqsrc_ins_sink(flav_cur, flav_cedm, 
+                          propgrp_F_sm, propgrp_C_sm, 
+                          csrc, psnk, tsnk, S2, S1, Tpol)
+      L:Subset({axis=#L-1, position=tsnk}):where(function() src_EpG_adj:set(
+            gamma{n=15} * src_EpG_pt:adjoin())end)
+    end
+    src_EpG_adj = smear_func(src_EpG_adj, {pos=tsnk_list})
+    -- E source(sink-cEDM-seq), no smearing
+    if flav_cur == flav_cedm then 
+      src_EpG_adj = src_EpG_adj + gamma{n=15} * cedm_seqsrc_edm_bkw(
+                        propgrp_B5, gf_clov):adjoin()
+    end
+    tt("src")
+    prop_EpG = solver_func(src_EpG_adj):adjoin() * gamma{n=15} ; tt("prop")
+    if do_save_prop.EpG then
+      prop_save_func(prop_file, prop_EpG, "prop_EpG", ama['prop_prec'])
+      done_prop(cfg_key, "prop_EpG", prop_file)
+    end
+    tt("done")
+  else
+    prop_EpG = prop_load_func(prop_file, "prop_EpG")
+  end
+  return prop_EpG, is_new
+end
+
+-- return (prop_EpG, is_new)
+function get_propgrpemul_volcedm_EpG(
+    L, cfg_key, csrcgrp, ama, psnk, tsep, 
+    S2, S1, Tpol, tpol_tag, flav_cur, flav_cedm,
+    propgrp_F_sm, -- frw(F), smeared
+      propgrp_C_sm, -- frw cedm-seq (C), smeared
+      propgrp_B5, -- bkw(\tilde B), unsmeared
+    gf_clov, gf_tag,
+    smear_func, solver_func)
+  local propgrp_EpG = L:DiracPropagator()
+  local is_new_grp= false
+  for i_csrc, csrc in pairs(csrcgrp) do
+    local tsnk = (csrc[1+t_axis] + tsep) % latsize[1+t_axis]
+    local prop_EpG, is_new = get_prop_volcedm_EpG(L, cfg_key, csrc, ama, psnk, tsnk,
+                  S2, S1, Tpol, tpol_tag, flav_cur, flav_cedm,
+                  propgrp_F_sm, propgrp_C_sm, propgrp_B5, gf_clov, gf_tag, 
+                  smear_func, solver_func)
+    propgrp_EpG = propgrp_EpG + prop_EpG
+    is_new_grp= is_new_grp or is_new
+  end
+  return propgrp_EpG, is_new_grp
+end
+
+
+
+-- return (prop_EpG, is_new)
+function get_prop_volpsc_EpG(
+    L, cfg_key, csrc, ama, psnk, tsnk, 
+    S2, S1, Tpol, tpol_tag, flav_cur, flav_ins,
+    prop_F_sm, -- frw(F), smeared
+      prop_C_sm, -- frw psc-seq (C), smeared
+      prop_B5, -- bkw(\tilde B), unsmeared
+    smear_func, solver_func)
+  local prop_EpG = nil
+  local prop_file = get_pscsinkseqprop_file(cfg_key, csrc, psnk, tsnk, 
+                        tpol_tag, flav_cur, flav_ins, ama)
+  local is_new = not have_prop(cfg_key, "prop_EpG", prop_file)
+  if is_new then
+    local tt = timer("CALC prop_EpG")
+    -- G source(cEDM-sink-seq), smeared from right
+    local src_EpG_pt = seqsrc_expand_nucsink(flav_cur, flav_ins, 
+        prop_F_sm, prop_C_sm, csrc, psnk, tsnk, S2, S1, Tpol)
+    local src_EpG_adj = L:DiracPropagator()
+    L:Subset({axis=#L-1, position=tsnk}):where(function() src_EpG_adj:set(
+        gamma{n=15} * smear_func(src_EpG_pt:adjoin(), {pos=tsnk})) end)
+    -- E source(sink-cEDM-seq), no smearing
+    if flav_cur == flav_ins then 
+      src_EpG_adj = src_EpG_adj + gamma{n=15} * seqsrc_psc_bkw(prop_B5):adjoin()
+    end
+    tt("src")
+    prop_EpG = solver_func(src_EpG_adj):adjoin() * gamma{n=15} ; tt("prop")
+    if do_save_prop.EpG then
+      prop_save_func(prop_file, prop_EpG, "prop_EpG", ama['prop_prec'])
+      done_prop(cfg_key, "prop_EpG", prop_file)
+    end
+    tt("done")
+  else
+    prop_EpG = prop_load_func(prop_file, "prop_EpG")
+  end
+  return prop_EpG, is_new
+end
+
+-- return (prop_EpG, is_new)
+function get_propgrp_volpsc_EpG(
+    L, cfg_key, csrcgrp, ama, psnk, tsep, 
+    S2, S1, Tpol, tpol_tag, flav_cur, flav_ins,
+    propgrp_F_sm, -- frw(F), smeared
+      propgrp_C_sm, -- frw psc-seq (C), smeared
+      propgrp_B5, -- bkw(\tilde B), unsmeared
+    smear_func, solver_func)
+  -- prop_Bcpb must have the same flav_cur==flav_ins
+  local prop_EpG = nil
+  local csrc_coh0 = csrcgrp[1]
+  local prop_file = get_pscsinkseqprop_grp_file(cfg_key, csrcgrp, psnk, tsep, 
+                        tpol_tag, flav_cur, flav_ins, ama)
+  local is_new = not have_prop(cfg_key, "prop_EpG", prop_file)
+  if is_new then
+    local tt = timer("CALC prop_EpG")
+    -- G source(cEDM-sink-seq), smeared from right
+    local src_EpG_adj = L:DiracPropagator() -- zero
+    local tsnk_list = {}
+    for i_csrc, csrc in pairs(csrcgrp) do
+      local tsnk = (csrc[1+t_axis] + tsep) % latsize[1+t_axis]
+      list_append(tsnk_list, tsnk)
+      -- XXX tsnk must be in the correct slab of propgrp_F_sm, propgrp_C_sm
+      -- XXX sic! seqsrc_nucsink already uses subsets, no need for further opt
+      local src_EpG_pt = seqsrc_expand_nucsink(flav_cur, flav_ins, 
+                          propgrp_F_sm, propgrp_C_sm, 
+                          csrc, psnk, tsnk, S2, S1, Tpol)
+      L:Subset({axis=#L-1, position=tsnk}):where(function() src_EpG_adj:set(
+            gamma{n=15} * src_EpG_pt:adjoin())end)
+    end
+    src_EpG_adj = smear_func(src_EpG_adj, {pos=tsnk_list})
+    -- E source(sink-cEDM-seq), no smearing
+    if flav_cur == flav_ins then 
+      src_EpG_adj = src_EpG_adj + gamma{n=15} * seqsrc_psc_bkw(
+                        propgrp_B5):adjoin()
+    end
+    tt("src")
+    prop_EpG = solver_func(src_EpG_adj):adjoin() * gamma{n=15} ; tt("prop")
+    if do_save_prop.EpG then
+      prop_save_func(prop_file, prop_EpG, "prop_EpG", ama['prop_prec'])
+      done_prop(cfg_key, "prop_EpG", prop_file)
+    end
+    tt("done")
+  else
+    prop_EpG = prop_load_func(prop_file, "prop_EpG")
+  end
+  return prop_EpG, is_new
+end
+
+

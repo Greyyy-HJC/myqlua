@@ -1,0 +1,87 @@
+package.path = 'qlua-production/?.qlua;qlib-lhpc/?.qlua;qlib/?.qlua;' .. package.path
+require 'strict'    -- catch all undefined (nil) variables
+require 'stdlib'    -- standard printf, etc
+require 'lhpc-std'  -- make_source, etc
+require 'gauge'
+require 'qdpc_io'
+require 'setup_util'
+require 'latvec'
+
+require 'util/strkey'
+
+tot_timer = timer("total")
+
+if "" == subjob_key then sample_list = false
+else sample_list = parse_int_range(subjob_key) end
+--printf("subjob_key='%s' sample_list=%s\n", subjob_key, tostring(sample_list))
+
+cfg_list = read_key_list('list.cfg.n51', 'cfg_list')
+sample_list = sample_list or range(1, #cfg_list+1)
+
+latsize   = {48,48,48,64}
+t_axis    = #latsize - 1
+rnd_seed  = 1984
+
+L = qcd.lattice(latsize, {network=network_geom})
+print_network_settings()
+print_subgrid_settings(L)
+
+S = rnd_init(L, rnd_seed)
+
+gfix_type = "coulomb"
+data_top = 'data'
+function get_colmat_gfix_file(key, gfix_type)
+  return string.format("%s/colmat_gfix/colmat_gfix.%s.%s",
+          data_top, gfix_type, key)
+end
+
+function get_colmat_gfix_new_file(key, gfix_type)
+  return string.format("%s/colmat_gfix_new/colmat_gfix.%s.%s",
+          data_top, gfix_type, key)
+end
+
+
+do
+  local n_sample_tot = #cfg_list
+  local i_sample_list = range(1, 1 + n_sample_tot)
+  if sample_list then 
+--    printf("WARN: request samples {%s}\n", list_tostring(sample_list))
+    for i,s in ipairs(sample_list) do 
+      if (n_sample_tot < s) then printf("WARN: SKIP sample[%d]: out of range\n", s) end
+    end
+    i_sample_list = list_slice(i_sample_list, sample_list)
+  end
+  printf("INFO: select  samples {%s}\n", list_tostring(i_sample_list))
+
+  for ii_s, i_sample in ipairs(i_sample_list) do
+    local tt = timer(string.format("sample[%d]", i_sample))
+    local cfg_key = cfg_list[i_sample]
+
+    local colmat_gfix_file = get_colmat_gfix_file(cfg_key, gfix_type)
+    printf("read colmat '%s'\n", colmat_gfix_file)
+    local colmat_gfix = load_qdpc_colmat(L, colmat_gfix_file)   ; tt('read_colmat')
+
+    local rnd_gt = toSUn(3.*S:gaussian_ColorMatrix())
+    local c0 = {}
+    for mu = 0, #L - 1 do c0[1+mu] = 0 end
+    for t = 0, L[t_axis] - 1 do
+      c0[1+t_axis] = t 
+      L:Subset({axis=t_axis,position=t}):where(function()
+          local cm0 = L:ColorMatrix(rnd_gt[c0])
+          rnd_gt:set(L:ColorMatrix(cm0))
+      end)
+    end                                                         ; tt('rand_colmat')
+
+    local colmat_gfix_new = rnd_gt * colmat_gfix
+    local gauge_str = string.format("gauge_%s_fix", gfix_type)
+    local colmat_gfix_file = get_colmat_gfix_new_file(cfg_key, gfix_type)
+    printf("save colmat '%s'\n", colmat_gfix_file)
+    os.mkdir_path(dirname(colmat_gfix_file))
+    save_qdpc_colmat(L, colmat_gfix_new, colmat_gfix_file, gauge_str, gauge_str, "single")  ; tt('save_colmat')
+    tt("done")
+  end
+end
+
+tot_timer("done")
+qcd.qprof_print()
+printf("QLUA_RUN_SUCCESS\n")

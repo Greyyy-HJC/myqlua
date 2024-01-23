@@ -1,0 +1,155 @@
+require 'latvec'
+
+function matr_herm(a)  return 0.5 * (a + a:adjoin()) end
+
+function matr_aherm(a) return 0.5 * (a - a:adjoin()) end
+
+function matr_trzero(a)
+  local nc  = a:colors()
+  local cm1 = a.lattice:ColorMatrix(1.)
+  return a - (a:trace() / nc) * cm1
+end
+
+function examine_suN(a, tit)
+  tit = tit or ""
+  local L = a.lattice
+  local nc = a:colors()
+  local cm1 = L:ColorMatrix(1.)
+  local c1 = L:Complex(1.)
+  local a_aH_diff1 = (a*a:adjoin() - cm1):norm2() / (L:volume() * nc)
+  local aDet_diff1 = (a:det() - c1):norm2() / (L:volume())
+  printf("%s:  |a.aH-1|2=%e  |det(a)-1|2=%e\n", tit, a_aH_diff1, aDet_diff1)
+end
+
+function avg_plaquette(u)
+  local L   = u[1].lattice
+  local nc  = u[1]:colors()
+  assert(#L == #u)
+  local plaq = L:Real(0)
+  for i = 0, #L-1 do for j = i+1, #L-1 do 
+    plaq = plaq + gauge_plaquette(u, i, j):trace():real()
+  end end
+  return plaq:sum() / (L:volume() * nc * #L * (#L-1) / 2.)
+end
+
+function avg_link_sq(u)
+  local L   = u[1].lattice
+  local nc  = u[1]:colors()
+  assert(#L == #u)
+  local link_sq = L:Real(0)
+  for i = 0, #L-1 do 
+    link_sq = link_sq + qcd.dot(u[1+i], u[1+i]):real()
+  end
+  return link_sq:sum() / (L:volume() * nc * #L)
+end
+
+
+-------------------------------------------------------------------------------
+-- stout force
+-------------------------------------------------------------------------------
+
+function gauge_stout_force_step(f_sm, u_sm, u, rho)
+  --    u^{sm}_{x,mu} = exp(\alpha iQ_{x,mu}) u_{x,sm},  
+  --    iQ_{x,mu} = [C_{x,mu} * u_{x,mu}^H]_{AT}
+  --    C_{x,mu} = sum of staples
+  -- \delta S = \sum_{x,mu} 2 Re Tr [\Sigma^{sm}_{x,mu} \delta U^{sm}_{x,mu}] 
+  --          = \sum_{x,mu} 2 Re Tr [\Sigma_{x,mu} \delta U_{x,mu}]
+  --
+  --            XXX maybe recover from u^{sm}_{x,mu}^H u_{x,mu}^H ?
+  --  f_sm      smeared force \Sigma^{sm}_{x,mu}
+  --  u_sm      smeared gauge field U^{sm}_{x,mu}
+  --  u         unsmeared field U_{x,mu}
+  --  rho       stout smearing param
+  --
+  -- Links:
+  --              mu
+  --              ^
+  --              |
+  --        --uf-- --uc--
+  --       |      |      |
+  --       ue     ux     ub
+  --       |      |      |
+  --        --ud-- --ua-- --> nu
+  local s     = {}
+  local w     = {}
+  for mu = 0, #L-1 do
+    local c_re = L:ColorMatrix(0.)
+    for nu = 0, #L-1 do
+      if mu ~= nu then
+        local ub  = u[1+mu]:shift(nu, "from_forward")
+        local uc  = u[1+nu]:shift(mu, "from_forward")
+        local uab = u[1+nu] * ub
+        local uAx = u[1+nu]:adjoin() * u[1+mu]
+        c_re      = c_re + uab * uc:adjoin() + (uAx * uc):shift(nu, "from_backward")
+      end
+    end
+    local iq    = matr_trzero(matr_aherm(c_re * u[1+mu]:adjoin()))
+    local uf_sm1= u[1+mu] * f_sm[1+mu]    -- sic! u*f_sm
+    local exp_iq, Gamma = qcd.su3_dexp(complex(0,-rho) * iq, uf_sm1)
+    local iLambda = matr_trzero(matr_aherm(complex(0,1) * Gamma))
+    -- TODO check that u_sm[1+mu] * u[1+mu]:adjoin() == exp_iq
+    s[1+mu]     = f_sm[1+mu] * exp_iq + rho * c_re:adjoin() * iLambda
+    -- need for Lambda-staples
+    w[1+mu]     = iLambda:adjoin() * u[1+mu]
+--    examine_suN(exp_iq, "exp_iq")
+--    examine_suN(Gamma, "Gamma")
+--    latvec.print_cmp(exp_iq, u_sm[1+mu] * u[1+mu]:adjoin(), "exp_iq<>U_sm.U^H")
+    local exp_iq2 = (rho * iq):exp()
+  end
+  for mu = 0, #L-1 do
+    for nu = 0, #L-1 do
+      if mu ~= nu then
+        local ub  = u[1+mu]:shift(nu, "from_forward")
+        local uc  = u[1+nu]:shift(mu, "from_forward")
+        local uab = u[1+nu] * ub
+        local uAx = u[1+nu]:adjoin() * u[1+mu]
+        local wb  = w[1+mu]:shift(nu, "from_forward")
+        local wc  = w[1+nu]:shift(mu, "from_forward")
+        local uwab= w[1+nu] * ub + u[1+nu] * wb
+        local uwAx= w[1+nu]:adjoin() * u[1+mu] + u[1+nu]:adjoin() * w[1+mu]
+        local d   = (uwab * uc:adjoin() + uab * wc:adjoin()
+                  + (uwAx * uc + uAx * wc):shift(nu, "from_backward"))
+        s[1+mu] = s[1+mu] - rho * d:adjoin()
+      end
+    end
+  end
+  return s
+end
+
+function gauge_stout_force_wrap(u, stout_rho, stout_nstep, force_func, opt)
+  --  force_func  return force, act; act is passed without modification
+  --              convenient for stout-smeared Qtopo to avoid redoing smearing to check dS<>f*du
+  --
+  opt = opt or {}
+  local L   = u[1].lattice
+  assert(#L == #u)
+  local function report_gauge_force(u, f, title)
+    if opt.verbose then
+      local plaq_u  = avg_plaquette(u)
+      local qtopo_u = gauge_topdensity_plaq(u):sum()
+      local linksq_f= avg_link_sq(f)
+      printf("gauge_topdensity_plaq_stout_force: %s\tplaq=%f\tqtopo=%f\t|force|2=%f\n", 
+          title, plaq_u, qtopo_u, linksq_f)
+    end
+  end
+
+  -- stout-smear and keep all steps
+  -- [1+stout_istep][1+mu]
+  local u_stout = { u } 
+  for i = 1, stout_nstep do
+    u_stout[i+1] = stout_smear_full(u_stout[i], stout_rho, 1)
+  end
+
+  -- smeared force from smeared links
+  local qtopo_f, qtopo = force_func(u_stout[stout_nstep + 1])
+
+  -- chain-transform force from istep=nstep to istep=0
+  for i = stout_nstep, 1, -1 do
+    report_gauge_force(u_stout[1+i], qtopo_f, string.format("stout_step=%d", i))
+    qtopo_f = gauge_stout_force_step(qtopo_f, u_stout[i+1], u_stout[i], stout_rho)
+  end
+  report_gauge_force(u_stout[1], qtopo_f, string.format("stout_step=0"))
+
+  return qtopo_f, qtopo
+end
+

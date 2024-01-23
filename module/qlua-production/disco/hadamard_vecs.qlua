@@ -1,0 +1,147 @@
+-- added on 2019/02/26, implementation by Jeremy Green
+-- works until the powers of two have been exhausted for one of the dimensions
+--ss commments by syritsyn
+--ss notation {a,b,c,d} is a bit vector == 2^3*a+2^2*b+2^1*c+2^0*d
+disco = rawget(_G, 'disco') or {}
+
+function disco.hadamard_vecs(L)
+   local d = #L                   --ss assuming d=4, coord=(x,y,z,t)
+   local RB = vector.int(2^d)     --ss RB[{x,y,z,t}]={z,y,x,cbar}, cbar=1-c, c=(p + d)%2, p=(x+y+z+t)%2
+   do
+      -- red-black ordering of 2^d torus
+      local c = vector.int(2^d)   --ss c[{x,y,z,t}] = (p+d%2)%2
+      c[2^d-1] = 0
+      for j = 0,d-1 do
+	 for k = 2^d - 2^(j+1), 2^d - 2^j - 1 do
+	    c[k] = 1 - c[k+2^j]
+	 end
+      end
+
+      local RB0 = vector.int(2^d) --ss RB0[{x,y,z,t}]={cbar,x,y,z}
+      local blacks = 0
+      local reds = 2^(d-1)
+      for i = 0, 2^d - 1 do
+	 if c[i] == 0 then
+            RB0[i] = reds
+            reds = reds + 1
+         else
+            RB0[i] = blacks
+            blacks = blacks + 1
+         end
+      end
+
+      -- bit-reverse RB0
+      for i = 0, 2^d - 1 do
+	 RB[i] = 0
+	 for j = 0, d-1 do
+	    RB[i] = RB[i] + (RB0[i]%2) * 2^( d-j-1 )
+	    RB0[i] = math.floor(RB0[i] / 2)
+	 end
+      end
+   end
+
+   local nbits_max = 0
+   for j=0, d-1 do
+      nbits_max = nbits_max + math.ceil(math.log(L[j])/math.log(2))
+   end
+   local function probvec(m)
+      local maxbit
+      for j=0, nbits_max do
+	 if math.floor( m / 2^j ) == 0 then
+	    maxbit = j - 1
+	    break
+	 end
+      end
+      -- reversing the lower bits yields consistency with other code
+      -- but makes the matching of Hadamard vectors with the same even sites more difficult
+--[[
+      if maxbit >= 0 then
+	 local mlow = m % (2^maxbit)
+	 m = m - mlow
+	 for j = 0, maxbit-1 do
+	    m = m + ( mlow % 2 ) * 2^(maxbit-j-1)
+	    mlow = math.floor(mlow / 2)
+	 end
+      end
+]]--
+      local kmax = math.floor( (maxbit+d)/d )
+      local y = L:Int()           --ss \sum_{m0=0,1,2,...} bitvectordot(m[-d*(m0+1):-d*m0], s')
+      --ss no need for kmax, maxbit, nbits_max if the loop is rewritten as 
+      --ss while 0 < m do
+      for m0 = 0, kmax-1 do       
+	 local s = L:Int()        --ss s={x[-m0-1],y[-m0-1],z[-m0-1],t[-m0-1]}
+	 for j = 0, d-1 do
+	    s = s * 2 + ( L:pcoord(j) / 2^m0 ) % 2
+	 end
+	 s = RB[s]                --ss s'={z[-m0-1],y[-m0-1],x[-m0-1],cpbar[-m0-1]}
+	 for j = 0, d-1 do
+	    y = y + ( s%2 ) * ( m%2 )
+	    s = s / 2
+	    m = math.floor( m / 2 )
+	 end
+      end
+      return 1 - 2*(y % 2) -- (-1)^y
+   end
+
+   return probvec
+end
+
+function disco.make_hadamard_vector_func(L)
+   local d = #L                   --ss assuming d=4, coord=(x,y,z,t)
+   local RB = vector.int(2^d)     --ss RB[{x,y,z,t}]={z,y,x,cbar}, cbar=1-c, c=(p + d%2)%2, p=(x+y+z+t)%2
+   do
+      for x = 0, 2^d-1 do         --ss x = {x,y,z,t}
+        local p  = x % 2          --ss p=(will be)=(x+y+z+t)
+        local x1  = math.floor(x / 2)
+        local xr  = 0
+        for j = 1, d-1 do
+          local xj = x1 % 2
+          p   = p + xj
+          xr  = 2 * xr + xj
+          x1  = math.floor(x1 / 2)
+        end
+        local c = (p + d) % 2     --ss sic! c[-1] === 0 for any d in JG's code
+        RB[x] = 2 * xr + (1 - c)  --ss sic! signs are alternated on "red" (c=0)
+      end
+   end
+
+   local function probvec(m)
+      local y = L:Int()           --ss \sum_{m0=0,1,2,...} bitvectordot(m[-d*(m0+1):-d*m0], s')
+      local m0= 0
+      while 0 < m do
+	 local s = L:Int()        --ss s={x[-m0-1],y[-m0-1],z[-m0-1],t[-m0-1]}
+	 for j = 0, d-1 do
+	    s = s * 2 + ( L:pcoord(j) / 2^m0 ) % 2
+	 end
+	 s = RB[s]                --ss s'={z[-m0-1],y[-m0-1],x[-m0-1],cpbar[-m0-1]}
+	 for j = 0, d-1 do
+	    y = y + (s % 2) * (m % 2)
+	    s = s / 2
+	    m = math.floor( m / 2 )
+	 end
+         m0 = m0 + 1              --ss next bits in coord
+      end
+      return 1 - 2*(y % 2) -- (-1)^y
+   end
+
+   return probvec
+end
+
+-- probing on even sites only
+-- in 4-d, on the even sites probvec(2*m)=-probvec(2*m+1)
+function disco.hadamard_vecs_even(L)
+   local probvec = disco.hadamard_vecs(L)
+   local Leven = L:Subset("even")
+
+   local function probvec_even(m)
+      ret = L:Int()
+      Leven:where(function() ret:set(probvec(2*m)) end)
+      return ret
+   end
+
+   return probvec_even
+end
+
+hadamard_vecs               = depr_warn(disco.hadamard_vecs)
+make_hadamard_vector_func   = depr_warn(disco.make_hadamard_vector_func)
+hadamard_vecs_even          = depr_warn(disco.hadamard_vecs_even)

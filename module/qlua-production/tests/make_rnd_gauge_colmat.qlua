@@ -1,0 +1,59 @@
+package.path = 'qlib/?.qlua;qlib-lhpc/?.qlua;qlua-production/?.qlua;' .. package.path
+require 'stdlib'
+require 'lhpc-std'
+require 'setup_util'
+require 'latvec'
+require 'qdpc_io'
+require 'config/econfig'
+require 'gauge'
+require 'util/file'
+tot_timer = timer("total")
+
+--test_ens  = 'TEST8c16'
+--test_ens  = 'TEST32c64'
+test_ens  = 'TEST48c64'
+ekey      = string.format('%s_isoClover', test_ens)
+etab      = econfig.ensemble_param[ekey]
+ens_top   = test_ens
+
+cfg_key   = '100500'
+latsize   = etab.latsize
+network_geom = nil --{ 1, 1, 1, 2 }
+t_axis    = #latsize - 1
+rnd_seed  = 1984
+ferm_bc   = {1,1,1,-1}
+
+L = qcd.lattice(latsize, {network=network_geom})
+print_network_settings()
+print_subgrid_settings(L)
+S = rnd_init(L, rnd_seed)
+rnd = S
+
+get_gauge_file = (rawget(_G, 'get_gauge_file') or 
+  function(cfg_key)
+    return string.format('%s/gauge/gauge.%s.lime', ens_top, cfg_key)
+  end)
+get_colmat_gfix_file = (rawget(_G, 'get_colmat_gfix_file') or
+  function(cfg_key, gfix_type)
+    return string.format('%s/colmat_gfix/colmat_gfix.%s.%s.lime', ens_top, gfix_type, cfg_key)
+  end)
+
+
+
+local tt  = timer("create and save random gauge field")
+gauge_u   = latvec.fromfunction({4}, function()return toSUn(S:gaussian_ColorMatrix()) end)
+gauge_u_f = get_gauge_file(cfg_key)
+os.mkdir_path(dirname(gauge_u_f))
+save_qdpc_colmat(L, gauge_u, gauge_u_f,
+      "gauge_rnd", "gauge_rnd", "single")   
+tt('done')
+
+local tt  = timer("save colmat landaufix")
+colmat    = toSUn(S:gaussian_ColorMatrix())
+colmat_f  = get_colmat_gfix_file(cfg_key, 'coulomb')
+os.mkdir_path(dirname(colmat_f))
+save_qdpc_colmat(L, colmat, colmat_f,
+      "colmat_coulombfix", "colmat_coulombfix", "single")
+tt("done")
+
+tot_timer("done")

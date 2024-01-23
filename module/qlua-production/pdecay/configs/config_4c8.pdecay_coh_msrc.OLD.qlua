@@ -1,0 +1,610 @@
+package.path = 'qlib/?.qlua;qlib-lhpc/?.qlua;' .. package.path
+require 'strict'
+require 'setup_util'
+require 'stdlib'
+require 'madwf_sns'
+require 'mdwf_eopc'   -- MDWF ref.impl to check evecs
+
+--local _P = {}
+--job_config = _P
+--setmetatable(_P, {__index = _G})
+--setfenv(1, _P)
+job_config = _G
+
+-------------------------------------------------------------------------------
+-- general
+-------------------------------------------------------------------------------
+assert(job_key)
+assert(task_key)  -- for keeping track of samples in task 
+assert(subjob_key)
+if "" == subjob_key then sample_list = false
+else sample_list = parse_int_range(subjob_key) end
+
+cfg_key = job_key -- job# enumerates config#
+
+latsize = {4,4,4,8}
+t_axis = #latsize - 1
+rnd_seed= 1984
+
+-- for inverter test
+test_src_coord = {0,0,0,0}
+test_src_wup_N = 0
+
+
+-------------------------------------------------------------------------------
+-- quark action
+-------------------------------------------------------------------------------
+ferm_bc = {1,1,1,-1} ; bc = ferm_bc
+mdwf_M5 = 1.8
+mdwf_mf = 0.01
+mdwf_mf_ud = mdwf_mf
+mdwf_mf_s = 0.0850
+mdwf_L5_full = 32
+mdwf_b5_full = 1.
+mdwf_c5_full = 0.
+-- zMoebius params : etamax=1.45
+mdwf_L5  = 10
+mdwf_bmc5 = 1.
+mdwf_bpc5 = {
+  complex(4.953133333527814,  4.636759671022268),
+  complex(5.834549184435342, -0.847375749821817),
+  complex(3.727311567410276, 0),
+  complex(1.614590791824022, 0),
+  complex(0.835373070341761, 0),
+
+  complex(0.7053563878413177, 0),
+  complex(1.120047444033678, 0),
+  complex(2.420780639614394, 0),
+  complex(5.834549184435342,  0.847375749821817),
+  complex(4.953133333527814, -4.636759671022268),
+}
+assert(#mdwf_bpc5 == mdwf_L5)
+mdwf_b5, mdwf_c5 = {}, {}
+for s = 1, mdwf_L5 do 
+  mdwf_b5[s] = .5 * (mdwf_bpc5[s] + mdwf_bmc5)
+  mdwf_c5[s] = .5 * (mdwf_bpc5[s] - mdwf_bmc5)
+end
+
+-- testing settings
+mdwf_tol1, mdwf_maxiter1 = 1e-05, 100
+mdwf_tol,  mdwf_maxiter  = 1e-10, 100
+mixcg_tol_sloppy,mixcg_maxiter_sloppy      = 1e-5 , 100
+mixcg_tol_exact, mixcg_maxiter_exact       = 1e-10, 150
+
+
+-------------------------------------------------------------------------------
+-- AMA approximations
+-------------------------------------------------------------------------------
+-- * coordinates
+cfg_list = {}
+for s in io.lines('TEST4c8/list.cfg.all') do
+  cfg_list[1+#cfg_list] = s
+end
+cfg_index = table_index(cfg_list, cfg_key)
+printf("cfg_key='%s' index=%d\n", cfg_key, cfg_index)
+
+do
+--  csrcgrid  = { 1, 2, 4, 2 }
+--  nsrc_split = 2
+  csrcgrid  = { 1, 1, 2, 1 }
+  nsrc_split = 2
+  csrcgrid_nt = csrcgrid[1+t_axis]
+  hslab_len_t = math.floor(latsize[1+t_axis] / csrcgrid_nt)
+
+  local x0_1= { 0, 0, 0, 0 }
+  local dx_g= { 7,11,13,23 }
+  local dx_it={ latsize[1]/2, latsize[2]/2, latsize[3]/2, 0 } -- max displacement
+
+  local l1 = make_srcgrp_grid(csrcgrid, latsize, x0_1, dx_g, cfg_index, dx_it)
+  local nsrcgrp = #l1
+  assert(0 == nsrcgrp % nsrc_split)
+  local nsrc = math.floor(nsrcgrp / nsrc_split)
+  local l2 = list_reshape2d(l1, {nsrc, nsrc_split})
+--  print_obj(l2, "l2")
+
+  local csrcgrp_list2_sl = l2
+  local csrcgrp_list2_ex = { l2[1] }
+  ama_ex = { ['approx']    = 'exact',
+        ['csrcgrp_list2'] = csrcgrp_list2_ex,
+  --      ['tol']       = 1e-9 
+        ['prop_prec'] = 'double' }
+  ama_sl = { ['approx']    = 'sloppy',
+        ['csrcgrp_list2'] = csrcgrp_list2_sl,
+        ['ncg']       = 400,
+        ['tol']       = 1e-5,
+        ['prop_prec'] = 'float',
+        ['maxiter'] = 10000 }
+  ama_list = { 
+    ama_sl, 
+    ama_ex,
+  }
+end
+
+
+------------------------------------------------------------------------------
+-- Lanczos parameters
+------------------------------------------------------------------------------
+l_nev         = 200   -- wanted vectors
+l_ncv         = 250
+l_maxiter     = 50000
+l_tol         = 1e-6
+-- Chebyshev acc parameters
+l_poly_n      = 40
+l_poly_a      = .2 -- adjusted for 1400 based on a 1600 run results; eval[1400=67e-5]
+l_poly_b      = 10  -- actual lambda_max=4.647 from an LR run
+l_poly_x0     = 0.  -- P_n normalization point
+-- eigcg parameters (used only to init space for Lanczos)
+eigcg_nev     = 2
+eigcg_tol     = 1e-6
+eigcg_vmax    = 10
+eigcg_umax    = l_ncv
+
+
+------------------------------------------------------------------------------
+-- preptest params
+------------------------------------------------------------------------------
+preptest = {
+  bmark_la            = true,
+  test_read_gauge     = true,
+  test_save_hadspec   = true,
+  test_save_bb        = true,
+  test_save_bb_gen    = true,
+  test_ape            = true,
+  test_wup            = true,
+  test_prop           = true,
+  test_evec           = true,
+  test_g5herm         = true,
+}
+
+
+------------------------------------------------------------------------------
+-- solver section
+------------------------------------------------------------------------------
+-- if all propagators have been computed & stored, do not init solvers
+do_contract_only = false
+do_bogus_prop = false
+do_save_prop = { 
+  F   = true,     -- need full F to compute C with gamma5
+  Fg  = false,    -- keep F instead
+  B   = true,     -- need for cvi3 with gamma5, for xspace theta; also, read for reuse in one job
+  C   = false,    -- grouped C is sufficient
+  Cg  = true,
+  EpG = false, 
+}
+
+-- evec params
+mdwf_opt = {parity=1, pctype='eopc2p', defl='int2qlm'--[['internal']] }
+printf("mdwf_parity=%d    mdwf_pctype=%s\n", mdwf_opt.parity, mdwf_opt.pctype)
+mdwf_nvec, mdwf_nvec_basis = 200, 200
+qlmopt= { sublat='odd', array=mdwf_L5, prec='single', }
+evecdwfcl_opt = { file_geom = {4,2,2,2}, dir_stride=1 }
+
+
+
+function make_solver_x(mdwf, gauge_u, ferm_bc, ama)
+  local mixcg_maxiter_exact   = 100
+  --   single prec. restart
+  local mixcg_tol1            = 1e-4
+  local mixcg_maxiter1        = 100
+  local mixcg_tol             = 1e-9
+  local eps_moeb              = 2e-3
+
+  -- sic! the tolerance must be squared
+  if 'exact' == ama['approx'] then
+    local mdwf_invert = mdwf:mixed_solver(
+                mixcg_tol1^2, mixcg_maxiter1,   
+                eps_moeb^2,   mixcg_maxiter1)
+    local madwf_solver = make_solver_MADCG_g5herm(
+        gauge_u, ferm_bc, mdwf_mf, mdwf_M5,
+        mdwf_L5, mdwf_b5, mdwf_c5,
+        mdwf_L5_full, mdwf_b5_full, mdwf_c5_full,
+        3,
+        { eps2_i    = 5e-6,
+          eps2_f    = 5e-5,
+          solver_moeb = mdwf_invert,
+          eps2_m1   = eps_moeb^2, -- to match short solve prec
+          eps2_1    = eps_moeb^2,
+          mdwf_opt  = mdwf_opt,
+          verbose   = 'full',
+          })
+    return madwf_solver
+  elseif 'sloppy' == ama['approx'] then
+    local mdwf_invert = mdwf:mixed_solver(
+                mixcg_tol1^2, mixcg_maxiter1,   
+                mixcg_tol^2, ama['ncg']) 
+    return make_calc_mdwf_prop(mdwf_invert, gauge_u, ferm_bc, 
+                      mdwf_L5, mdwf_M5, mdwf_b5, mdwf_c5)
+  else
+    error(string.format("unknown approx='%s'"), ama['approx'])
+  end
+end
+
+
+-------------------------------------------------------------------------------
+-- source parameters
+-------------------------------------------------------------------------------
+ape_alpha   = 2.85   -- equiv to CPS ape_beta=0.4
+ape_N       = 2
+ape_accu    = 1e-6
+ape_maxiter = 15
+wup_N       = 3
+wup_alpha   = 2.5
+
+
+------------------------------------------------------------------------------
+-- correlator parameters
+------------------------------------------------------------------------------
+
+-- SINK momenta for hadspec, c2pt_volcedm
+c2pt_psnk_list = make_mom_list(10)
+-- SINK momenta for c2pt_cpbar, bb, bb_volcedm
+-- INSERTION momenta for c2pt_cpbar(cedm), bb, bb_volcedm(current)
+-- source-sink separations
+c3pt_tsep_list = { 8, 9, 10 }
+-- flavor components (assuming proton in&out)
+flav_list = { 'U', 'D' }
+-- building blocks link paths
+
+-- polarization matrices for nucleon ops
+cedm_S1   = gamma{mu=0} * gamma{mu=2}
+cedm_S2   = cedm_S1
+-- tpol is used in CP-even, tpol5 in CP-odd correlators
+tpol_posSzplus  = (1. + gamma{mu=3})/2 *(1. - gamma{mu=0}*gamma{mu=1}*complex(0,1))
+tpol_posSzminus = (1. + gamma{mu=3})/2 *(1. + gamma{mu=0}*gamma{mu=1}*complex(0,1))
+tpol_posSzplus5 = (1. + gamma{mu=3})/2 *(1. - gamma{mu=0}*gamma{mu=1}*complex(0,1)) *gamma{n=15}
+tpol_posSzminus5= (1. + gamma{mu=3})/2 *(1. + gamma{mu=0}*gamma{mu=1}*complex(0,1)) *gamma{n=15}
+
+-- include both spin polarizations for c2pt, one for c3pt
+cedm_Tpol_c2pt_list = { 
+  posSzplus   = tpol_posSzplus,
+  posSzminus  = tpol_posSzminus, 
+  posSzplus5  = tpol_posSzplus5,
+  posSzminus5 = tpol_posSzminus5, }
+cedm_Tpol5_c2pt_list = { 
+  posSzplus   = tpol_posSzplus,
+  posSzminus  = tpol_posSzminus,
+  posSzplus5  = tpol_posSzplus5,
+  posSzminus5 = tpol_posSzminus5, }
+cedm_Tpol_c3pt_list = { 
+  posSzplus   = tpol_posSzplus, }
+cedm_Tpol5_c3pt_list = { 
+  posSzplus   = tpol_posSzplus, }
+
+
+function debug_mem_print(cfg_key, msg)
+  msg = msg or ""
+  if 0 == os.node() then qcd.log_rusage(string.format("%s.rusage", cfg_key), msg) end  -- print getrusage to file
+  print_obj(qcd.memory_usage(), msg)  -- print Qlua lattice object count to stdout
+end
+
+------------------------------------------------------------------------------
+-- file locations
+------------------------------------------------------------------------------
+ens_top   = 'TEST4c8'
+data_top  = 'TEST4c8/data' 
+data_pdir = 'TEST4c8/data_pdir'
+evec_pdir = string.format('TEST4c8/evec_rawdump.%s.%d', mdwf_opt.pctype, mdwf_opt.parity)
+--scratch_dir     = "/scratch/evec_rawdump"
+scratch_dir     = evec_pdir   -- taking chances ...
+evec_rawdump_stride = 4   
+    
+prop_qio_stride   = 4
+prop_qio_volfmt   = 'part_dir'
+
+out_tag         = string.format('zm%d', mdwf_L5)
+
+-- return meta,eval,bpath
+function get_evecdwfcl_files(cfg_key)
+  local bpath = string.format("")
+  bpath = string.format("%s/evec_cache/%s",       
+      ens_top, cfg_key)
+  return bpath..'/metadata.txt', bpath..'/eigen-values.txt', bpath
+end
+
+
+
+function get_gauge_file(cfg_key)
+  return string.format("%s/gauge/ckpoint_lat.%s",
+          ens_top, cfg_key)
+end
+function mdwf_evec_file(key, nev)
+  return string.format("%s/mdwf_evec_nev%05d.%s.%s.raw", 
+          evec_pdir, nev, out_tag, key)
+end
+
+function csrc_str(csrc)
+  return string.format("x%dy%dz%dt%d", csrc[1], csrc[2], csrc[3], csrc[4])
+end
+function csrcgrp_str(csrcgrp)
+  local csrc_str_list = {}
+  for i_csrc, csrc in ipairs(csrcgrp) do
+    csrc_str_list[i_csrc] = csrc_str(csrc)
+  end
+  return table.concat(csrc_str_list, '_')
+end
+function psnk_str(psnk)
+  return string.format("PX%dPY%dPZ%d", psnk[1], psnk[2], psnk[3])
+end
+function snk_str_old(psnk, tsnk)
+  return string.format("%sT%d", psnk_str(psnk), tsnk)
+end
+function snk_str(psnk, tsep)
+  return string.format("%sdt%d", psnk_str(psnk), tsep)
+end
+-- AMA-dependent output file names
+function ama_str(ama)
+  if 'exact' == ama['approx'] then
+    return string.format("ex")
+  elseif 'sloppy' == ama['approx'] then
+    return string.format("sl")
+  else
+--    error(string.format('unknown ama="%s"', ama['approx']))
+    return string.format("")
+  end
+end
+function get_frwprop_file_S(cfg_key, csrc, ama)
+  return string.format("%s/frw_prop/frw_prop.%s.%s.%s.S.lime",
+          data_pdir, cfg_key, ama_str(ama), csrc_str(csrc))
+end
+
+
+function get_frwprop_file(cfg_key, csrc, ama)
+  return string.format("%s/frw_prop/frw_prop.%s.%s.%s.lime", 
+          data_pdir, cfg_key, ama_str(ama), csrc_str(csrc))
+end
+function get_frwprop_flav_file(cfg_key, csrc, flav_frw, ama)
+  return string.format("%s/frw_prop/frw_prop.%s.%s.%s.%s.lime", 
+          data_pdir, cfg_key, ama_str(ama), csrc_str(csrc), flav_frw)
+end
+function get_frwprop_grp_file(cfg_key, csrcgrp, ama)
+  return string.format("%s/frw_prop/frw_prop_grp.%s.%s.%s.lime", 
+          data_pdir, cfg_key, ama_str(ama), csrcgrp_str(csrcgrp))
+end
+function get_bkwprop_file(cfg_key, csrc, psnk, tsnk, tpol_tag, flavor, ama)
+  return string.format("%s/bkw_prop/bkw_prop.%s.%s.%s.%s.%s.%s.lime", 
+          data_pdir, cfg_key, ama_str(ama), 
+          csrc_str(csrc), snk_str_old(psnk, tsnk), 
+          tpol_tag, flavor)
+end
+function get_bkwprop_grp_flav_file(cfg_key, csrcgrp, psnk, tsep, tpol_tag, flav_frw, flav_bkw, ama)
+  return string.format("%s/bkw_prop/bkw_prop_grp.%s.%s.%s.%s.%s.%s.%s.lime", 
+          data_pdir, cfg_key, ama_str(ama), 
+          csrcgrp_str(csrcgrp), snk_str(psnk, tsep), 
+          tpol_tag, flav_frw, flav_bkw)
+end
+
+function get_cedmseqprop_file(cfg_key, csrc, gf_tag, ama)
+  return string.format("%s/cedmseq_prop/cedmseq_prop.%s.%s.%s.%s.lime",
+          data_pdir, cfg_key, ama_str(ama), csrc_str(csrc), gf_tag)
+end
+function get_cedmseqprop_grp_file(cfg_key, csrcgrp, gf_tag, ama)
+  return string.format("%s/cedmseq_prop/cedmseq_prop_grp.%s.%s.%s.%s.lime",
+          data_pdir, cfg_key, ama_str(ama), csrcgrp_str(csrcgrp), gf_tag)
+end
+function get_cedmsinkseqprop_file(cfg_key, csrc, psnk, tsnk,
+          tpol_tag, flav_cur, flav_cedm, gf_tag, ama)
+  return string.format("%s/cedmsinkseq_prop/cedmsinkseq_prop.%s.%s.%s.%s.%s.%s.%s.%s.lime",
+        data_pdir, cfg_key, ama_str(ama), csrc_str(csrc), snk_str_old(psnk, tsnk), 
+        tpol_tag, flav_cur, flav_cedm, gf_tag)
+end
+function get_cedmsinkseqprop_grp_file(cfg_key, csrcgrp, psnk, tsep,
+          tpol_tag, flav_cur, flav_cedm, gf_tag, ama)
+  return string.format("%s/cedmsinkseq_prop/cedmsinkseq_prop_grp.%s.%s.%s.%s.%s.%s.%s.%s.lime",
+        data_pdir, cfg_key, ama_str(ama), csrcgrp_str(csrcgrp), snk_str(psnk, tsep), 
+        tpol_tag, flav_cur, flav_cedm, gf_tag)
+end
+
+function get_hadspec_file(cfg_key, csrc, ama)
+  return string.format('%s/hadspec/hadspec.%s.%s.%s.aff',
+          data_top, cfg_key, ama_str(ama), csrc_str(csrc))
+end
+function get_c2pt_file(cfg_key, csrc, ama)
+  return string.format('%s/c2pt/c2pt.%s.%s.%s.aff',
+          data_top, cfg_key, ama_str(ama), csrc_str(csrc))
+end
+function get_bb_file(cfg_key, csrc, psnk, tsep, tpol_tag, flav_cur, ama)
+  return string.format("%s/bb/bb.%s.%s.%s.%s.%s.%s.aff",
+          data_top, cfg_key, ama_str(ama), csrc_str(csrc), snk_str(psnk, tsep),
+          tpol_tag, flav_cur)
+end
+function get_bbspace_file(cfg_key, csrc, psnk, tsep, tpol_tag, flav_cur, ama)
+  local ext = ''
+  if 'hdf5' == bbspace_opt.fmt then ext = '.h5'
+  elseif 'qio' == bbspace_opt.fmt then ext = '.lime' end
+  return string.format("%s/bbspace/bbspace.%s.%s.%s.%s.%s.%s%s",
+          data_top, cfg_key, ama_str(ama), csrc_str(csrc), snk_str(psnk, tsep),
+          tpol_tag, flav_cur, ext)
+end
+
+function get_c2pt_cpbar_file(cfg_key, csrc, psnk, tsep, tpol_tag, flav_cur, ama)
+  return string.format("%s/c2pt_cpbar/c2pt_cpbar.%s.%s.%s.%s.%s.%s.aff",
+          data_top, cfg_key, ama_str(ama), csrc_str(csrc), snk_str(psnk, tsep), 
+          tpol_tag, flav_cur)
+end
+function get_c2pt_volcedm_file(cfg_key, csrc, gf_tag, ama)
+  return string.format('%s/c2pt_volcedm/c2pt_volcedm.%s.%s.%s.%s.aff',
+          data_top, cfg_key, ama_str(ama), csrc_str(csrc), gf_tag)
+end
+function get_bb_volcedm_file(cfg_key, csrc, psnk, tsep,
+          tpol_tag, flav_cur, flav_cedm, gf_tag, ama)
+  return string.format("%s/bb_volcedm/bb_volcedm.%s.%s.%s.%s.%s.%s.%s.%s.aff",
+          data_top, cfg_key, ama_str(ama), csrc_str(csrc), snk_str(psnk, tsep),
+          tpol_tag, flav_cur, flav_cedm, gf_tag)
+end
+
+function get_c3pt_pdecay_file(cfg_key, csrc, psnk, tsep, 
+          mgamma_tag, flav_bkw, ama)
+  return string.format('%s/c3pt_pdecay/c3pt_pdecay.%s.%s.%s.%s.%s.%s.aff',
+          data_top, cfg_key, ama_str(ama), csrc_str(csrc), snk_str(psnk, tsep), mgamma_tag, flav_bkw)
+end
+function get_c3pt_pdecay_grp_file(cfg_key, csrcgrp, psnk, tsep, 
+          mgamma_tag, flav_bkw, ama)
+  return string.format('%s/c3pt_pdecay/c3pt_pdecay.%s.%s.%s.%s.%s.%s.aff',
+          data_top, cfg_key, ama_str(ama), csrcgrp_str(csrcgrp), snk_str(psnk, tsep), mgamma_tag, flav_bkw)
+end
+
+function get_lec_file(cfg_key, csrc, ama)
+  return string.format('%s/c3pt_pdecay/lec.%s.%s.%s.aff',
+          data_top, cfg_key, ama_str(ama), csrc_str(csrc))
+end
+
+function arpack_logfile(cfg_key)
+  return string.format("%s/arpack.log", logdir, cfg_key)
+end
+
+
+-- logging propagators and samples
+function get_prop_log_file(cfg_key, prop_kind)
+  return string.format("%s/prop_log/%s.%s", 
+          data_pdir, cfg_key, prop_kind)
+end
+
+job_tag = string.format('%s.%s.dt%s', job_key, task_key, 
+    list_tostring(c3pt_tsep_list, '%d', '-'))
+function get_c3pt_log_file(cfg_key)
+  return string.format("%s/log/%s", data_top, job_tag)
+end
+
+-------------------------------------------------------------------------------
+-- SETUP
+-------------------------------------------------------------------------------
+job_timer = timer("total")
+L = qcd.lattice(latsize, {network=network_geom})
+lat = L     -- alias
+S = rnd_init(L, rnd_seed)
+rnd = S     -- alias
+debug_mem_print(cfg_key,"Init lattice. From config script.")
+cur_timer = timer("gauge_read")
+printf("read gauge '%s'\n", get_gauge_file(cfg_key))
+gauge_u = qcd.nersc.read_gauge(L, get_gauge_file(cfg_key))
+cur_timer("done")
+
+debug_mem_print(cfg_key,"gauge read")
+if do_bogus_prop then
+  printf("WARNING: bogus(random) propagators for TESTING ONLY\n")
+  make_solver = function(ama) 
+    return function(x)
+      if 'lattice.dirac.propagator' == type(x) then return rnd:gaussian_DiracPropagator()
+      elseif 'lattice.dirac.fermion' == type(x) then return rnd:gaussian_DiracFermion() 
+      else error(string.format("solver: argument type '%s'", type(x))) end
+    end 
+  end
+elseif do_contract_only then    
+  printf("WARNING: contractions only, no solver initialized\n")
+  make_solver = function(ama) 
+    return function(x)
+      error("invoke solver in 'do_contract_only' mode") 
+      -- return nothing (nil)
+    end 
+  end
+else
+  if 'internal' == mdwf_opt.defl then  -- regular mdwf deflation
+    local mdwf_gen  = qcd.MDWF.generic(gauge_u, ferm_bc, 
+              mdwf_L5, mdwf_M5, mdwf_mf,
+                mdwf_b5, mdwf_c5, mdwf_opt)
+    mdwf_eigcg_df = mdwf_gen:eig_deflator(eigcg_vmax, eigcg_nev, eigcg_tol, l_nev)
+
+    local evecs_perm = mdwf_evec_file(cfg_key, l_nev)
+--    local evecs_scratch = mdwf_evec_file_scratch(cfg_key, l_nev)
+--    if evecs_scratch ~= evecs_perm then
+--      cur_timer = timer("evecs_rawdump_sync")
+--      printf("evecs_rawdump_sync: '%s' -> '%s'\n", evecs_perm, evecs_scratch)
+--      evecs_rawdump_sync(evecs_perm, evecs_scratch, evec_rawdump_stride)
+--      cur_timer("done")
+--    end
+
+    cur_timer = timer("evecs_rawload")
+    printf("[evec_read] %s\n", evecs_perm)
+    mdwf_eigcg_df:evecs_rawload(evecs_perm, l_nev, 
+                  {rank_stride=evec_rawdump_stride})
+    mdwf_eigcg_df:stop()
+    cur_timer("done")
+
+    make_solver = function(ama)
+      return make_solver_x(mdwf_eigcg_df, gauge_u, ferm_bc, ama)
+    end
+    get_evec = function(i_ev) return mdwf_eigcg_df:get_vector(i_ev) end
+
+  elseif 'int2qlm' == mdwf_opt.defl then -- qlm deflation with vectors converted from mdwf rawdump
+    local mdwf_load = qcd.MDWF.generic(gauge_u, ferm_bc, mdwf_L5, mdwf_M5, mdwf_mf, 
+                mdwf_b5, mdwf_c5, mdwf_opt)
+    mdwf_eigcg_df = mdwf_load:eig_deflator(eigcg_vmax, eigcg_nev, eigcg_tol, l_nev)
+    local evecs_perm = mdwf_evec_file(cfg_key, l_nev)
+    cur_timer = timer("evecs_rawload")
+    printf("[evec_read] %s\n", evecs_perm)
+    mdwf_eigcg_df:evecs_rawload(evecs_perm, l_nev, 
+                  {rank_stride=evec_rawdump_stride})
+    mdwf_eigcg_df:stop()                                    ; cur_timer('done')
+
+    mdwf_qlmx  = qcd.latmat.create(L, 'lattice.dirac.fermion', mdwf_nvec, qlmopt)
+    cur_timer = timer("evecs_int2qlm")
+    for i_ev = 0, mdwf_nvec - 1 do
+     mdwf_qlmx:insert(i_ev, mdwf_eigcg_df:get_vector(i_ev))
+    end
+    mdwf_eval = mdwf_eigcg_df:eigenvalues()
+    cur_timer('done')
+    mdwf_load = nil
+    force_gc('mdwf_load')
+
+    make_solver = function(ama) 
+      return make_solver_x(
+          function(tol, maxiter) 
+            return mdwf:qlmdefl_mixed_solver(mdwf_qlmx, mdwf_eval, 
+--              eps_zmobius1^2, maxiter_zmobius1,   -- can have restarts
+              tol^2*.1, maxiter + 10,             -- suppress restarts
+              tol^2, maxiter, {defl_log=1})
+          end, 
+          gauge_u, ferm_bc, ama) 
+    end
+
+    get_evec = function(i_ev) return mdwf_qlmx:extract(i_ev) end
+
+  elseif 'qlm' == mdwf_opt.defl then -- qlm deflation
+    local mdwf = qcd.MDWF.generic(gauge_u, ferm_bc, mdwf_L5, mdwf_M5, mdwf_mf, 
+                mdwf_b5, mdwf_c5, mdwf_opt)
+
+    -- MDWF evecs
+    mdwf_qlmx  = qcd.latmat.create(L, 'lattice.dirac.fermion', mdwf_nvec, qlmopt)
+    cur_timer = timer("read_df_blk_clehner")
+    local evec_md,evec_ev,evec_bp = get_evecdwfcl_files(cfg_key)
+    printf("[evec-cache] reading  '%s'  '%s'  '%s'\n", evec_md, evec_ev, evec_bp)
+    mdwf_eval = qcd.latmat.read_df_blk_clehner(mdwf_qlmx, evec_md, evec_ev, evec_bp, evecdwfcl_opt)
+    cur_timer("done")
+    printf("mdwf_qlmx=%s\n", tostring(mdwf_qlmx))
+    print_vector(mdwf_eval, "eval")
+
+    debug_mem_print(cfg_key,"Eigenvectors read")
+    make_solver = function(ama) 
+      return make_solver_x(
+          function(tol, maxiter) 
+            return mdwf:qlmdefl_mixed_solver(mdwf_qlmx, mdwf_eval, 
+--              eps_zmobius1^2, maxiter_zmobius1,   -- can have restarts
+              tol^2*.1, maxiter + 10,             -- suppress restarts
+              tol^2, maxiter, {defl_log=1})
+          end, 
+          gauge_u, ferm_bc, ama) 
+    end
+    get_evec = function(i_ev) return mdwf_qlmx:extract(i_ev) end
+
+  elseif 'xxx' == mdwf_opt.defl then 
+    return nil
+  else
+    error(string.format("bad defl='%s'", mdwf_opt.defl))
+  end
+
+  -- check the lowest evec[0]
+  local gauge_u_bc = latvec.copy(gauge_u)
+  gauge_apply_bc(gauge_u_bc, ferm_bc)
+  print_obj(mdwf_opt)
+  mdwf_op_ref = make_mdwf_op_ref(gauge_u_bc, mdwf_L5, mdwf_M5, mdwf_mf,
+            mdwf_b5, mdwf_c5, mdwf_opt.pctype)
+  for i_ev = 0, 0 do
+    local v = get_evec(i_ev)
+    latvec.print_eo_norm2(v, string.format("v[%2d]", i_ev))
+    local MxM_v = mdwf_op_ref.op_MxM(v)
+    printf("v.MxM.v[%2d] = %23.16e\n", i_ev, latvec.vdot(v, MxM_v):real())
+    latvec.print_eo_norm2(MxM_v, string.format("MxM_v[%2d]", i_ev))
+    latvec.print_cmp(MxM_v, v, string.format("MxM(v)<>v[%2d]", i_ev))
+  end
+
+end

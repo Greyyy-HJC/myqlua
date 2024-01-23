@@ -1,0 +1,8 @@
+make sure the following files& directories are present:
+list.cfg.all
+data/hadspec
+data_pdir/frw_prop
+data_pdir/prop_log
+
+run as 
+$ [mpirun, etc]  <qlua-binary>  <job.qlua>  <config.qlua>  <main.qlua>

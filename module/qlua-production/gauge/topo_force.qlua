@@ -1,0 +1,398 @@
+--require 'gauge'
+require 'gauge/loops'
+require 'gauge/stout_force'
+
+-------------------------------------------------------------------------------
+-- plaq Qtopo force
+-------------------------------------------------------------------------------
+function gauge_staples_plaq(U, mu, nu)
+  -- compute +/- staples || link U[1+mu] from gauge field U in (mu,nu) plane
+  -- 0 <= mu != nu < #L : directions
+  -- return staple[mu, +nu], staple[mu, -nu]
+  local u_nu_frw_mu = U[1+nu]:shift(mu, "from_forward")
+  local cpos = U[1+nu] * U[1+mu]:shift(nu, "from_forward") * u_nu_frw_mu:adjoin()
+  local cneg = (U[1+nu]:adjoin() * U[1+mu] * u_nu_frw_mu):shift(nu, "from_backward")
+  return cpos, cneg
+end
+
+function gauge_topdensity_plaq_force(U, opt)
+  -- compute force \Sigma_{x,mu} = \delta S / \delta U_{x,mu} defined so that 
+  -- dS/d\tau = 2 Re \sum_{x,mu} Tr[\Sigma_{x,mu} . dU_{x,mu}/d\tau] 
+  --          = \sum_{x,mu} Tr[\Sigma . dU/d\tau + \Sigma^\dag dU^\dag/d\tau]
+  opt = opt or {}
+  local L     = U[1].lattice
+  assert(#U == #L)
+  local nc    = U[1]:colors()
+  local cm_1  = L:ColorMatrix(1.)
+  -- compute all staples, Gmunu
+  local c_im = {}
+  local Glat = {}
+  for mu = 0, #L - 1 do 
+    c_im[1+mu] = {}   ; c_im[1+mu][1+mu] = nil
+    Glat[1+mu] = {}   ; Glat[1+mu][1+mu] = nil
+  end
+  for mu = 0, #L - 1 do
+    for nu = 0, #L - 1 do
+      if mu ~= nu then
+        local cpos, cneg = gauge_staples_plaq(U, mu, nu)
+        local c_im1 = (cpos - cneg):adjoin()
+        c_im[1+mu][1+nu] = c_im1
+        if mu < nu then
+          -- clover piece, HT
+          local Gclov = (U[1+mu] * c_im1 + (c_im1 * U[1+mu]):shift(mu, "from_backward"))
+--          Gclov = Gclov - (Gclov:trace() / nc) * cm_1
+          Gclov = (Gclov - Gclov:adjoin()) / complex(0,8)
+          Glat[1+mu][1+nu] =  Gclov
+          Glat[1+nu][1+mu] = nil -- save space with G[1+nu][1+mu] = -G[1+mu][1+nu]
+        end
+      end
+    end
+  end
+
+  -- for 0<=i<j<4: eps4d[1+i][1+j]={k,l} such that eps[i,j,k,l]=+1
+  local eps4d = {   -- order of (k,l) encodes sign
+    {{}, {2,3} , {3,1}, {1,2}},
+    {{}, {   } , {0,3}, {2,0}},
+    {{}, {   } , {   }, {0,1}}}
+
+  local qtopo = L:Real(0.)
+  for mu = 0, #L - 1 do 
+    for nu = mu + 1, #L - 1 do
+      local Ghat1 = Glat[1+mu][1+nu]
+      local Ghat2 = nil
+      local k, l = unpack(eps4d[1+mu][1+nu])
+      if k < l then Ghat2 = Glat[1+k][1+l] else Ghat2 = -Glat[1+l][1+k] end
+      qtopo = qtopo + (Ghat1 * Ghat2):trace():real()
+    end
+  end
+  qtopo = qtopo / (8. * math.pi*math.pi)  -- sic! 4x symmetry factor
+  
+  local sigma = {}
+  for mu = 0, #L - 1 do
+    local s = L:ColorMatrix(0.)
+    for nu = 0, #L - 1 do if mu ~= nu then
+      local c_im1 = c_im[1+mu][1+nu]
+      local tGclov = nil
+      if mu < nu then
+        local k, l = unpack(eps4d[1+mu][1+nu])
+        if k < l then tGclov =  Glat[1+k][1+l] else tGclov = -Glat[1+l][1+k] end
+      elseif nu < mu then
+        local k, l = unpack(eps4d[1+nu][1+mu])
+        if k < l then tGclov = -Glat[1+k][1+l] else tGclov =  Glat[1+l][1+k] end
+      end
+      local tGclov_frw_mu = tGclov:shift(mu, "from_forward")
+      local ds1 = c_im1 * tGclov + tGclov_frw_mu * c_im1
+      local ds2 = U[1+mu]:adjoin() * tGclov + tGclov_frw_mu * U[1+mu]:adjoin()
+      local u_nu_frw_mu = U[1+nu]:shift(mu, "from_forward")
+      s = s + (ds1 
+               + u_nu_frw_mu * ds2:shift(nu, "from_forward") * U[1+nu]:adjoin()
+               - (u_nu_frw_mu:adjoin() * ds2 * U[1+nu]):shift(nu, "from_backward"))
+    end end
+    s = s / complex(0,4) -- XXX perhaps divide c_im?
+    sigma[1+mu] = s / (8 * math.pi*math.pi) -- FIXME check scale!
+  end
+
+  return sigma, qtopo
+end
+
+function gauge_topdensity_plaq_stout_force(U, stout_rho, stout_nstep, opt)
+  return gauge_stout_force_wrap(U, stout_rho, stout_nstep, 
+            gauge_topdensity_plaq_force, opt)
+end
+
+
+-------------------------------------------------------------------------------
+-- imptree Qtopo
+-------------------------------------------------------------------------------
+function gauge_clovsum_rect21(U, a, b)
+  -- another (better? 6<8 shifts) version of: qlib/gauge.qlua: gauge_clovsum_rect
+  -- compute "clover" sum of rectangles with long side in a
+  -- 0 <= a != b < #L : directions
+  -- return sum of four rectangular ctrclkwise loops
+  local Va  = U[1+a]
+  local Vap = Va:shift(b, "from_forward")
+  local Vb  = U[1+b]
+  -- narrow staple, +2a*1b
+  local Sp  = Va * Vb:shift(a, "from_forward") * Vap:adjoin()
+  local Sp  = Va * Sp:shift(a, "from_forward") * Vap:adjoin()
+  -- narrow staple, -2a*1b
+  local Sn  = (Va:adjoin() * Vb * Vap):shift(a, "from_backward")
+  local Sn  = (Va:adjoin() * Sn * Vap):shift(a, "from_backward")
+  -- XXX 1mmult can be optimized away for Gmunu
+  -- C1aherm=(Sn-Sp:adjoin())*Vb, G
+  -- Gmunu = (C1aherm - C1aherm:adjoin()) / (2i),  
+  local C1  = Sp * Vb:adjoin() + Vb * Sn:adjoin()
+  local C2  = Vb:adjoin() * Sp + Sn:adjoin() * Vb
+  return C1 + C2:shift(b, "from_backward")
+end
+
+function gauge_qtopo_staples_rect21_ins(U, G, a, b)
+  -- narrow staples, 2a*(\pm1b) with G insertions in corners
+  -- 0 <= a != b < #L : directions
+  --  G == G^\dag insertion
+  -- return : sum of staples (4)
+
+  -- 9sh, 13mm (2 fused)
+  local Va    = U[1+a]
+  local Vaf   = Va:shift(a, "from_forward")
+  local Vaa   = Va * Vaf
+  local Vaap  = Vaa:shift(b, "from_forward")
+
+  local Vb    = U[1+b]
+  local Vbp2  = Vb:shift(a, "from_forward"):shift(a, "from_forward")
+
+  local GVGb  = G * Vb + Vb * G:shift(b, "from_forward")
+  local GVGbp2= GVGb:shift(a, "from_forward"):shift(a, "from_forward")
+
+  local GCG1  = GVGb * Vaap * Vbp2:adjoin() + Vb * Vaap * GVGbp2:adjoin()
+  local GCG2  = GVGb:adjoin() * Vaa  * Vbp2 + Vb:adjoin() * Vaa  * GVGbp2
+  local GCG   = (GCG1 - GCG2:shift(b, "from_backward")):adjoin()
+  return Vaf * GCG + (GCG * Va):shift(a, "from_backward")
+end
+  
+function gauge_qtopo_staples_rect12_ins(U, G, a, b)
+  -- narrow staples, 2a*(+1b)
+
+  -- 9sh, 15mm (1fused)
+  -- this version is mergeable with rect21(U,G,b,a)
+--  local Va    = U[1+a]
+--  local Vap2  = Va:shift(b, "from_forward"):shift(b, "from_forward")
+--  local Vb    = U[1+b]
+--  local Vbb   = Vb * Vb:shift(b, "from_forward")
+--  local Vbbp  = Vbb:shift(a, "from_forward")
+--
+--  local Ga    = G:shift(a, "from_forward")
+--  local GVGa  = G * Va + Va * Ga
+--  local GVGap2= GVGa:shift(b, "from_forward"):shift(b, "from_forward")
+--  local C1    = Vbb * Vap2 * Vbbp:adjoin()
+--  local GCG1  = Vbb * GVGap2 * Vbbp:adjoin() + G * C1 + C1 * Ga
+--  local C2    = Vbb:adjoin() * Va * Vbbp
+--  local GCG2  = Vbb:adjoin() * GVGa * Vbbp +  G * C2 + C2 * Ga
+--  return (GCG1 - GCG2:shift(b, "from_backward"):shift(b, "from_backward")):adjoin()
+
+  -- 9sh 11mm (1 fused)
+  local Va    = U[1+a]
+  local Vap2  = Va:shift(b, "from_forward"):shift(b, "from_forward")
+  local Vb    = U[1+b]
+  local Vbb   = Vb * Vb:shift(b, "from_forward")
+  local Vbbp  = Vbb:shift(a, "from_forward")
+  local Gap2  = G:shift(b, "from_forward"):shift(b, "from_forward")
+  local GVGbb = G * Vbb + Vbb * Gap2
+  local GVGbbp= GVGbb:shift(a, "from_forward")
+  local GCG1  = GVGbb * Vap2 * Vbbp:adjoin() + Vbb * Vap2 * GVGbbp:adjoin()
+  local GCG2  = GVGbb:adjoin() * Va * Vbbp + Vbb:adjoin() * Va * GVGbbp
+  return (GCG1 - GCG2:shift(b, "from_backward"):shift(b, "from_backward")):adjoin()
+end
+
+function gauge_qtopo_staples_rect21ab_rect12ba_ins(U, G, a, b)
+  -- XXX speed up by computing rec21 and rect12 together for (a,b), (b,a) and reuse:
+  --    V(a|b)p2
+  --    GVG(a|b)p2
+  --    V(aa|bb)
+  --    V(aa|bb)p
+  -- merged gauge_staples_rect21_ins and gauge_staples_rect12_ins
+  -- narrow staples, 2a*(\pm1b) with G insertions in corners
+  -- 0 <= a != b < #L : directions
+  --  G == G^\dag insertion
+  -- return : staples_rect21_a, staples_rect12_b in plane (a,b)
+
+  -- 13sh, 23mm (1 fused)
+  local Va    = U[1+a]
+  local Vaf   = Va:shift(a, "from_forward")
+  local Vaa   = Va * Vaf
+  local Vaap  = Vaa:shift(b, "from_forward")
+
+  local Vb    = U[1+b]
+  local Vbp2  = Vb:shift(a, "from_forward"):shift(a, "from_forward")
+  local Gb    = G:shift(b, "from_forward")
+  local GVGb  = G * Vb + Vb * Gb
+  local GVGbp2= GVGb:shift(a, "from_forward"):shift(a, "from_forward")
+
+  -- (\pm2a,b)
+  local GCG1a = GVGb * Vaap * Vbp2:adjoin() + Vb * Vaap * GVGbp2:adjoin()
+  local GCG2a = GVGb:adjoin() * Vaa  * Vbp2 + Vb:adjoin() * Vaa  * GVGbp2
+  local GCGa  = (GCG1a - GCG2a:shift(b, "from_backward")):adjoin()
+  local GCGa  = Vaf * GCGa + (GCGa * Va):shift(a, "from_backward")
+  -- (b,\pm2a)
+  local C1b   = Vaa * Vbp2 * Vaap:adjoin()
+  local GCG1b = Vaa * GVGbp2 * Vaap:adjoin()
+  local C2b   = (Vaa:adjoin() * Vb * Vaap):shift(a, "from_backward"):shift(a, "from_backward")
+  local GCG2b = (Vaa:adjoin() * GVGb * Vaap):shift(a, "from_backward"):shift(a, "from_backward")
+  local Cb    = C1b - C2b
+  local GCGb  = (GCG1b - GCG2b + G * Cb + Cb * Gb):adjoin()
+  return GCGa, GCGb
+end
+
+
+function gauge_topdensity_rect_force(U)
+  local L     = U[1].lattice
+  assert(#U == #L)
+  local nc    = U[1]:colors()
+  local cm_1  = L:ColorMatrix(1.)
+  -- compute all staples, Gmunu
+--  local c_im = {}
+  local Glat = {}
+  for mu = 0, #L - 1 do 
+--    c_im[1+mu] = {}   ; c_im[1+mu][1+mu] = nil
+    Glat[1+mu] = {}   ; Glat[1+mu][1+mu] = nil
+  end
+  for mu = 0, #L - 1 do
+    for nu = mu + 1, #L - 1 do
+      local Gclov = gauge_clovsum_rect21(U, mu, nu) - gauge_clovsum_rect21(U, nu, mu)
+--      local Gclov = gauge_clovsum_rect(U, mu, nu) - gauge_clovsum_rect(U, nu, mu)
+--      Gclov = Gclov - (Gclov:trace() / nc) * cm_1
+      -- clover piece, HT
+      Gclov = (Gclov - Gclov:adjoin()) / complex(0,32) -- sic! 2[1+hc] * 4[clov] * 4[1x2+2x1]
+      Glat[1+mu][1+nu] =  Gclov
+      Glat[1+nu][1+mu] = nil -- save space with G[1+nu][1+mu] = -G[1+mu][1+nu]
+    end
+  end
+
+  -- for 0<=i<j<4: eps4d[1+i][1+j]={k,l} such that eps[i,j,k,l]=+1
+  local eps4d = {   -- order of (k,l) encodes sign
+    {{}, {2,3} , {3,1}, {1,2}},
+    {{}, {   } , {0,3}, {2,0}},
+    {{}, {   } , {   }, {0,1}}}
+
+  local qtopo = L:Real(0.)
+  for mu = 0, #L - 1 do 
+    for nu = mu + 1, #L - 1 do
+      local Ghat1 = Glat[1+mu][1+nu]
+      local Ghat2 = nil
+      local k, l = unpack(eps4d[1+mu][1+nu])
+      if k < l then Ghat2 = Glat[1+k][1+l] else Ghat2 = -Glat[1+l][1+k] end
+      qtopo = qtopo + (Ghat1 * Ghat2):trace():real()
+    end
+  end
+  qtopo = qtopo / (8. * math.pi*math.pi)  -- sic! 4x symmetry factor
+  
+  local sigma = {}
+  for mu = 0, #L - 1 do 
+    sigma[1+mu] = L:ColorMatrix(0) 
+  end
+  for mu = 0, #L - 1 do
+    local s = L:ColorMatrix(0.)
+    for nu = 0, #L - 1 do if mu ~= nu then 
+      local tGclov = nil
+      if mu < nu then
+        local k, l = unpack(eps4d[1+mu][1+nu])
+        if k < l then tGclov =  Glat[1+k][1+l] else tGclov = -Glat[1+l][1+k] end
+      elseif nu < mu then
+        local k, l = unpack(eps4d[1+nu][1+mu])
+        if k < l then tGclov = -Glat[1+k][1+l] else tGclov =  Glat[1+l][1+k] end
+      end
+      if false then
+        local c21_mu  = gauge_qtopo_staples_rect21_ins(U, tGclov, mu, nu) 
+        local c12_mu  = gauge_qtopo_staples_rect12_ins(U, tGclov, mu, nu)
+        sigma[1+mu] = sigma[1+mu] + c21_mu + c12_mu
+      else
+      local c21x_mu, c12x_nu  = gauge_qtopo_staples_rect21ab_rect12ba_ins(U, tGclov, mu, nu)
+--      local c21x_nu, c12x_mu  = gauge_qtopo_staples_rect21ab_rect12ba_ins(U, tGclov, nu, mu)
+        sigma[1+mu] = sigma[1+mu] + c21x_mu
+        sigma[1+nu] = sigma[1+nu] - c12x_nu    -- sic! minus due to eps4d
+      end
+--      local c21_nu  = gauge_qtopo_staples_rect21_ins(U, tGclov, nu, mu) 
+--      local c12_nu  = gauge_qtopo_staples_rect12_ins(U, tGclov, nu, mu)
+--      latvec.print_cmp(c21x_mu, c21_mu, "c21x_mu<>c21_mu")
+--      latvec.print_cmp(c12x_mu, c12_mu, "c12x_mu<>c12_mu")
+--      latvec.print_cmp(c21x_nu, c21_nu, "c21x_nu<>c21_nu")
+--      latvec.print_cmp(c12x_nu, c12_nu, "c12x_nu<>c12_nu")
+    end end
+  end
+  -- normalize
+  for mu = 0, #L - 1 do
+    sigma[1+mu] = sigma[1+mu] / complex(0, 16*8 * math.pi*math.pi) -- XXX check scale!
+  end
+
+  return sigma, qtopo
+end
+
+function gauge_topdensity_imptree_force(U)
+  local splaq, qplaq = gauge_topdensity_plaq_force(U)
+  local srect, qrect = gauge_topdensity_rect_force(U)
+  local s = {}
+  for mu = 0, #U-1 do 
+    s[1+mu] = (5./3.) * splaq[1+mu] - (2./3.) * srect[1+mu]
+  end
+  local q = (5./3.) * qplaq - (2./3.) * qrect
+  return s, q
+end
+
+function gauge_topdensity_imptree_stout_force(U, stout_rho, stout_nstep, opt)
+  return gauge_stout_force_wrap(U, stout_rho, stout_nstep, 
+            gauge_topdensity_imptree_force, opt)
+end
+
+--
+--function gauge_topdensity_force_staple_gen(U, G, a, b, MNtab)
+--  -- adjoint staple in dir a, plane (a,b): dS = \sum_{m,n} \sum_{x,a,b}ReTr[U_{x,x+m} * C^{(m,n)}]
+--  -- return C[m][n]
+--  --  G       (\tilde){G} from Q total
+--  --          NOTE cannot have different G[m][n] because the loops are built recurrently
+--  --          NOTE will need separate calls to compute terms in force due to 
+--  --              Qimptree = a*Qplaq + b*Qrect:
+--  --              Sigma = a*SigmaPlaq(U, Gplaq) + a*SigmaRect(U, Grect)
+--  -- NOTE this function was an exercise before writing topdensity_imptree_force, probably not (widely?) used
+--  -- FIXME actually G insertions are needed only in corners
+--  assert(0 < #U)
+--  local L = U[1].lattice
+--  assert(#L == #U)
+--  MNtab = MNtab or {1}
+--
+--  local Va      = U[1+a]
+--  local Va_m    = nil
+--  local Vb      = U[1+b]
+--  local Vbp     = Vb
+--  local Var, Vaf = {}, {}
+--  local Gp      = G
+--  -- XXX all GX, XG, GXG links contain one factor G only
+--  -- XX the notation shows which side G factors are present (in separate terms)
+--  local GVa_m   = nil
+--  local VGar, GVaf = {}, {}
+--  local Cab     = {}
+--  for m = 1, #MNtab do
+--    Gp      = G:shift(a, "from_forward")
+--    if m == 1 then 
+--      Va_m    = Va
+--      GVa_m   = G * Va
+--    else
+--      Vaf[m-1]  = Va_m:shift(a, "from_forward")
+--      GVaf[m-1] = GVa_m:shift(a, "from_forward")
+--      Va_m    = Va * Vaf[m-1]
+--      GVa_m   = G * Va_m  + Va * GVaf[m-1]
+--      if m == 2 then 
+--        Var[1]    = Va:shift(a, "from_backward")
+--        VGar[1]   = Var[1] * G
+--      else
+--        Var[m-1]  = (Var[m-2] * Va):shift(a, "from_backward") 
+--        VGar[m-1] = (VGar[m-2] * Va):shift(a, "from_backward") + Var[m-1] * G
+--      end
+--    end
+--    local Su    = Va_m:adjoin()
+--    local Sd    = Su
+--    local GSGu  = Gp * GVa_m:adjoin()
+--    local GSGd  = GSGu
+--    Cab[m] = {}
+--    for n = 1, MNtab[m] do
+--      Su      = Vbp * Su  :shift(b, "from_forward") * Vb:adjoin()
+--      GSGu    = Vbp * GSGu:shift(b, "from_forward") * Vb:adjoin()    + Gp * Su + Su * G
+--      Sd      = (Vbp:adjoin() * Sd   * Vb):shift(b, "from_backward")
+--      GSGu    = (Vbp:adjoin() * GSGd * Vb):shift(b, "from_backward") + Gp * Sd + Sd * G
+--      local S = Su - Sd
+--      local GSG = GSGu - GSGd
+--      if 1 == m then Cab[m][n] = GSG
+--      else 
+--        local C = GVaf[m-1] * S + Vaf[m-1] * GSG
+--        for k = 2, m - 1 do
+--          S     = S:shift(a, "from_backward")
+--          GSG   = GSG:shift(a, "from_backward")
+--          C     = C + GVaf[m-k] * S * Var[k-1] + Vaf[m-k] * (GSG * Var[k-1] + S * VGar[k-1])
+--        end
+--        Cab[m][n] = C
+--      end
+--    end
+--  end
+--  return Cab
+--end
+
+

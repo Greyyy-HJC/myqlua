@@ -1,0 +1,117 @@
+require 'lhpc-std'
+require 'gauge'
+require 'util/geom'
+
+-- almost identical to hex-smear/gauge_hyp_general, with modifications
+-- * use shift maps instead of field:shift
+-- * reduced number of shifts from 4 to 3 per staple
+-- * reduced redundant staple calculation in step 1 by 2
+function gauge_hyp_general_shmap(U, nsteps, alpha, fatlink_sun_func)
+  --  U       gauge field
+  --  n       number of steps
+  --  alpha   weights for staples in step 3,2,1 norm. by the number of terms:
+  --          (6,4,2) for staples in step 3,2,1
+  --  fatlink_sun_func(Ulink, Ustaple)  
+  --          transform Ulink into a new one using Ustaple; Ustaple is scaled by the calling code
+  assert(0 < #U)  
+  local dim = #U
+
+  assert(dim == 4, "only 4-d lattice is supported")
+  assert(#(U[1].lattice) == dim)
+  assert(#(U[2].lattice) == dim)
+  assert(#(U[3].lattice) == dim)
+  assert(#(U[4].lattice) == dim)
+  local L = U[1].lattice
+
+  -- shift maps: create once to avoid the bottleneck in field shifts with threads
+  local sh_f, sh_b = {}, {}
+  for mu = 0, #L - 1 do
+    sh_f[1+mu] = scatter_shift_dir(L, mu, "from_forward") 
+    sh_b[1+mu] = scatter_shift_dir(L, mu, "from_backward")
+  end
+
+  local function step(U)
+     -- compute V1
+     local V1 = {}
+     for mu = 1, dim do
+        V1[mu] = {}
+        for nu = 1, dim do V1[mu][nu] = {} end
+     end
+     for mu = 1, dim do
+        local Um = U[mu]
+        for nu in skip(mu, interval(1,dim)) do
+           for rho in skip(mu, interval(nu + 1,dim)) do -- sic! once for symm.pair {nu<rho}
+              local C1 = L:ColorMatrix()
+              for si in skip(mu, skip(nu, skip(rho, interval(1, dim)))) do
+                 local Us = U[si]
+                 local Us_f = sh_f[mu](Us)
+                 C1 = ( C1 
+                      + Us * sh_f[si](Um) * Us_f:adjoin() 
+                      + sh_b[si](Us:adjoin() * Um * Us_f))
+              end
+              local X = fatlink_sun_func(Um, alpha[3] * C1)
+              V1[mu][nu][rho] = X
+              V1[mu][rho][nu] = X
+           end
+        end
+     end
+
+     -- compute V2
+     local V2 = {}
+     for mu = 1, dim do V2[mu] = {} end
+     for mu = 1, dim do
+        for nu in skip(mu, interval(1,dim)) do
+           local C2 = L:ColorMatrix()
+           for si in skip(mu, skip(nu, interval(1,dim))) do
+              local Vsmn = V1[si][mu][nu]
+              local Vsmn_f = sh_f[mu](Vsmn)
+              local Vmsn = V1[mu][si][nu]
+              C2 = ( C2 
+                   + Vsmn * sh_f[si](Vmsn) * Vsmn_f:adjoin() 
+                   + sh_b[si](Vsmn:adjoin() * Vmsn * Vsmn_f))
+           end
+           V2[mu][nu] = fatlink_sun_func(U[mu], alpha[2] * C2)
+        end
+     end
+     V1 = nil -- let QLUA reclaim some memory
+
+     -- compute V3
+     local V3 = {}
+     for mu in interval(1,dim) do
+        local C3 = L:ColorMatrix()
+        for si in skip(mu, interval(1,dim)) do
+           local Vsm = V2[si][mu]
+           local Vsm_f = sh_f[mu](Vsm)
+           local Vms = V2[mu][si]
+           C3 = ( C3 
+                + Vsm * sh_f[si](Vms) * Vsm_f:adjoin() 
+                + sh_b[si](Vsm:adjoin() * Vms * Vsm_f))
+        end
+        V3[mu] = fatlink_sun_func(U[mu], alpha[1] * C3)
+     end
+     return V3
+  end
+
+  local Z = U
+  for i = 1, nsteps do
+     Z = step(Z)
+  end
+  return Z
+end
+
+
+-- HYP smearing
+function gauge_hyp_smear_shmap(U, n, alpha, blk_accu, blk_maxiter)
+  blk_accu    = blk_accu or 1e-8
+  blk_maxiter = blk_maxiter or 150
+  local alpha1= {}
+  alpha1[1]   = alpha[1] / 6. / (1 - alpha[1])
+  alpha1[2]   = alpha[2] / 4. / (1 - alpha[2])
+  alpha1[3]   = alpha[3] / 2. / (1 - alpha[3])
+  return gauge_hyp_general_shmap(U, n, alpha1,
+          function(u, cm) return (u + cm):proj(blk_accu, blk_maxiter, u) end)
+end
+-- variant with hard-coded parameters
+function gauge_hyp_smear_std_shmap(U, n)
+  return gauge_hyp_smear_shmap(U, n, { 0.75, 0.60, 0.30 })
+end

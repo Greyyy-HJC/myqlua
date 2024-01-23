@@ -1,0 +1,576 @@
+-- full pdecay calculation:
+--  * propagators :
+--    prop_F prop_B prop_B
+--  ** c2pt : prop_F^3 
+--  ** bb : prop_F*prop_F*prop_B
+
+
+package.path = 'qlua-production/?.qlua;qlib-lhpc/?.qlua;qlib/?.qlua;' .. package.path
+require "strict"    -- catch all undefined (nil) variables
+require "stdlib"    -- standard printf, etc
+require "lhpc-std"  -- make_source, etc
+require "ape-smear" -- gauge smear
+require "gauge"
+require "qdpc_io"
+require "setup_util"
+require "latvec"
+
+require "hadspec"
+require "hex-smear"
+require "madwf_sns"
+
+require "hadron/baryon_corr"
+
+------------------------------------------------------------------------------
+-- INITIALIZATION
+------------------------------------------------------------------------------
+tot_timer = timer("total")
+--L = qcd.lattice(latsize, {network=network_geom})
+--S = rnd_init(L, rnd_seed)
+
+
+------------------------------------------------------------------------------
+-- aux functions
+------------------------------------------------------------------------------
+function have_prop(cfg_key, prop_kind, prop_file)
+  local prop_log = get_prop_log_file(cfg_key, prop_kind)
+  local bn = basename(prop_file)
+  if not io.fexists(prop_log) then return false end
+  for s in io.lines(prop_log) do
+    if s == bn then return true end
+  end
+  return false
+end
+function done_prop(cfg_key, prop_kind, prop_file)
+  local prop_log = get_prop_log_file(cfg_key, prop_kind)
+  local bn = basename(prop_file)
+  local f = io.open(prop_log, "a")
+  f:write(string.format("%s\n", bn))
+  f:flush()
+  f:close()
+end
+function prop_save_func(fname, x, title, prop_prec)
+  -- requires in the scope:
+  --  prop_volfmt       part_dir for fast
+  --  prop_vol_stride   spacing between ranks doing IO (set equal to the number of ranks per 1 IO node)
+  if nil == title then
+    title = tostring(x)
+  end
+  printf("SAVE %s '%s'\n", title, fname)
+  local tt = timer(string.format("SAVE %s", title))
+  local qio_w = open_qdpc_write(L, fname, "", prop_qio_volfmt, 
+                    {rank_stride=prop_qio_stride})
+  qio_w:DiracPropagator(prop_prec, x, title)
+  qio_w:close()
+  tt("done")
+end
+function prop_load_func(fname, title)
+  -- requires in the scope:
+  --  prop_vol_stride   spacing between ranks doing IO (set equal to the number of ranks per 1 IO node)
+  if nil == title then
+    title = ''
+  end
+  printf("LOAD %s '%s'\n", title, fname)
+  local tt = timer(string.format("LOAD %s", title))
+  local qio_r = open_qdpc_read(L, fname, {rank_stride=prop_qio_stride})
+  local res = qio_r:DiracPropagator()
+  qio_r:close()
+  tt("done")
+  return res
+end
+
+function save_midpoint_list(
+    L,
+    aff_w, 
+    aff_kpath_prefix,
+    d, u,
+    csrc, psnk_list, t_axis,
+    bc_quark_t,
+    meson_list
+    )
+  -- insert '/' between kpath prefix and the rest of kpath
+  if (0 < aff_kpath_prefix:len()) then aff_kpath_prefix = aff_kpath_prefix .. '/midpoint/' end
+  -- create a list of 4d momenta appropriate for momentum projection
+  -- XXX note that <N(t,p)\bar{N}(0)> = \sum_x exp(-ipx) <N(t,x)\bar{N}(0)>
+  local psnk_pw = {}
+  for i,p in ipairs(psnk_list) do 
+    local psnk_list_neg = {}
+    for j,pj in ipairs(p) do
+      psnk_list_neg[j] = -pj
+    end
+    psnk_list_neg[1+t_axis] = 0
+    psnk_pw[i] = L:planewave(csrc, psnk_list_neg)
+  end
+  
+  local tsrc = csrc[1+t_axis]
+  local tsize = L[t_axis]
+  -- create MultiSet for projections
+  -- TODO replace with shifted and sign-aware multiset?
+  local mset_tcoord = L:MultiSet(tsize, L:pcoord(t_axis))
+  
+  -- calc meson 2pts
+  local bc_mes_t = bc_quark_t * bc_quark_t
+  for i, mes in pairs(meson_list) do
+    local c2pt = meson_2pt(d, u, gamma{n=meson_tab[mes]})
+    for i,psnk in ipairs(psnk_list) do
+      aff_w:write(aff_kpath_prefix .. hadspec_kpath(mes, csrc, psnk),
+                  make_hadspec_standard(c2pt:project(psnk_pw[i], mset_tcoord),
+                                        tsrc, tsize, bc_mes_t)) 
+    end
+  end
+end
+
+function have_c3pt(cfg_key, c3pt_file)
+  local c3pt_log = get_c3pt_log_file(cfg_key)
+  local bn = basename(c3pt_file)
+  if not io.fexists(c3pt_log) then return false end
+  for s in io.lines(c3pt_log) do
+    if s == bn then return true end
+  end
+  return false
+end
+
+function done_c3pt(cfg_key, c3pt_file)
+  local c3pt_log = get_c3pt_log_file(cfg_key)
+  local bn = basename(c3pt_file)
+  local f = io.open(c3pt_log, "a")
+  f:write(string.format("%s\n", bn))
+  f:flush()
+  f:close()
+end
+
+
+------------------------------------------------------------------------------
+-- load or compute propagators
+------------------------------------------------------------------------------
+-- general parameter order :
+--    coord; [polaris/flavor]; [prop(s)]; [gf] ; smear/solve
+-- return (prop_F, is_new)
+function get_prop_F(
+      L, cfg_key, csrc, ama, 
+      flav_frw,               -- flavor for forward prop
+      smear_func, solver_func)
+  local prop_F = nil
+  local prop_file = 'a'
+  if 'UD' == flav_frw then prop_file = get_frwprop_file(cfg_key, csrc, -- prop file location
+             ama)
+  else printf("flav_S\n") ; prop_file = get_frwprop_file_S(cfg_key, csrc, ama) end
+  local is_new = not have_prop(cfg_key, "prop_F", prop_file) 
+  if is_new then
+--  if true then
+    local tt = timer("CALC prop_F")
+    local src_F = smear_func(make_source_point(L, csrc))  ; tt("src")
+--    local src_F = make_source_point(L, csrc)  ; tt("src")
+    prop_F  = solver_func(src_F)                          ; tt("prop")
+    prop_save_func(prop_file, prop_F, "prop_F", ama['prop_prec'])
+    done_prop(cfg_key, "prop_F", prop_file)         -- mark as computed and saved
+    tt("done")
+    qcd.log_rusage("fresource.txt","Get_prop")
+  else
+    prop_F = prop_load_func(prop_file, "prop_F")    -- load if available
+  end
+  return prop_F, is_new
+end
+
+
+-- return (prop_B, is_new)
+mgamma_list = {
+  Tg15 = gamma{n=15}
+}
+function get_prop_B(
+      L, cfg_key, csrc, ama,
+      psnk, tsnk,             -- sink mom&pos
+      mgamma_tag,             -- meson gamma-structure tag
+      flav_bkw,               -- flavor for backward prop
+      prop_F_sm,              -- forward prop
+      smear_func, solver_func)
+  local prop_B = nil
+  local prop_file = get_bkwprop_file(cfg_key, csrc, -- prop file location
+            psnk, tsnk, mgamma_tag, flav_bkw, ama)
+  local is_new = not have_prop(cfg_key, "prop_B", prop_file)
+  if is_new then
+    local Mgamma = mgamma_list[mgamma_tag]
+    local tt = timer("CALC prop_B")
+    local psnk4 = space2full(psnk, t_axis, 0)       -- make 4-vector
+    local src_B = L:DiracPropagator()               -- field=0
+    L:Subset({axis=t_axis,position=tsnk}):where(    -- set on 1 timeslice
+        function()
+          src_B:set(Mgamma * prop_F_sm * L:planewave(csrc, psnk4):conj())
+        end)                          ; tt("src")
+    prop_B = solver_func(src_B)       ; tt("prop")  -- solve Dslash
+    prop_save_func(prop_file, prop_B, "prop_B", ama['prop_prec'])
+    done_prop(cfg_key, "prop_B", prop_file)         -- mark as computed and saved
+    tt("done")
+  else
+    prop_B = prop_load_func(prop_file, "prop_B")    -- load if available
+  end
+  return prop_B, is_new
+end
+
+
+
+------------------------------------------------------------------------------
+-- function to sample one source location
+------------------------------------------------------------------------------
+function sample_c23pt_pdecay(
+        L, cfg_key, csrc, ama,
+        c2pt_psnk_list, c3pt_tsep_list,
+        Ssrc, pdecay_contract_list,  -- {{ mgamma_tag=, flav_B=, psnk=, qext_list=, {op={func=, T=, S=},..}},..}
+        smear_func, 
+        solver_func_UD, solver_func_S,
+        t_axis, ferm_bc)
+  -- parameters
+  --  L               lattice object
+  --  cfg_key         gauge cfg "key" : string
+  --  csrc            forward source position for the sample
+  --  ama             AMA parameter for saving files
+  --  c2pt_psnk_list  list of sink momenta for c2pt
+  --  c3pt_tsep_list  list of source-sink separations (tsep)
+  --  Ssrc            nucleon source diquark spin structure
+  --  pdecay_contract_list    list of pdecay contractions in the form
+  --                   {{ mgamma_tag=, flav_B=, psnk=, qext_list=, {op={func=, T=, S=},..}},..}
+  --  smear_func      source smearing function x_smeared = smear_func(x_point)
+  --  solver_func_UD, solver_func_S
+  --    fermion solvers for light(UD) and strange(S) quarks
+  --        x = solver_func(y) <-> Dslash.x = y, for light(UD) and S quarks
+  -- also requires global functions for data file names
+  --    get_*_file
+  -- and variables
+  -- XXX envs : 
+  --    latsize
+  --    hadspec_baryon_list, hadspec_meson_list 
+  
+  local timer_1src  = timer('1src')                 -- function timer
+  local tt    -- timer                              -- local timer
+  local bc_quark_t  = ferm_bc[1+t_axis]             -- time BC for quarks
+  local bc_baryon_t = bc_quark_t^3                  -- time BC for baryons
+  local sample_csrc_str  = string.format("x%d_y%d_z%d_t%d", -- kpath element
+      csrc[1],csrc[2],csrc[3],csrc[4])
+  local solver_func_map = {['UD']=solver_func_UD, ['S']=solver_func_S}
+  -- get forward props from nucleon source
+  local prop_F, is_new_F = get_prop_F(L, cfg_key, csrc, ama, 'UD', smear_func, solver_func_UD)
+  printf("aaaa\n")
+  -- also need S-quark for meson 2pts
+  local prop_Fs, is_new_Fs = get_prop_F(L, cfg_key, csrc, ama, 'S', smear_func, solver_func_S)
+  tt = timer('smear_prop_F') ;  local prop_F_sm = smear_func(prop_F)   ; tt('done')
+  tt = timer('smear_prop_Fs') ; local prop_Fs_sm  = smear_func(prop_Fs) ; tt('done')
+
+  do    -- contract 2pt functions
+    tt  = timer("save_hadspec") 
+
+    local hadspec_file = get_hadspec_file(cfg_key, csrc, ama)
+
+    if not io.fexists(hadspec_file) then 
+
+    printf('[save_hadspec] %s\n', hadspec_file)
+    local aff_hadspec = qcd.aff.Writer(hadspec_file)
+    -- hadspec UD (mesons and baryons)
+    save_hadspec_list(L, aff_hadspec, '/hadspec/SP',
+                     prop_F, prop_F, csrc, c2pt_psnk_list,
+                     t_axis, bc_quark_t, hadspec_baryon_list, hadspec_meson_list)
+    save_hadspec_list(L, aff_hadspec, '/hadspec/SS',
+                     prop_F_sm, prop_F_sm, csrc, c2pt_psnk_list,
+                     t_axis, bc_quark_t, hadspec_baryon_list, hadspec_meson_list)
+--    save_midpoint_list(L, aff_hadspec, '/hadspec/SS',
+--                     prop_F_sm, prop_F_sm, csrc, c2pt_psnk_list,
+--                     t_axis, bc_quark_t, hadspec_meson_list)
+
+    -- hadspec UD+Strange (mesons and baryons)
+    printf('[save_hadspec] %s\n', hadspec_file)
+--    local aff_hadspec = qcd.aff.Writer(hadspec_file)
+    save_hadspec_list(L, aff_hadspec, '/hadspec_s/SP',
+                     prop_Fs, prop_F, csrc, c2pt_psnk_list,
+                     t_axis, bc_quark_t, hadspec_baryon_list, hadspec_meson_list)
+    save_hadspec_list(L, aff_hadspec, '/hadspec_s/SS',
+                     prop_Fs_sm, prop_F_sm, csrc, c2pt_psnk_list,
+                     t_axis, bc_quark_t, hadspec_baryon_list, hadspec_meson_list) 
+--To get eta mass
+    save_hadspec_list(L, aff_hadspec, '/hadspec_ss/SP',
+                     prop_Fs, prop_Fs, csrc, c2pt_psnk_list,
+                     t_axis, bc_quark_t, hadspec_baryon_list, hadspec_meson_list)
+    save_hadspec_list(L, aff_hadspec, '/hadspec_ss/SS',
+                     prop_Fs_sm, prop_Fs_sm, csrc, c2pt_psnk_list,
+                     t_axis, bc_quark_t, hadspec_baryon_list, hadspec_meson_list) 
+    aff_hadspec:close()
+    
+    -- compute c2pt (protons with all tpol)
+    local c2pt = {} -- [kpath]
+    local c2pt_sm = {} -- [kpath]
+    for tpol_g = 0, 15 do
+      local tpol, tpol_tag = gamma{n=tpol_g}, string.format("Tg%d", tpol_g)
+      local k_cc = string.format('proton_%s', tpol_tag)
+      c2pt[k_cc] = baryon_sigma_twopt(prop_F, prop_F, Ssrc, Ssrc, tpol)
+      c2pt_sm[k_cc] = baryon_sigma_twopt(prop_F_sm, prop_F_sm, Ssrc, Ssrc, tpol)
+    end -- tpol
+    -- save c2pt
+    local c2pt_file = get_c2pt_file(cfg_key, csrc, ama)
+    printf("[save_c2pt] %s\n", c2pt_file)
+    local c2pt_aff  = qcd.aff.Writer(c2pt_file)
+    save_2pt_list(L, c2pt_aff, '/c2pt/SP/',
+              c2pt, csrc, c2pt_psnk_list, t_axis, bc_baryon_t)
+    save_2pt_list(L, c2pt_aff, '/c2pt/SS/',
+              c2pt_sm, csrc, c2pt_psnk_list, t_axis, bc_baryon_t)
+    c2pt_aff:close()
+    tt('done')
+  end
+  end --when hadspec is not there
+  
+-----------------------------------------------------------------------------------------
+--3pt part
+
+
+  for i_tsep, tsep in pairs(c3pt_tsep_list) do
+    local tsrc = csrc[1+t_axis]
+    local tsnk = (tsrc + tsep) % latsize[1+t_axis]
+    for i_pdecay_contract, pdc in pairs(pdecay_contract_list) do
+      local c3pt_pdecay_file = get_c3pt_pdecay_file(cfg_key, csrc, pdc.psnk, tsep, 
+              pdc.mgamma_tag, pdc.flav_B, ama)
+      local is_new = not have_c3pt(cfg_key, c3pt_pdecay_file)
+      if is_new then
+        printf("[CALC c3pt]: %s\n", c3pt_pdecay_file) 
+      -- select solver
+      local solver_func_B = solver_func_map[pdc.flav_B]   --flav_B provides flavor of the second Dirac inversion
+      assert(solver_func_B)
+
+      -- compute prop_B
+      local prop_B, is_new_B = get_prop_B(
+          L, cfg_key, csrc, ama, pdc.psnk, tsnk, 
+          pdc.mgamma_tag, pdc.flav_B,
+          prop_F_sm, smear_func, solver_func_B)
+
+      local c3pt_snk_str = string.format("PX%d_PY%d_PZ%d_dt%d", -- kpath element
+              pdc.psnk[1], pdc.psnk[2], pdc.psnk[3], tsep)
+      tt = timer("save_c3pt_pdecay")
+      local c3pt_pdecay  = {}                       -- [kpath] -> L:Complex=c3pt
+      for pd_op_tag, pd_op in pairs(pdc.pd_op_list) do
+        -- compute pdecay contraction for this T,S
+          for tg=0,15 do 
+             local cc = pd_op.func(prop_F, prop_F, prop_B, pd_op.S, Ssrc, gamma{n=tg}*pd_op.T)  -- check parameters
+             local k_cc = string.format('proton/%s/%s/%s/%s/Tg%d', 
+                           pdc.mgamma_tag, pdc.flav_B, pd_op_tag, c3pt_snk_str,tg)
+             c3pt_pdecay[k_cc] = cc
+          end
+      end -- pd_op
+      prop_B = nil
+-------------------------------------------------------------------------------------------------------------
+      -- save c3pt to file
+        printf("[save_c3pt_pdecay] %s\n", c3pt_pdecay_file)
+        local c3pt_pdecay_aff  = qcd.aff.Writer(c3pt_pdecay_file)
+        -- save projections on a list of momenta
+        -- XXX c3pt(psnk, qext) = sum_{y,z} exp(-i*psnk*(y-x) - i*qext*(z-x)) <M(y) Op(z) Nbar(x)>
+        -- XXX psnk + qext = psrc
+        -- sic! BC are applied when t_op wraps around (t_op = (tsrc + tau)%lt < tsnk)
+        save_2pt_list_fast(L, c3pt_pdecay_aff, '/c3pt_pdecay/SS/',
+                c3pt_pdecay, csrc, pdc.qext_list, t_axis, bc_baryon_t)
+        c3pt_pdecay_aff:close()
+        tt("done")
+        force_gc("save_c3pt_pdecay")
+        done_c3pt(cfg_key, c3pt_pdecay_file)
+        c3pt_pdecay = nil
+      else printf("[HAVE c3pt]: %s\n",c3pt_pdecay_file) 
+      end -- is_new
+
+    end -- pdecay_contract
+  end -- tsep
+  for i_lec_contract, lec in pairs(LEC_contract_list) do
+  local lec_pdecay = {}
+       for lec_op_tag, lec_op in pairs(lec.pd_op_list) do
+          for tg=0,15 do
+            local cc= lec_op.func(prop_F, prop_F, prop_F, lec_op.S, Ssrc, gamma{n=tg}*lec_op.T)
+            local k_cc = string.format('lec/%s/Tg%d',
+                                       lec_op_tag,tg )
+            lec_pdecay[k_cc] = cc
+          end --tg
+       end --lec_op
+  local lec_pdecay_file = get_lec_file(cfg_key, csrc, ama)
+  printf("[save_lec_pdecay] %s\n", lec_pdecay_file)
+  local lec_pdecay_aff = qcd.aff.Writer(lec_pdecay_file)
+  save_2pt_list_fast(L, lec_pdecay_aff, '/lec_pdecay/SP/',
+                   lec_pdecay, csrc, lec.qext_list, t_axis, bc_baryon_t)
+  end --lec
+  prop_F = nil
+  force_gc("sample_pdecay")
+  timer_1src('done')
+
+end
+
+
+------------------------------------------------------------------------------
+-- MAIN
+------------------------------------------------------------------------------
+
+-- * load gauge field
+cur_timer = timer("gauge_read")
+printf("read gauge '%s'\n", get_gauge_file(cfg_key))
+gauge_u = qcd.nersc.read_gauge(L, get_gauge_file(cfg_key))
+cur_timer("done")
+
+-- * smear gauge field for source construction
+wup_gauge_u = APE_smear(gauge_u, ape_alpha, ape_N, ape_accu, ape_maxiter, t_axis)
+
+mdwf_b5_full_s = {}
+mdwf_c5_full_s = {}
+for s = 1, mdwf_L5_full do
+  mdwf_b5_full_s[s] = mdwf_b5_full
+  mdwf_c5_full_s[s] = mdwf_c5_full
+end
+
+
+-- * init mdwf for S(strange quark)
+-- TODO zMADWF? deflation?
+
+printf("init _grid.zmobius_solver\n")
+tt = timer('_grid.init')  ; _grid.init(L, {verbose=true, log='Error,Warning,Message,Iterative'})   ; tt('done')
+print_obj(_grid)
+printf("call _grid.zmobius_solver\n")
+
+mdwf_tol_restart = 1.e-4
+mdwf_tol, mdwf_maxiter = 1.e-5, 10000
+print_obj(mdwf_opt)
+
+
+------------------- sloppy solver
+local eps1 = 1.e-5
+local eps2 = 1.e-4
+
+function grid_solver(src,is_relaxed,is_verbose) 
+  return _grid.zmobius_solver(gauge_u, bc, 
+      mdwf_L5, mdwf_M5, mdwf_mf, mdwf_b5, mdwf_c5, 
+      eps1, 1, src, 
+      { pctype=mdwf_opt.pctype, parity=mdwf_opt.parity,
+        --x0=y2, 
+        defl = {mdwf_qlmx, mdwf_eval},
+        dslash_asm=true,
+        hugepages=true,
+        comms_overlap=true,
+        tol_restart=mdwf_tol_restart, maxiter_restart=200, verbose=1})
+end
+
+function grid_solver_h(src,is_relaxed,is_verbose) 
+  return _grid.zmobius_solver(gauge_u, bc, 
+      mdwf_L5_full, mdwf_M5, mdwf_mf_s, mdwf_b5_full_s, mdwf_c5_full_s, 
+      1.e-5, 300, src, 
+      { pctype=mdwf_opt.pctype, parity=mdwf_opt.parity,
+        --x0=y2, 
+--        defl = {mdwf_qlmx, mdwf_eval},
+        dslash_asm=true,
+        hugepages=true,
+	comms_overlap=true,
+--        tol_restart=mdwf_tol_restart, maxiter_restart=100, 
+	verbose=1
+        })
+end
+
+-------------------- exact solver
+
+
+local eps1 = 7.e-6
+local eps2 = 7.e-6
+  function grid_solver_ex(src,is_relaxed,is_verbose) 
+    return _grid.zmobius_solver(gauge_u, bc, 
+        mdwf_L5, mdwf_M5, mdwf_mf, mdwf_b5, mdwf_c5, 
+        eps1, 2, src, 
+        { pctype=mdwf_opt.pctype, parity=mdwf_opt.parity,
+          --x0=y2, 
+          defl = {mdwf_qlmx, mdwf_eval},
+          dslash_asm=true,
+        hugepages=true,
+	comms_overlap=true,
+          tol_restart=mdwf_tol_restart, maxiter_restart=300, verbose=1})
+  end
+
+  function grid_m1_solver(src,is_relaxed,is_verbose) 
+    return _grid.zmobius_solver(gauge_u, bc, 
+        mdwf_L5_full, mdwf_M5, 1.0, mdwf_b5_full_s, mdwf_c5_full_s, 
+        eps2, 400, src, 
+        { pctype=mdwf_opt.pctype, parity=mdwf_opt.parity,
+          --x0=y2, 
+--          defl = {mdwf_qlmx, mdwf_eval},
+         hugepages=true,
+	comms_overlap=true,
+          dslash_asm=true,
+--          tol_restart=mdwf_tol_restart, maxiter_restart=300, 
+          verbose=1})
+  end
+
+  function grid_solver_h_ex(src,is_relaxed,is_verbose) 
+    return _grid.zmobius_solver(gauge_u, bc, 
+        mdwf_L5_full, mdwf_M5, mdwf_mf_s, mdwf_b5_full_s, mdwf_c5_full_s, 
+        1.e-10, 900, src, 
+        { pctype=mdwf_opt.pctype, parity=mdwf_opt.parity,
+          --x0=y2, 
+--          defl = {mdwf_qlmx, mdwf_eval},
+         hugepages=true,
+	comms_overlap=true,
+          dslash_asm=true,
+--          tol_restart=mdwf_tol_restart, maxiter_restart=300, 
+          verbose=1})
+  end
+
+  local mixcg_maxiter_exact   = 10000
+  --   single prec. restart
+  local mixcg_tol1            = eps2
+  local mixcg_maxiter1        = 5000
+  local eps_moeb              = 2*mixcg_tol1
+  -- sic! the tolerance must be squared
+
+    local mdwf_invert = grid_solver_ex
+    local _grid_solver_ex = make_solver_MADCG_g5herm(
+        gauge_u, ferm_bc, mdwf_mf_ud, mdwf_M5,
+        mdwf_L5, mdwf_b5, mdwf_c5,
+        mdwf_L5_full, mdwf_b5_full, mdwf_c5_full,
+        3,
+        {
+          solver_moeb = mdwf_invert,
+--          eps2_m1   = eps_moeb^2, -- to match short solve prec
+          solver_m1 = grid_m1_solver,
+          eps2_1    = eps_moeb^2,
+          })
+
+  _grid_solver_S_ex = make_calc_mdwf_prop(grid_solver_h_ex, gauge_u, ferm_bc, mdwf_L5_full, mdwf_M5, mdwf_b5_full_s, mdwf_c5_full_s)
+
+  _grid_solver=make_calc_mdwf_prop(grid_solver,gauge_u, ferm_bc, mdwf_L5, mdwf_M5, mdwf_b5, mdwf_c5)
+  _grid_solver_S = make_calc_mdwf_prop(grid_solver_h, gauge_u, ferm_bc, mdwf_L5_full, mdwf_M5, mdwf_b5_full_s, mdwf_c5_full_s)
+--XXX uniformity!!
+--  _grid_solver_S = make_calc_mdwf_prop(grid_solver_h, gauge_u, ferm_bc, mdwf_L5, mdwf_M5, mdwf_b5, mdwf_c5)
+
+
+
+
+-- * main loop over ama modes
+for i_ama, ama in pairs(ama_list) do
+  local function smear_func_wup(x) 
+    -- reqiures global wup_a, wup_n, wup_gauge_u, t_axis
+    return wuppertal_smear(wup_gauge_u, wup_alpha, wup_N, x, t_axis)
+  end
+  local solver_func_UD = nil
+  local solver_func_S = nil
+  -- init solvers
+  if ama['approx'] == 'exact' then
+  solver_func_UD = _grid_solver_ex
+  solver_func_S = _grid_solver_S_ex
+  else
+  solver_func_UD = _grid_solver
+  solver_func_S = _grid_solver_S
+  end
+  -- loop over sample csrc
+  for i_csrcgrp, csrcgrp in pairs(ama['csrcgrp_list']) do 
+    for i_csrc, csrc in pairs(csrcgrp) do
+       sample_c23pt_pdecay(L, cfg_key, csrc, ama,
+                c2pt_psnk_list, c3pt_tsep_list,
+                proton_Ssrc, pdecay_contract_list, 
+                smear_func_wup, solver_func_UD, solver_func_S,
+                t_axis, ferm_bc)
+    end --csrc
+  end -- csrcgrp
+
+  -- cleanup to help gc
+  solver_func_UD  = nil
+  solver_func_S   = nil
+  force_gc()
+  print_obj(qcd.memory_usage())
+end -- ama
+
+tot_timer("done")
+printf("QLUA_RUN_SUCCESS\n")
+-- vim : syn=lua

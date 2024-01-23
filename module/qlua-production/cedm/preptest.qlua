@@ -1,0 +1,279 @@
+-- preparatory test before running jobs
+-- * la benchmark
+-- * nersc gauge read benchmark
+-- * smearing benchmark
+-- * hadspec benchmark
+-- * bb benchmark
+
+-- * solver benchmark
+-- * g5herm check
+-- * ama prop comparison
+
+package.path = 'qlua-production/?.qlua;qlib-lhpc/?.qlua;qlib/?.qlua;' .. package.path
+require "strict"    -- catch all undefined (nil) variables
+require "stdlib"    -- standard printf, etc
+require "lhpc-std"  -- make_source, etc
+require "ape-smear" -- gauge smear
+require "wuppertal-smear"
+require "gauge"
+require "setup_util"
+require "latvec"
+require 'mdwf_eopc'
+require "hadspec"
+require "bb"
+
+require "madwf_sns"
+
+assert(job_key)
+assert(cfg_key)
+
+------------------------------------------------------------------------------
+-- INITIALIZATION
+------------------------------------------------------------------------------
+tot_timer = timer("total")
+L = qcd.lattice(latsize, {network=network_geom})
+rnd = rnd_init(L, rnd_seed)
+tt=nil
+tt_=nil
+print_network_settings()
+print_subgrid_settings(L)
+printf("num_threads=%d\n", openmp.num_threads())
+printf("thread_limits=%d\n", openmp.thread_limit())
+
+dp_rnd_1 = rnd:gaussian_DiracPropagator()
+dp_rnd_2 = rnd:gaussian_DiracPropagator()
+
+------------------------------------------------------------------------------
+-- PARAMS
+------------------------------------------------------------------------------
+csrc_bm = {1,2,3,4}
+bc_quark_t = ferm_bc[1+t_axis]
+tsep_bm = latsize[1+t_axis]-1
+tsnk_bm = (csrc_bm[1+t_axis] + tsep_bm) % latsize[1+t_axis]
+
+hadspec_aff_file = 'hadspec-bm.aff'
+bb_aff_file='bb-bm.aff'
+------------------------------------------------------------------------------
+-- MAIN
+------------------------------------------------------------------------------
+-- la benchmark
+if preptest.bmark_la then
+  for i, la_pp in pairs({
+          { "gemm", "c",   300,    300,    300 },
+          { "gemm", "z",   300,    300,    300 },
+  --        { "gemm", "c",  1000,   1000,   1000 },
+  --        { "gemm", "z",  1000,   1000,   1000 },
+  --        { "gemm", "c",  3000,   3000,   3000 },
+  --        { "gemm", "z",  3000,   3000,   3000 },
+        }) do
+    local bm, pd, m,n,k = unpack(la_pp)
+    cur_str = string.format("la_benchmark %2s %6s  %6d %6d %6d", bm, pd, m, n, k)
+    printf("%s\n", cur_str)
+    cur_t = timer(cur_str)
+    qcd.latmat.la_benchmark(bm, pd, m, n, k)
+    cur_t("done")
+  end
+end
+
+-- gauge read benchmark
+gauge_u = nil
+if preptest.test_read_gauge then
+  tt=timer("read_nersc_gauge")
+  local gauge_file = get_gauge_file(cfg_key) ; printf("[read_gauge] %s\n", gauge_file)
+  gauge_u = qcd.nersc.read_gauge(L, gauge_file)
+  tt("done")
+else
+  gauge_u = latvec.fromfunction({#L}, 
+      function()return toSUn(4.123*rnd:gaussian_ColorMatrix())end)
+end
+
+-- hadspec bm
+if preptest.test_save_hadspec then 
+  local prop_F = dp_rnd_1
+  local aff_w = qcd.aff.Writer(hadspec_aff_file)
+  tt=timer(string.format("save_hadspec:meson[fields=%d, #psnk=%d]",
+          #hadspec_meson_list, #hadspec_psnk_list))
+  save_hadspec_list_fast(L, aff_w, '/hadspec/SP',
+                   prop_F, prop_F, csrc_bm, hadspec_psnk_list,
+                   t_axis, bc_quark_t, {}, hadspec_meson_list)
+  tt("done")
+  tt=timer(string.format("save_hadspec:baryon[fields=%d, #psnk=%d]",
+          #hadspec_baryon_list, #hadspec_psnk_list))
+  save_hadspec_list_fast(L, aff_w, '/hadspec/SP',
+                   prop_F, prop_F, csrc_bm, hadspec_psnk_list,
+                   t_axis, bc_quark_t, hadspec_baryon_list, {})
+  tt("done")
+  aff_w:close()
+end
+
+-- bb bm
+if preptest.test_save_bb or preptest.test_save_bb_gen then
+  local prop_F = dp_rnd_1
+  local prop_B = dp_rnd_2
+  local save_bb_str = string.format(
+            "save_bb[tsep=%d, bb_link=[%d;%d], #qext=%d]", 
+            tsep_bm, bb_link_min, bb_link_max, #c3pt_qext_list)
+  if preptest.test_save_bb then
+  --  os.sleep(10)
+    tt=timer(save_bb_str .. " STD")
+    local aff_w = qcd.aff.Writer(bb_aff_file .. '.std')
+    calc_bb(L, aff_w, "/bb-bm",
+        bb_link_min, bb_link_max,
+        prop_F, gamma{n=15} * prop_B:adjoin() * gamma{n=15}, gauge_u, 
+        csrc_bm, tsnk_bm, {0,0,0}, t_axis,
+        c3pt_qext_list, false, bc_quark_t, bc_quark_t)
+    aff_w:close()
+    tt("done")
+  end
+  if preptest.test_save_bb_gen then
+    require 'hadron/baryon_corr'
+    tt=timer(save_bb_str .. " GEN")
+    local aff_w = qcd.aff.Writer(bb_aff_file .. '.gen')
+    general_save_bb(aff_w, "/bb-bm",
+        { prop_F }, { prop_B }, gauge_u, 
+        csrc_bm, tsep_bm, bb_link_min, bb_link_max,
+        c3pt_qext_list, t_axis, ferm_bc)
+    aff_w:close()
+    tt("done")
+  end
+end
+
+-- ape smearing benchmark
+if preptest.test_ape then
+  tt=timer(string.format("ape_smear[ape_N=%d, t_axis=%d]", ape_N, t_axis))
+  wup_gauge_u = APE_smear(gauge_u, ape_alpha, ape_N, ape_accu, ape_maxiter, t_axis)
+  tt("done")
+else 
+  wup_gauge_u = gauge_u
+end
+
+if preptest.test_wup then
+  local x = dp_rnd_1
+  tt=timer(string.format("wup_smear[wup_N=%d, t_axis=%d, %s]", wup_N, t_axis, type(x)))
+  local x_S = wuppertal_smear(wup_gauge_u, wup_alpha, wup_N, x, t_axis)
+  tt("done")
+end
+
+
+if preptest.test_prop then -- test props
+  -- MDWF obj
+  mdwf = nil
+  qlmx = nil
+  make_solver_ama = nil
+  get_evec = nil
+  if qlm_defl then -- qlm deflation
+    mdwf = qcd.MDWF.generic(gauge_u, ferm_bc, mdwf_L5, mdwf_M5, mdwf_mf, 
+                mdwf_b5, mdwf_c5, mdwf_opt)
+
+    -- MDWF evecs
+    qlmx  = qcd.latmat.create(L, 'lattice.dirac.fermion', mdwf_nvec, qlmopt)
+    cur_timer = timer("read_df_blk_clehner")
+    local evec_md,evec_ev,evec_bp = get_evecdwfcl_files(cfg_key)
+    printf("[evec-cache] reading  '%s'  '%s'  '%s'\n", evec_md, evec_ev, evec_bp)
+    eval = qcd.latmat.read_df_blk_clehner(qlmx, evec_md, evec_ev, evec_bp, evecdwfcl_opt)
+    cur_timer("done")
+    print_vector(eval, "eval")
+
+    make_solver_ama = function(ama) 
+      return make_solver(
+          function(tol, maxiter) 
+            return mdwf:qlmdefl_mixed_solver(qlmx, eval, 
+              eps_zmobius1^2, maxiter_zmobius1, tol^2, maxiter, {defl_log=1})
+          end, 
+          gauge_u, ferm_bc, ama) 
+    end
+    get_evec = function(i_ev) return qlmx:extract(i_ev) end
+  else  -- regular mdwf deflation
+    local mdwf_gen  = qcd.MDWF.generic(gauge_u, ferm_bc, 
+              mdwf_L5, mdwf_M5, mdwf_mf,
+                mdwf_b5, mdwf_c5)
+    local mdwf_eigcg_df = mdwf_gen:eig_deflator(eigcg_vmax, eigcg_nev, eigcg_tol, l_nev)
+
+    local evecs_perm = mdwf_evec_file(cfg_key, l_nev)
+
+    cur_timer = timer("evecs_rawload")
+    printf("[evec_read] %s\n", evecs_perm)
+    mdwf_eigcg_df:evecs_rawload(evecs_perm, l_nev, 
+                  {rank_stride=evec_rawdump_stride})
+    mdwf_eigcg_df:stop()
+    cur_timer("done")
+
+    mdwf = mdwf_eigcg_df  -- external alias
+    qlmx = mdwf           -- alias to extract evecs
+    make_solver_ama = function(ama)
+      return make_solver(mdwf, gauge_u, ferm_bc, ama)
+    end
+    get_evec = function(i_ev) return mdwf_eigcg_df:get_vector(i_ev) end
+  end
+
+  for i_ama, ama in pairs(ama_list) do
+    local function smear_func_wup(x) 
+      -- reqiures global wup_a, wup_n, wup_gauge_u, t_axis
+      error("not implemented")
+    end
+    local solver_func = make_solver_ama(ama)
+    -- TODO ama tests
+    solver_func = nil
+    force_gc()
+    print_obj(qcd.memory_usage())
+  end
+
+  -- test evals
+  if preptest.test_evec then
+    -- golden op def
+    bc_gauge_u = gauge_copy(gauge_u)
+    gauge_apply_boundary(bc_gauge_u, ferm_bc)
+    if 'eopc2p' == mdwf_opt.pctype then
+      function op_mxm(x)
+        local Mx = mdwf_eopc_sym2p(x, bc_gauge_u, mdwf_M5, mdwf_mf, mdwf_b5, mdwf_c5)   -- M.x
+        return mdwf_eopc_sym2p(Mx, bc_gauge_u, mdwf_M5, mdwf_mf, mdwf_b5, mdwf_c5, true)-- M^H.M.x
+      end
+    elseif 'eopc2' == mdwf_opt.pctype then
+      function op_mxm(x)
+        local Mx = mdwf_eopc_sym2(x, bc_gauge_u, mdwf_M5, mdwf_mf, mdwf_b5, mdwf_c5)   -- M.x
+        return mdwf_eopc_sym2(Mx, bc_gauge_u, mdwf_M5, mdwf_mf, mdwf_b5, mdwf_c5, true)-- M^H.M.x
+      end
+    else error(string.format("unknown pctype='%s'", mdwf_opt.pctype)) end
+
+    for i_ev=0, 1 do 
+      local ss=string.format("evec[%04d]:", i_ev)
+      tt_ = timer(ss.."extract", i_ev);     v = get_evec(i_ev)    ;tt_("done")
+      tt_ = timer(ss.."norm2", i_ev)  ;     printf("|v[%2d]|2=%e\n", i_ev, latvec.norm2(v)) ; tt_("done")
+      tt_ = timer(ss.."op_mxm", i_ev) ;     mxm_v = op_mxm(v)         ;tt_("done")
+      tt_ = timer(ss.."vdot", i_ev)   ;     printf("Re{v^H.MxM.v}[%2d]=%e\n", i_ev, latvec.vdot(v, mxm_v):real()) ; tt_("done")
+    end
+  end
+
+  -- wup-smeared 4d source
+  tt=timer(string.format("wup_smear %fx%d", wup_alpha, wup_N))
+  df_x = wuppertal_smear(wup_gauge_u, wup_alpha, wup_N, 
+    make_source_point(L, test_src_coord), t_axis)[{c=0,d=0}]
+  tt("done")
+
+  -- exact solver 
+  for i_ama, ama in pairs(ama_list) do 
+    local solver = make_solver_ama(ama)
+    tt = timer(string.format("qlmdefl_mixed_solver:%s", ama_str(ama)))
+    local df_y = solver(df_x, true, true, true)
+    tt("done")
+    if preptest.test_g5herm then
+      tt = timer(string.format("g5herm:%s", ama_str(ama)))
+  --    local s1 = rnd:gaussian_DiracPropagator()
+  --    local s2 = rnd:gaussian_DiracPropagator()
+      local s1 = rnd:gaussian_DiracFermion()
+      local s2 = rnd:gaussian_DiracFermion()
+      local p1 = solver(s1)
+      local p2 = gamma{n=15} * solver(gamma{n=15} * s2)
+      local s2xp1 = qcd.dot(s2, p1):sum()
+      local s1xp2c = qcd.dot(s1, p2):sum():conj()
+      local rdiff_12 = (s2xp1 - s1xp2c):abs() * 2. / (s1xp2c:abs() + s1xp2c:abs())
+      printf("g5herm[%s]: s2xp1=%s  [s1xp2]^*=%s  rdiff=%e\n", 
+          ama_str(ama), tostring(s2xp1), tostring(s1xp2c), rdiff_12)
+      tt("done")
+    end
+  end
+end 
+
+tot_timer("done")
+printf("QLUA_RUN_SUCCESS\n")
+-- vim : syn=lua

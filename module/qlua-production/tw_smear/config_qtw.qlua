@@ -1,0 +1,68 @@
+
+latsize = {4,4,4,8}
+ferm_bc = {1,1,1,-1}    -- this will be modified to include effect of twisting
+do
+  -- initial position, for cfg #640
+  local csrc_shift_0 = {0, 0, 0, 0}
+  -- shift between every 40 configs
+  local csrc_shift_cfg = {1, 1, 1, 1}
+--  local cfg_shift_idx = math.floor((tonumber(assert(job_key)) - 640) / 40)
+  local cfg_shift_idx = 1
+  -- shift between timeslices
+  local nsrc = {2,2,2,4}
+  -- XXX orthogonal in space to shift_cfg
+  local csrc_shift_s = { latsize[1] / nsrc[1], 
+                         latsize[2] / nsrc[2], 
+                         latsize[3] / nsrc[3],  
+                         latsize[3] / nz }
+
+  local sloppy_csrc_list = {}
+  local i_csrc = 0
+  for i_t = 0, nsrc[4]-1 do for i_z = 0, nsrc[3]-1 do
+    for i_y = 0, nsrc[2]-1 do for i_x = 0, nsrc[1]-1 do
+      ii = {i_x, i_y, i_z, i_t}
+      local csrc = {}
+      for i = 1, 4 do 
+        csrc[i] = (csrc_shift_0[i] + csrc_shift_cfg[i] * cfg_shift_idx 
+                   + math.floor(latsize[i] / nsrc[i]) * ii[i])
+      end
+      sloppy_csrc_list[1+i_csrc] = csrc
+      i_csrc = i_csrc + 1
+    end end
+  end end
+  ama_mode_list = {
+    { ['approx']    = 'exact',
+      ['csrc_list'] = { sloppy_csrc_list[1] },
+      ['tol']       = 1e-8 },
+    { ['approx']    = 'sloppy',
+      ['csrc_list'] = sloppy_csrc_list,
+      ['tol']       = 1e-4 } }
+end
+        
+
+
+function qtw_str(qtw)
+  local c = {"twx", "twy", "twz", "twt"}
+  local res = {}
+  for i = 1, #qtw do
+    if 0 ~= qtw[i] then table.insert(string.format("%s%.2f", c[i], qtw[i]))
+  end
+  return table.concat(res)
+end
+function ama_str(ama)
+  if "exact" == ama.approx then 
+    return string.format("ex%.1e", ama.tol)
+  elseif "approx" == ama.approx then
+    return string.format("sl%.1e", ama.tol)    
+  else error(string.format("unknown ama='%s'", ama.approx)) end
+end
+function source_str(csrc)
+  return string.format("x%dy%dz%dt%d", csrc[1], csrc[2], csrc[3], csrc[4])
+end
+
+data_top = 'data'
+function get_file_hadspec_qtw(cfgkey, csrc, qtw, ama)
+  return string.format("%s/hadspec/hadspec.%s.%s.%s.%s.aff",
+            data_top, cfgkey, ama_str(ama), qtw_str(qtw), source_str(csrc))
+end
+

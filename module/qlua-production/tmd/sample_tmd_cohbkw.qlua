@@ -1,0 +1,206 @@
+require 'cedm/cedm_get_prop'
+require 'latvec'
+require 'util/strkey'
+
+------------------------------------------------------------------------------
+-- sample cpeven c2,c3 (coherent)
+------------------------------------------------------------------------------
+function sample_tmd_cohbkw(
+        L, cfg_key, csrcgrp,  ama,      -- [1-4]
+        hslab_tlen, c3pt_tlen,         -- [5-6]
+        c2pt_psnk_list, c3pt_psnk_list, c3pt_qext_list, tsep_list,
+        tmd_lpspec_list_bfirst,
+        S2, S1, 
+        Tpol_list_c3pt,
+        flav_list,
+        gf_lpath_, 
+        smear_func, solver_func, 
+        t_axis, ferm_bc,
+        redo_contract, gg)
+  -- parameters
+  --  L               lattice object
+  --  cfg_key          gauge cfg "key" : string
+  --  csrcgrp         group of coherent sources for the coh.sample
+  --  ama             AMA parameter for saving files
+  --  c2pt_psnk_list  sink momentum for c2pt, c2pt_volcedm
+  --  c3pt_psnk_list  sink momentum for c3pt, c2pt_cpbar
+  --  c3pt_qext_list  list of momenta for insertions
+  --  tsep_list       source-sink separation list
+  --  S2, S1          sink and source diquark spin structures
+  --  Tpol_list
+  --                  list of nucleon polarization matrices for 0- and 1-st order in CEDM insertions
+  --  flav_list       flavors for cedm and current insertions
+  --  gf_lpath        gauge field for link paths in building blocks
+  --  smear_func      source smearing function x_smeared = smear_func(x_point)
+  --  solver_func     fermion solver x = solver_func(y) <-> Dslash.x = y
+  --  redo_contract   { hadspec=false, c2pt=false,
+  --                    bb=true, bbspace=true}
+
+  -- also requires global functions for propagator storage
+  --  get_frwprop_file            F
+  --  get_hadspec_file
+  -- and variables
+
+  -- XXX envs : 
+  --    latsize
+  --    hadspec_baryon_list, hadspec_meson_list 
+  --    bb_link_min, bb_link_max,
+  --    bb_volcedm_link_min, bb_volcedm_link_max,
+  --    t_axis
+  --    ferm_bc
+  assert(0 < #csrcgrp)
+  -- ensure all tsep are small enough
+  for i_tsep, tsep in pairs(tsep_list) do assert(tsep < hslab_tlen) end
+  -- nontrivial bc are not implemented: require special treatment due to spatial coord shift 
+  for mu = 0, #L-1 do assert(mu == t_axis or 1 == ferm_bc[1+mu]) end
+
+  local timer_1srcgrp = timer(string.format('1srcgrp[%d] tmd_cohbkw', #csrcgrp))
+  local csrcgrp_key = strkey.csrcgrp_str(csrcgrp)
+  redo_contract = redo_contract or {}
+  local tt    -- timer
+  local bc_quark_t  = ferm_bc[1+t_axis]
+  local bc_baryon_t = bc_quark_t^3
+  local bc_quark_tpos = table_copy(ferm_bc)
+  bc_quark_tpos[1+t_axis] = 1       -- for tmd
+  local lt          = L[t_axis]     -- time extent
+
+  local gf_lpath_bc = gauge_copy(gf_lpath_)
+  gauge_apply_boundary(gf_lpath_bc, ferm_bc)
+  if gg then gf_lpath_bc = gauge_transform_U(gg, gf_lpath_bc) end   --**
+
+  local csrc_coh0 = csrcgrp[1]
+  local csrc0_str  = strkey.csrc_str_k(csrc_coh0)
+  local tsrc_coh0 = csrc_coh0[1+t_axis]
+
+  -- build hyperslab subsets for constructing frwprop_grp, tmd
+  local csrc_hslab = hyperslab_subset_grp(L, csrcgrp, hslab_tlen, t_axis,
+          {verbose=true})
+  -- scatter map for TMD prop & gf "chopping"
+  local tmd_chop_map, tmd_L = hyperslab_subvol_scatter_grp(L, csrcgrp, 
+          c3pt_tlen, t_axis, 
+          { copy_network=true,  -- use the same network_geom as L
+            shift_space=false   -- all spatial coordinates shifted to (0,0,0)
+          })
+  local csrc_chop0 = list_copy(csrc_coh0)
+  csrc_chop0[1+t_axis] = 0
+  local lt_chop = tmd_L[t_axis]
+  assert(lt_chop == c3pt_tlen * #csrcgrp)
+
+  -- create "chopped" gauge field for TMD
+  tt = timer('gauge_chop')
+  local gf_lpath_bc_chop = latvec.apply(tmd_chop_map, gf_lpath_bc)     ; tt('done')
+
+  -- XXX F-props are stored separately (need full Lt extent for volume insertions) 
+  local prop_F_list = {}    -- FIXME rearrange to compute F&C together, drop list to save RAM
+  local propgrp_F = L:DiracPropagator()
+  local is_new_F_grp = false
+  for i_csrc, csrc in pairs(csrcgrp) do
+    local prop_F, is_new_F = get_prop_F(L, cfg_key, csrc, ama, smear_func, solver_func)
+    if gg then prop_F = gg * prop_F * L:ColorMatrix(gg[csrc_coh0]):adjoin() end         --**
+    is_new_F_grp = is_new_F_grp or is_new_F
+    prop_F_list[i_csrc]   = prop_F
+    csrc_hslab[i_csrc]:where(function()propgrp_F:set(prop_F)end)
+  end -- csrc
+  if do_save_prop.Fg then
+    local prop_Fg_file = get_frwprop_grp_file(cfg_key, csrcgrp, ama)
+    prop_save_func(prop_Fg_file, propgrp_F, 'prop_Fg', ama['prop_prec'])
+  end
+  tt  = timer('smear_prop_F')
+  local propgrp_F_sm  = smear_func(propgrp_F)
+  tt('done')
+  if is_new_F_grp or redo_contract.hadspec then -- contract hadspec, c2pt (CP-even)
+    -- FIXME use fast contract qcd.contract_
+    -- hadspec (all mesons, baryons)
+    tt  = timer("save_hadspec") 
+    local hadspec_file = get_hadspec_file(cfg_key, csrc_coh0, ama)
+    printf('[save_hadspec] %s\n', hadspec_file)
+    os.mkdir_path(dirname(hadspec_file))
+    local aff_hadspec = qcd.aff.Writer(hadspec_file)
+    save_hadspec_list_fast(L, aff_hadspec, string.format('/hadspec/SP/%s/', csrcgrp_key),
+                     propgrp_F, propgrp_F, csrc_coh0, c2pt_psnk_list,
+                     t_axis, bc_quark_t, hadspec_baryon_list, hadspec_meson_list)
+    save_hadspec_list_fast(L, aff_hadspec, string.format('/hadspec/SS/%s/', csrcgrp_key),
+                     propgrp_F_sm, propgrp_F_sm, csrc_coh0, c2pt_psnk_list,
+                     t_axis, bc_quark_t, hadspec_baryon_list, hadspec_meson_list)
+    aff_hadspec:close()
+    tt('done')
+  end
+  if is_new_F_grp or redo_contract.c2pt then
+    -- TODO rewrite c2pt 
+    -- TODO 2pt on chopped lattice only?
+    -- c2pt (protons with all tpol)
+    tt  = timer("save_c2pt") 
+    local c2pt = {} -- [kpath]
+    local c2pt_sm = {} -- [kpath]
+    for tpol_g = 0, 15 do
+      local tpol, tpol_tag = gamma{n=tpol_g}, string.format("Tg%d", tpol_g)
+      local k_cc = string.format('proton_%s', tpol_tag)
+      c2pt[k_cc] = cedm_baryon_sigma(propgrp_F, propgrp_F, S2, S1, tpol)
+      c2pt_sm[k_cc] = cedm_baryon_sigma(propgrp_F_sm, propgrp_F_sm, S2, S1, tpol)
+    end -- tpol
+    local c2pt_file = get_c2pt_file(cfg_key, csrc_coh0, ama)
+    printf("[save_c2pt] %s\n", c2pt_file)
+    os.mkdir_path(dirname(c2pt_file))
+    local c2pt_aff  = qcd.aff.Writer(c2pt_file)
+    save_2pt_list_fast(L, c2pt_aff, string.format('/c2pt/SP/%s/', csrcgrp_key),
+              c2pt, csrc_coh0, c2pt_psnk_list, t_axis, bc_baryon_t)
+    save_2pt_list_fast(L, c2pt_aff, string.format('/c2pt/SS/%s/', csrcgrp_key),
+              c2pt_sm, csrc_coh0, c2pt_psnk_list, t_axis, bc_baryon_t)
+    c2pt_aff:close()
+    tt('done')
+  end -- is_new_F_grp
+  
+  tt = timer('propgrp_F_chop')
+  local propgrp_F_chop = tmd_chop_map(propgrp_F)                ; tt('done')
+
+  for i_tsep, tsep in pairs(tsep_list) do
+    for i_psnk, psnk in pairs(c3pt_psnk_list) do
+      local psnk_str = strkey.psnk_str_k(psnk)
+      -- compute prop_B, save CP-even c3pt
+      for tpol_tag, tpol in pairs(Tpol_list_c3pt) do
+        for i_flav_cur, flav_cur in pairs(flav_list) do
+          local propgrp_B, is_new_B_grp = get_propgrp_B(
+              L, cfg_key, csrcgrp, ama, psnk, tsep, 
+              S2, S1, tpol, tpol_tag, flav_cur, 
+              propgrp_F_sm,
+              smear_func, solver_func)
+          if gg then propgrp_B = L:ColorMatrix(gg[csrc_coh0]) * propgrp_B * gg:adjoin() end         --**
+          tt = timer('propgrp_B_chop')
+          local propgrp_B_chop = tmd_chop_map(propgrp_B)        ; tt('done')
+          if is_new_B_grp or redo_contract.tmd then -- contract c3pt(t=tcur, tsnk=const, flav=flav_cur)
+            tt = timer("save_tmd")
+            local tmd_file = get_tmd_file(cfg_key, csrc_coh0, psnk, tsep,
+                tpol_tag, flav_cur, ama)
+            printf("[save_tmd] %s\n", tmd_file)
+            os.mkdir_path(dirname(tmd_file))
+            local tmd_aff = qcd.aff.Writer(tmd_file)
+            general_save_tmd_qbarq_bfirst(
+                propgrp_F_chop, propgrp_B_chop, gf_lpath_bc_chop, 
+                tmd_lpspec_list_bfirst, 
+                { save = { 
+                    file=tmd_aff, 
+                    kpath=string.format("/tmd/SS/proton_%s/%s/%s/%s_dt%d", 
+                          tpol_tag, flav_cur, csrcgrp_key, psnk_str, tsep),
+                    mkey='q', fkey='g' },
+                  momproj = {
+                    csrc=csrc_chop0, 
+                    mom_list=c3pt_qext_list, 
+                    t_axis=t_axis,
+                    bc_t = ferm_bc[1+t_axis], -- FIXME must be +1 because qbarq has overall ferm_bc_t sign if c3pt wraps-around; this is corrected in stripping; however, csrc_chop0[4]==0, so no wraparound happens anyway
+                    tlen=lt_chop,
+                    ft_sign=1 } })
+            tmd_aff:close()
+            tt("done")
+          end
+        end -- flav_cur
+      end -- tpol
+      force_gc("sample_tmd:prop_B")
+
+    end -- psnk
+  end -- tsep
+
+  force_gc("sample_tmd")
+  timer_1srcgrp('done')
+end
+
+

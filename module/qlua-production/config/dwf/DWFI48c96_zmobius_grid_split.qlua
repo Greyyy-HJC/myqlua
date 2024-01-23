@@ -1,0 +1,239 @@
+-- ***************************************************************************
+-- ** DWF 48c96 (physical point)
+-- ** config using CLehner's zmobius evecs, madcg for exact
+-- ***************************************************************************
+
+require 'config/dwf/DWFI48c96_zmobius'
+
+-- evec params TODO check / adjust to actual evec storage params
+mdwf_opt = {parity=1, pctype='eopc2p', 
+  defl_type='qlm', defl_nvec=2000, defl_nvec_basis=400}
+printf("mdwf_parity=%d    mdwf_pctype=%s\n", mdwf_opt.parity, mdwf_opt.pctype)
+qlmopt= { sublat='odd', array=mdwf_L5, block={4,4,3,4}, arr_block=mdwf_L5,
+          nvec_basis=mdwf_opt.defl_nvec_basis,
+          prec='single'}
+evecdwfcl_opt = { file_geom = {4,4,8,8}, dir_stride=32, bufsizeM=1024 }
+
+-- FIXME paths
+-- return meta,eval,bpath
+function get_evecdwfcl_files(cfg_key)
+  local bpath = string.format("")
+  bpath = string.format("%s/evec_cache/%s",       
+      jobcfg.ens_top, cfg_key)
+  return bpath..'/metadata.txt', bpath..'/eigen-values.txt', bpath
+end
+
+-- FIXME check KNL setup
+_grid.init(L, {verbose=true, log='Error,Warning,Message,Iterative', 
+    shm_MB=2048, dslash_asm=true, comms_overlap=true})
+
+-- load evecs, create solver and deflator
+mdwf_qlmx, mdwf_eval = nil, nil
+
+debug_mem_print(cfg_key,"gauge read")
+if jobcfg.do_bogus_prop then
+  printf("WARNING: bogus(random) propagators for TESTING ONLY\n")
+  make_solver = function() 
+    return function(x) return latvec.random_like(x, rnd) end 
+  end
+  make_split_solver = make_solver 
+  make_solver_bcderiv = function() 
+    return function(x_bcd) 
+      return iter.ordered_tmap_table(
+          function(x) return latvec.random_like(x, rnd) end, x_bcd)
+    end
+  end 
+elseif jobcfg.do_contract_only then    
+  printf("WARNING: contractions only, no solver initialized\n")
+  make_solver = function() 
+    return function(x) return latvec.random_like(x, rnd) end 
+  end
+  make_split_solver = make_solver 
+  make_solver_bcderiv = function() 
+    return function(x_bcd) 
+      return iter.ordered_tmap_table(
+          function(x) return latvec.random_like(x, rnd) end, x_bcd)
+    end
+  end 
+else
+
+  -- load evecs
+  if 'internal' == mdwf_opt.defl_type then  
+    -- regular mdwf deflation
+    local eigcg_vmax, eigcg_nev, eigcg_tol = 6, 2, 1e-6    -- hack: irrelevant params
+    local mdwf_gen  = qcd.MDWF.generic(gauge_u, ferm_bc, 
+              mdwf_L5, mdwf_M5, mdwf_mf,
+                mdwf_b5, mdwf_c5, mdwf_opt)
+    mdwf_eigcg_df = mdwf_gen:eig_deflator(eigcg_vmax, eigcg_nev, eigcg_tol, mdwf_opt.defl_nvec)
+
+    cur_timer = timer("evecs_rawload")
+    local evecs_perm = mdwf_evec_file(cfg_key, mdwf_opt.defl_nvec)
+    printf("[evec_read] %s\n", evecs_perm)
+    mdwf_eigcg_df:evecs_rawload(evecs_perm, mdwf_opt.defl_nvec, 
+                  {rank_stride=evec_rawdump_stride})
+    mdwf_eigcg_df:stop()
+    mdwf_eval = mdwf_eigcg_df:eigenvalues()
+    cur_timer("done")
+
+    get_evec = function(i_ev) return mdwf_eigcg_df:get_vector(i_ev) end
+
+  elseif 'int2qlm' == mdwf_opt.defl_type then 
+    -- qlm deflation with vectors converted from mdwf rawdump
+    local eigcg_vmax, eigcg_nev, eigcg_tol = 6, 2, 1e-6    -- hack: irrelevant params
+    local mdwf_load = qcd.MDWF.generic(gauge_u, ferm_bc, mdwf_L5, mdwf_M5, mdwf_mf, 
+                mdwf_b5, mdwf_c5, mdwf_opt)
+    mdwf_eigcg_df = mdwf_load:eig_deflator(eigcg_vmax, eigcg_nev, eigcg_tol, mdwf_opt.defl_nvec)
+    local evecs_perm = mdwf_evec_file(cfg_key, mdwf_opt.defl_nvec)
+    cur_timer = timer("evecs_rawload")
+    printf("[evec_read] %s\n", evecs_perm)
+    mdwf_eigcg_df:evecs_rawload(evecs_perm, mdwf_opt.defl_nvec, 
+                  {rank_stride=evec_rawdump_stride})
+    mdwf_eigcg_df:stop()                                    ; cur_timer('done')
+
+    mdwf_qlmx  = qcd.latmat.create(L, 'lattice.dirac.fermion', mdwf_opt.defl_nvec, qlmopt)
+    cur_timer = timer("evecs_int2qlm")
+    for i_ev = 0, mdwf_opt.defl_nvec - 1 do
+     mdwf_qlmx:insert(i_ev, mdwf_eigcg_df:get_vector(i_ev))
+    end
+    mdwf_eval = mdwf_eigcg_df:eigenvalues()
+    cur_timer('done')
+    mdwf_load = nil
+    force_gc('mdwf_load')
+
+    get_evec = function(i_ev) return mdwf_qlmx:extract(i_ev) end
+
+  elseif 'qlm' == mdwf_opt.defl_type then 
+    -- MDWF evecs
+    mdwf_qlmx  = qcd.latmat.create(L, 'lattice.dirac.fermion', mdwf_opt.defl_nvec, qlmopt)
+    cur_timer = timer("read_df_blk_clehner")
+    local evec_md,evec_ev,evec_bp = get_evecdwfcl_files(cfg_key)
+    printf("[evec-cache] reading  '%s'  '%s'  '%s'\n", evec_md, evec_ev, evec_bp)
+    mdwf_eval = qcd.latmat.read_df_blk_clehner(mdwf_qlmx, evec_md, evec_ev, evec_bp, evecdwfcl_opt)
+    cur_timer("done")
+    printf("mdwf_qlmx=%s\n", tostring(mdwf_qlmx))
+    print_vector(mdwf_eval, "eval")
+    debug_mem_print(cfg_key,"Eigenvectors read")
+    get_evec = function(i_ev) return mdwf_qlmx:extract(i_ev) end
+
+  else
+    error(string.format("bad defl_type='%s'", mdwf_opt.defl_type))
+  end
+
+  -- check the lowest evec(s)
+  local gauge_u_bc = latvec.copy(gauge_u)
+  gauge_apply_bc(gauge_u_bc, ferm_bc)
+  print_obj(mdwf_opt,"mdwf_opt")
+  mdwf_op_ref = make_mdwf_op_ref(gauge_u_bc, mdwf_L5, mdwf_M5, mdwf_mf,
+            mdwf_b5, mdwf_c5, mdwf_opt.pctype)
+  for i_ev = 0, 1 do
+    local v = get_evec(i_ev)
+    latvec.print_eo_norm2(v, string.format("v[%2d]", i_ev))
+    local MxM_v = mdwf_op_ref.op_MxM(v)
+    printf("v.MxM.v[%2d] = %23.16e\n", i_ev, latvec.vdot(v, MxM_v):real())
+    latvec.print_eo_norm2(MxM_v, string.format("MxM_v[%2d]", i_ev))
+    latvec.print_cmp(MxM_v, v, string.format("MxM(v)<>v[%2d]", i_ev))
+  end
+  -- madcg/split solver params
+  local tol_nostop          = 1e-12     -- norestart
+  local maxiter_nostop      = 10000     -- norestart
+  local mdwf_madcg_maxiter  = 3
+  local dwf_verbose         = 'full'
+  local dwf_backend         = 'cpu-grid-lib'
+  local mdwf_split_geom     = assert(split_geom) 
+  assert(mdwf_qlmx)
+  assert(mdwf_eval)
+  local mdwf_opt_defl = {   
+    verbose         = 1, 
+    pctype          = mdwf_opt.pctype, 
+    parity          = mdwf_opt.parity,
+    defl            = {mdwf_qlmx, mdwf_eval},
+    tol_restart     = tol_nostop, maxiter_restart = maxiter_nostop,
+  }
+
+  -- XXX params set to I48 ensemble TODO recheck!
+  local mdwf_madcg_opt = { 
+    verbose   = dwf_verbose,  print_residual = true,
+    backend   = dwf_backend,
+    mdwf_opt  = mdwf_opt_defl,
+    -- sic! new parameterization: tol = sqrt(eps2)
+    tol_i     = 3e-3,   maxiter_i     = 300,            -- stop at tol_i
+    tol_f     = 3e-2,   maxiter_f     = 300,            -- stop at tol_f
+    tol_moeb  = 1e-4,   maxiter_moeb  = 3000,           -- 1defl+stop at tol
+    tol_pv    = 1e-5,   maxiter_pv    = 1000,           -- stop at tol_pv
+    tol_1     = 1e-5,   maxiter_1     = 500,            -- no restarts
+  }
+  local mdwf_solver_opt = { 
+    verbose   = dwf_verbose, 
+    backend   = dwf_backend, 
+    mdwf_opt  = mdwf_opt_defl,
+    -- sic! new parameterization: tol = sqrt(eps2)
+    tol   = 1e-10,      
+    maxiter   = false,          -- placeholder, must be set to sloppy AMA Niter
+    tol_1 = tol_nostop, maxiter_1 = maxiter_nostop, -- no restarts
+  }
+
+  -- make regular solver
+  function make_solver(ama)
+    if 'exact' == ama['approx'] then
+      return dwf.mdwf_g5herm_madcg_solver(
+          gauge_u, ferm_bc, mdwf_M5, mdwf_mf,
+          mdwf_L5,      mdwf_b5,      mdwf_c5,
+          mdwf_L5_full, mdwf_b5_full, mdwf_c5_full,
+          mdwf_madcg_maxiter,
+          mdwf_madcg_opt)
+    elseif 'sloppy' == ama['approx'] then
+      return dwf.mdwf_g5herm_solver(
+          gauge_u, ferm_bc, 
+          mdwf_L5, mdwf_M5, mdwf_mf,
+          mdwf_b5, mdwf_c5,
+          table_deepmerge(mdwf_solver_opt, {maxiter=ama['ncg']}))
+    else
+      error(string.format("unknown approx='%s'"), ama['approx'])
+    end
+  end
+
+  -- make split solver
+  function make_split_solver(ama)
+    if 'exact' == ama['approx'] then
+      return dwf.mdwf_g5herm_madcg_split_solver(
+          mdwf_split_geom,
+          gauge_u, ferm_bc, mdwf_M5, mdwf_mf,
+          mdwf_L5,      mdwf_b5,      mdwf_c5,
+          mdwf_L5_full, mdwf_b5_full, mdwf_c5_full,
+          mdwf_madcg_maxiter,
+          mdwf_madcg_opt)
+    elseif 'sloppy' == ama['approx'] then
+      return dwf.mdwf_g5herm_split_solver(
+          mdwf_split_geom,
+          gauge_u, ferm_bc, 
+          mdwf_L5, mdwf_M5, mdwf_mf,
+          mdwf_b5, mdwf_c5,
+          table_deepmerge(mdwf_solver_opt, {maxiter=ama['ncg']}))
+    else
+      error(string.format("unknown approx='%s'"), ama['approx'])
+    end
+  end
+
+  -- make split solver
+  function make_solver_bcderiv(ama)
+    if 'exact' == ama['approx'] then
+      return dwf.mdwf_g5herm_madcg_split_solver_bcderiv(
+          mdwf_split_geom,
+          gauge_u, ferm_bc, mdwf_M5, mdwf_mf,
+          mdwf_L5,      mdwf_b5,      mdwf_c5,
+          mdwf_L5_full, mdwf_b5_full, mdwf_c5_full,
+          mdwf_madcg_maxiter,
+          mdwf_madcg_opt)
+    elseif 'sloppy' == ama['approx'] then
+      return dwf.mdwf_g5herm_split_solver_bcderiv(
+          mdwf_split_geom,
+          gauge_u, ferm_bc, 
+          mdwf_L5, mdwf_M5, mdwf_mf,
+          mdwf_b5, mdwf_c5,
+          table_deepmerge(mdwf_solver_opt, {maxiter=ama['ncg']}))
+    else
+      error(string.format("unknown approx='%s'"), ama['approx'])
+    end
+  end
+
+end

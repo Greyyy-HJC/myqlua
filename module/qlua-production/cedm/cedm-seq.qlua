@@ -1,0 +1,137 @@
+require "test_fields"
+
+
+require 'hadron/baryon_corr'
+-- aliases
+cedm_baryon_sigma = baryon_sigma_twopt
+cedm_baryon_sigma_asym_src = baryon_sigma_twopt_asymsrc
+cedm_baryon_seqsource_u = baryon_sigma_seqsource_u
+cedm_baryon_seqsource_d = baryon_sigma_seqsource_d
+cedm_baryon_seqsource_func = baryon_sigma_seqsource_func
+cedm_baryon_sigma_seqone = baryon_sigma_twopt_seqone
+cedm_seqsrc_sink = baryon_sigma_seqsrc_sink
+seqsrc_nucsink = baryon_sigma_seqsrc_sink
+
+-- FIXME remove, replace with space2full
+function mom4(mom3)
+  -- FIXME take t_axis, 0 as arguments
+  return space2full(mom3, t_axis, 0)
+end
+function seqsrc_tslice_gamma(frw_prop, csrc, qext, t_ins, gamma_ins)
+  -- source for forward current-sequential propagator
+  --  frw_prop    forward propagator
+  --  csrc        coordinate of the source for planewave phases
+  --  qext, t_ins momentum and t-position of the current insertion
+  --  gamma_ins   gamma structure of the insertion [qbar.Gamma.q]
+  local L = frw_prop.lattice
+  local ss = L:DiracPropagator()        -- filled with zeros
+  L:Subset({axis=#L-1, position=t_ins}):where(
+    function() ss:set(gamma_ins * frw_prop 
+                      * L:planewave(csrc, mom4(qext))) end)
+  return ss
+end
+cedm_seqsrc_cur = seqsrc_tslice_gamma
+
+function seqsrc_tslice_gamma_bkw(bkw_prop, csrc, qext, t_ins, gamma_ins)
+  -- source for backward current-sequential propagator
+  local L = bkw_prop.lattice
+  local ss = L:DiracPropagator()        -- filled with zeros
+  L:Subset({axis=#L-1, position=t_ins}):where(
+    function() ss:set(bkw_prop * gamma_ins 
+                      * L:planewave(csrc, mom4(qext))) end)
+  return ss
+end
+cedm_seqsrc_cur_bkw = seqsrc_tslice_gamma_bkw
+
+do -- to hide sigma matrix
+  local cj = complex(0,1)
+  local sigma_mn = { 
+      {   0,  cj*gamma{n=3},  cj*gamma{n=5},  cj*gamma{n=9}   },  -- xx,xy,xz,xt
+      { -cj*gamma{n=3},   0,  cj*gamma{n=6},  cj*gamma{n=10}  },  -- yx,yy,yz,yt
+      { -cj*gamma{n=5}, -cj*gamma{n=6},   0,  cj*gamma{n=12}  },  -- zx,zy,zz,zt
+      { -cj*gamma{n=9}, -cj*gamma{n=10},  -cj*gamma{n=12},  0 } } -- tx,ty,tz,tt
+  local sigma_gamma5_mn = { 
+      {  0, -cj*gamma{n=12},   cj*gamma{n=10},  -cj*gamma{n= 6}  }, -- xx,xy,xz,xt
+      {  cj*gamma{n=12},  0,  -cj*gamma{n= 9},   cj*gamma{n= 5}  }, -- yx,yy,yz,yt
+      { -cj*gamma{n=10},   cj*gamma{n= 9}, 0,   -cj*gamma{n= 3}  }, -- zx,zy,zz,zt
+      {  cj*gamma{n= 6},  -cj*gamma{n= 5},   cj*gamma{n= 3},  0  } }-- tx,ty,tz,tt
+  function seqsrc_cedm(frw_prop, gauge_clover)
+    -- multiply the forward propagator with the edm insertion 
+    --  G_{\mu\nu}\sigma^{\mu\nu}\gamma^5
+    local L = frw_prop.lattice
+    local res = L:DiracPropagator()
+    for mu = 0, #L - 1 do
+      for nu = mu + 1, #L - 1 do
+        res = res + (gauge_clover[1+mu][1+nu] *
+                      (sigma_gamma5_mn[1+mu][1+nu] * frw_prop))
+      end
+    end
+    return 2 * res    -- += mu<->nu term
+  end
+  cedm_seqsrc_edm = seqsrc_cedm
+  function seqsrc_cedm_bkw(bkw_prop, gauge_clover)
+    -- multiply the backward propagator with the edm insertion 
+    --  G_{\mu\nu}\sigma^{\mu\nu}\gamma^5
+    local L = bkw_prop.lattice
+    local res = L:DiracPropagator()
+    for mu = 0, #L - 1 do
+      for nu = mu + 1, #L - 1 do
+        res = res + ((bkw_prop * sigma_gamma5_mn[1+mu][1+nu]) 
+                     * gauge_clover[1+mu][1+nu])
+      end
+    end
+    return 2 * res    -- += mu<->nu term
+  end
+  cedm_seqsrc_edm_bkw = seqsrc_cedm_bkw
+end
+
+-- source for doubly-sequential propagator through insertion (in prop_C) and sink
+-- prop_F is the original frw propagator, prop_C is assumed to be built from it 
+-- for both U and D quarks
+-- create source for "G" 2-sequential propagator (cEDM-sink)
+function seqsrc_expand_nucsink(flav_bkw, flav_ins, prop_F, prop_C, src, psnk, tsnk, S2, S1, Tpol)
+  -- "G"-propagator source
+  if     flav_ins == 'U' and flav_bkw == 'U' then 
+    return  baryon_sigma_seqsrc_sink(flav_bkw, prop_C, prop_F, src, psnk, tsnk, S2, S1, Tpol) -- Cu,Fd
+  elseif flav_ins == 'U' and flav_bkw == 'D' then 
+    return (baryon_sigma_seqsrc_sink(flav_bkw, prop_C, prop_F, src, psnk, tsnk, S2, S1, Tpol) -- Cu,Fu
+           +baryon_sigma_seqsrc_sink(flav_bkw, prop_F, prop_C, src, psnk, tsnk, S2, S1, Tpol))-- Fu,Cu
+  elseif flav_ins == 'D' and flav_bkw == 'U' then 
+    return  baryon_sigma_seqsrc_sink(flav_bkw, prop_F, prop_C, src, psnk, tsnk, S2, S1, Tpol) -- Fu,Cd
+  elseif flav_ins == 'D' and flav_bkw == 'D' then 
+    return  L:DiracPropagator() -- zero
+  else error(string.format('unknown flav_ins="%s" or flav_bkw="%s"', flav_ins, flav_bkw)) end
+end
+cedm_seqsrc_ins_sink = seqsrc_expand_nucsink    -- alias after rename
+
+
+-- vacuum insertion parameter
+--    vacins_opt = {
+--      vacins    = 'cedm'|'psc'
+--      tag       = <name>          -- extra tag for files, kpaths, ...
+--      flav      = 'U'|'D'         -- for qbarq (cedm, psc)
+--      gauge_fmunu= F[1+mu][1+nu]  -- for cedm: Fmunu for constructing cedm
+--    }
+function seqsrc_psc(prop) return gamma{n=15} * prop end
+function seqsrc_psc_bkw(prop) return prop * gamma{n=15} end
+
+function seqsrc_vacins(frw_prop, vacins_opt)
+  local vi = vacins_opt.vacins
+  if     'cedm' == vi then return seqsrc_cedm(frw_prop, vacins_opt.gauge_fmunu)
+  elseif 'psc'  == vi then return seqsrc_psc(frw_prop)
+  else error(string.format("unknown vacins='%s'", vi)) end
+end
+
+function seqsrc_vacins_bkw(bkw_prop, vacins_opt)
+  local vi = vacins_opt.vacins
+  if     'cedm' == vi then return seqsrc_cedm_bkw(bkw_prop, vacins_opt.gauge_fmunu)
+  elseif 'psc'  == vi then return seqsrc_psc_bkw(bkw_prop)
+  else error(string.format("unknown vacins='%s'", vi)) end
+end
+
+function seqsrc_vacins_nucsink(flav_bkw, vacins_opt, prop_F, prop_C, src, psnk, tsnk, S2, S1, Tpol)
+  local vi = vacins_opt.vacins
+  if 'cedm' == vi or 'psc' == vi then
+    return cedm_seqsrc_ins_sink(flav_bkw, vacins_opt.flav, prop_F, prop_C, src, psnk, tsnk, S2, S1, Tpol)
+  else error(string.format("unknown vacins='%s'", vi)) end
+end

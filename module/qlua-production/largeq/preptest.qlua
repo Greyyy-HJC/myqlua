@@ -1,0 +1,54 @@
+package.path = 'qlua-production/?.qlua;qlib-lhpc/?.qlua;qlib/?.qlua;' .. package.path
+require 'strict'    -- catch all undefined (nil) variables
+require 'stdlib'    -- standard printf, etc
+require 'lhpc-std'  -- make_source, etc
+require 'ape-smear' -- gauge smear
+require 'hex-smear'
+require 'gauge'
+require 'qdpc_io'
+require 'setup_util'
+require 'debug_util'
+require 'latvec'
+
+require 'hadspec'
+
+require 'smear/field_smear'
+require 'hadron/baryon_corr'
+require 'hadron/qbarq_wline'
+
+require 'util/file'
+require 'util/geom'
+require 'util/strkey'
+
+job_timer = rawget(_G, 'job_timer') or timer('total')
+
+S = rnd_init(L, rnd_seed)
+
+do  -- main part
+
+  -- ama loop
+  for i_ama, ama in pairs(ama_list) do
+    -- list of sample indices
+    printf("INFO: AMA=%s\n", strkey.ama_str(ama))
+    print_obj(ama, 'ama')
+
+    -- solver func for given AMA mode (note the normalization)
+    local calc_prop = function()end
+    if not contract_only then calc_prop = make_solver(ama) end
+
+    local n_sample_tot = #ama['csrcgrp_list']
+    local i_sample_list = range(1, 1 + n_sample_tot)
+
+    local tt = timer(string.format('AMA="%s", #srcgrp=%d', ama['approx'], #(ama['csrcgrp_list'])))
+    -- iterate over (coherent grouped) samples
+    for ii_s, i_sample in ipairs(i_sample_list) do
+      local csrcgrp = ama['csrcgrp_list'][i_sample]
+      local csrcgrp_tag = strkey.csrcgrp_str(csrcgrp)
+
+      local src1  = S:gaussian_DiracPropagator()
+      local tt = timer('calc_prop')
+      local prop1 = calc_prop(src1)        ; tt('done')
+    end
+  end
+end
+job_timer('done')

@@ -1,0 +1,172 @@
+package.path = 'qlib/?.qlua;qlib-lhpc/?.qlua;qlua-production/?.qlua;' .. package.path
+require 'strict'
+require 'setup_util'
+require 'latvec'
+
+-------------------------------------------------------------------------------
+-- general
+-------------------------------------------------------------------------------
+assert(job_key)
+cfg_key = job_key -- job# enumerates config#
+
+latsize   = {32,32,32,64}
+t_axis    = #latsize - 1
+rnd_seed  = 1984
+
+
+-------------------------------------------------------------------------------
+-- quark action
+-------------------------------------------------------------------------------
+-- * gauge smearing
+stout_rho = 0.125
+stout_n   = 1
+-- * fermion params
+ferm_bc = {1,1,1,-1}
+m_l     = -0.2390
+m_s     = -0.2050
+kappa_l = 1. / (8 + 2 * m_l)
+c_sw    = 1.20536588031793
+
+
+-- * QOP-MG parameters
+require 'mg_param'
+mg_tol_approx = 1e-4
+mg_maxiter  = 200
+mg_param = make_mg_params(
+      kappa_l, c_sw, ferm_bc, 
+      mg_tol_approx, mg_maxiter, latsize, 
+      {    
+        blocking      = { {4,4,4,4}, {2,2,2,2} },
+        verbose       = {        3,         3  }, 
+        null_vecs     = {       24,        24  },
+        null_vecs_extra={        0,         0  },
+        prehits       = {        0,         0  },
+        posthits      = {        4,         4  },
+        underrelax    = {       1.,        1.  },
+        null_maxiter  = {       20,        20  },
+        null_res      = {      0.4,       0.4  },
+        null_conv     = {      0.8,       0.8  },
+                                               
+        coarse_res    = {      0.1,       0.1  },
+        coarse_maxiter= {       12,        12  },
+        coarse_ngcr   = {        8,         8  },
+      },
+      { name = "mg-d5",
+        verbose = 3 })
+
+
+-------------------------------------------------------------------------------
+-- AMA approximations
+-------------------------------------------------------------------------------
+-- * coordinates
+require 'cfg_list'
+n_src   = {2,2,2,4} 
+sloppy_csrc_list = make_src_grid(
+    {  2,  2,  2,  4 },   -- n_src
+    latsize,  
+    {0,0,0,0},            -- x0
+    {7,11,13,23}, table_index(cfg_list, cfg_key))   -- displacement by config#
+-- * approx modes
+ama_list = {
+  { ['approx']    = 'exact',
+    ['csrc_list'] = { sloppy_csrc_list[1] }, 
+    ['tol']       = 1e-9 },
+  { ['approx']    = 'sloppy',
+    ['csrc_list'] = sloppy_csrc_list,
+    ['tol']       = 1e-4 }
+}
+function make_mg_solver(mg, ama, scale)
+  scale = scale or 1.
+  if ama['approx'] == 'exact' or ama['approx'] == 'sloppy' then
+    return make_solver_general(function(x)
+      return (scale * mg:solve(x, {residual = {rsqmin = ama['tol']^2}}))
+    end)
+  else
+    error(string.format("unknown ama='%s'", ama['approx']))
+  end
+end
+
+
+-------------------------------------------------------------------------------
+-- source parameters
+-------------------------------------------------------------------------------
+ape_alpha   = 2.5
+ape_N       = 25
+ape_accu    = 1e-12
+ape_maxiter = 150
+
+wup_alpha   = 2.0
+scan_wup_list = {20,40,70,100,140}
+
+test_src_coord = {0,0,0,0}
+test_src_wup_N = 0
+
+
+-------------------------------------------------------------------------------
+-- correlator parameters
+-------------------------------------------------------------------------------
+hadspec_psnk_list = make_mom_list(17)
+hadspec_baryon_list = {
+    "proton_1", "lambda_1", "delta_1", "proton_2",
+    "lambda_2", "delta_2", "proton_3", "lambda_3",
+    "delta_3", "proton_4", "proton_5", "proton_6",
+    "lambda_4", "xi_1", "lambda_5", "xi_2", "proton_negpar_3", 
+    "proton_pp", "proton_np", "proton_pp5", "proton_np5"}
+hadspec_meson_list = {
+    "a0_1", "rho_x_1", "rho_y_1", "b1_z_1",
+    "rho_z_1", "b1_y_1", "b1_x_1", "pion_2",
+    "a0_2", "rho_x_2", "rho_y_2", "a1_z_1",
+    "rho_z_2", "a1_y_1", "a1_x_1", "pion_1" }
+
+
+-------------------------------------------------------------------------------
+-- data file param and locations
+-------------------------------------------------------------------------------
+ens_top   = '/lfs/lhpc/isoClover/D5'
+data_top  = 'data' 
+prop_volfmt     = 'single'
+
+-- gauge config
+function gauge_file(key)
+  return string.format("%s/gauge/cl21_32_64_b6p3_m0p2390_m0p2050_cfg_%s.lime", ens_top, key)
+end
+get_gauge_file = gauge_file
+
+
+-- AMA-dependent output file names
+function csrc_str(csrc)
+  return string.format("x%dy%dz%dt%d", csrc[1], csrc[2], csrc[3], csrc[4])
+end
+function ama_str(ama)
+  if 'exact' == ama['approx'] then
+    return string.format("ex")
+  elseif 'sloppy' == ama['approx'] then
+    return string.format("sl")
+  else
+    error(string.format('unknown ama="%s"', ama['approx']))
+  end
+end
+
+-- * hadspec
+function get_hadspec_file_tag(cfg_key, csrc, ama, tag)
+  local tag = '.' .. (tag or '')
+  return string.format('%s/hadspec/hadspec.%s.%s.%s%s.aff',
+        data_top, cfg_key, ama_str(ama), csrc_str(csrc), tag)
+end
+
+-- building block
+--function get_bb_file(key, csrc, tsnk, psnk, baryon, flavor, mode)
+--  local desc = string.format("%s.x%dy%dz%dt%d.PX%dPY%dPZ%dT%d.%s.%s.aff",
+--                  key,
+--                  csrc[1], csrc[2], csrc[3], csrc[4],
+--                  psnk[1], psnk[2], psnk[3], tsnk,
+--                  baryon, flavor)
+--  if 'exact' == mode['approx'] then
+--    return string.format('%s/bb/bb-exact.%s', data_top, desc)
+--  elseif 'sloppy' == mode['approx'] then
+--    return string.format('%s/bb/bb-sl-nev%d-ncg%d.%s', 
+--              data_top, mode['nev'], mode['ncg'], desc)
+--  else 
+--    error(string.format('get_bb_file: unknown mode approx="%s"', mode['approx']))
+--  end
+--end

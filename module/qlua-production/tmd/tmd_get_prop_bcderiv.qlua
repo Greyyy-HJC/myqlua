@@ -1,0 +1,249 @@
+require 'tmd/tmd_get_prop'
+require 'iter'
+require 'util/geom'
+
+function get_tag_dd(tag, dd) return string.format('%s.bcd_%s', tag, dd) end
+
+function get_prop_bcderiv_F(
+      L, cfg_key, csrc, ama, tag, ddlist,
+      t_axis, smear_bcd_func, solver_bcd_func, prop_cache)
+  local prop_dd = {}
+  local prop_file_dd = {}       -- files with propagators ; also keys to prop_cache
+  local is_new = false
+  prop_cache = prop_cache or {}   -- if omitted
+  for dd in iter.litems(ddlist) do
+    local prop_file = get_frwprop_file(cfg_key, csrc, ama, get_tag_dd(tag, dd))
+    prop_file_dd[dd] = prop_file
+    -- try to find in cache or on disk
+    if nil ~= prop_cache[prop_file] then
+      printf("HAVE_CACHED prop_F '%s'\n", prop_file)
+      prop_dd[dd] = prop_cache[prop_file]
+    elseif have_prop(cfg_key, "prop_F", prop_file) then
+      printf("HAVE_SAVED prop_F '%s'\n", prop_file)
+      prop_dd[dd] = prop_load_func(prop_file, "prop_F")
+      prop_cache[prop_file] = prop_dd[dd]
+    else
+      is_new = true
+    end
+  end
+
+  if is_new then
+    prop_dd = {}        -- purge to save memory
+    local tt = timer(string.format("CALC prop_F(%s)", list_tostring(ddlist)))
+    local tsrc = csrc[1+t_axis]
+    local src_dd = {}
+    local src_zero = L:DiracPropagator()
+    for dd in iter.litems(ddlist) do src_dd[dd] = src_zero end
+    src_dd[''] = make_source_point(L, csrc)
+    src_dd = smear_bcd_func(src_dd, {pos=tsrc})
+    -- zero-out irrelevant timeslices
+    L:Subset(qcd.ne(L:pcoord(t_axis), tsrc)):where(function()
+          for dd, p in iter.ordered_titems(src_dd) do p:set_zero() end
+        end)                                              ; tt("src")
+
+    prop_dd  = solver_bcd_func(src_dd)                ; tt("prop")
+
+    for dd, p in iter.ordered_titems(prop_dd) do
+      local prop_file = prop_file_dd[dd]
+      prop_cache[prop_file] = p
+      if do_save_prop.F then
+        prop_save_func(prop_file, p,
+            string.format("prop_F.bcd_%s", dd),
+            ama['prop_prec'])
+        done_prop(cfg_key, "prop_F", prop_file)
+      end
+    end
+    tt("done")
+  end
+
+  return prop_dd, is_new
+end
+
+function get_prop_bcderiv_B(
+      L, cfg_key, csrc, ama, tag, ddlist,
+      psnk, tsnk, t_axis, S2, S1, Tpol, tpol_tag, flav_bkw,
+      prop_F_sm,
+      smear_bcd_func, solver_bcd_func, prop_cache)
+  local prop_dd = {}
+  local prop_file_dd = {}
+  local is_new = false
+  prop_cache = prop_cache or {}   -- if omitted
+  for dd in iter.litems(ddlist) do
+    local prop_file = get_bkwprop_file(cfg_key, csrc,
+        psnk, tsnk, tpol_tag, flav_bkw, ama, get_tag_dd(tag, dd))
+    prop_file_dd[dd] = prop_file
+    -- try to find in cache or on disk
+    if nil ~= prop_cache[prop_file] then
+      printf("HAVE_CACHED prop_B '%s'\n", prop_file)
+      prop_dd[dd] = prop_cache[prop_file]
+    elseif have_prop(cfg_key, "prop_B", prop_file) then
+      printf("HAVE_SAVED prop_B '%s'\n", prop_file)
+      prop_dd[dd] = prop_load_func(prop_file, "prop_B")
+      prop_cache[prop_file] = prop_dd[dd]
+    else
+      is_new = true
+    end
+  end
+
+  if is_new then
+    prop_dd = {}       -- purge to save memory
+    local tt = timer(string.format("CALC prop_B(%s)", list_tostring(ddlist)))
+    -- source
+    local src_adj_dd = {}
+    local src_zero = L:DiracPropagator()
+    for dd in iter.litems(ddlist) do src_adj_dd[dd] = src_zero end
+    local src_seq_adj = L:DiracPropagator()
+    L:Subset({axis=t_axis, pos=tsnk}):where(function()
+          local ph = L:planewave(csrc, space2full(psnk, t_axis))
+          src_seq_adj:set(ph * (gamma{n=15} * baryon_sigma_seqsource_func[flav_bkw](
+              prop_F_sm, prop_F_sm, S2, S1, Tpol):adjoin()))
+        end)
+    src_adj_dd[''] = src_seq_adj
+    src_adj_dd = smear_bcd_func(src_adj_dd, {pos=tsnk})
+    for dd, p in iter.ordered_titems(src_adj_dd) do 
+      L:Subset(qcd.ne(L:pcoord(t_axis), tsnk)):where(function() p:set_zero() end)
+    end                                              ; tt("src")
+    -- propagator
+    local prop_adj_dd = solver_bcd_func(src_adj_dd)     ; tt("prop")
+    -- save & cache
+    for dd, p_adj in iter.ordered_titems(prop_adj_dd) do
+      prop_dd[dd] = p_adj:adjoin() * gamma{n=15}
+      local prop_file = prop_file_dd[dd]
+      prop_cache[prop_file] = prop_dd[dd]
+      if do_save_prop.B then
+        prop_save_func(prop_file, prop_dd[dd],
+            string.format("prop_B.bcd_%s", dd),
+            ama['prop_prec'])
+        done_prop(cfg_key, "prop_B", prop_file)
+      end
+    end
+    tt("done")
+  end
+
+  return prop_dd, is_new
+end
+
+-- return (prop_B, is_new)
+-- build coherent "group bkw propagator" with single inversion using group
+-- frw propagator `propgrp_F_sm' at csrc (in csrcgrp) to construct bkw seq sources
+-- FIXME add `coh' to funcname
+-- FIXME rename local var prop_B -> propgrp_B for consistency
+function get_propgrp_bcderiv_B(
+      L, cfg_key, csrcgrp, ama, tag, ddlist,
+      psnk, tsep, t_axis, S2, S1, Tpol, tpol_tag, flav_bkw,
+      propgrp_F_sm,
+      smear_bcd_func, solver_bcd_func, prop_cache)
+  local prop_dd = {}
+  local prop_file_dd = {}
+  local is_new = false
+  prop_cache = prop_cache or {}   -- if omitted
+  for dd in iter.litems(ddlist) do
+    local prop_file = get_bkwprop_grp_file(cfg_key, csrcgrp,
+              psnk, tsep, tpol_tag, flav_bkw, ama, get_tag_dd(tag, dd))
+    prop_file_dd[dd] = prop_file
+    -- try to find in cache or on disk
+    if nil ~= prop_cache[prop_file] then
+      printf("HAVE_CACHED prop_B '%s'\n", prop_file)
+      prop_dd[dd] = prop_cache[prop_file]
+    elseif have_prop(cfg_key, "prop_B", prop_file) then
+      printf("HAVE_SAVED prop_B '%s'\n", prop_file)
+      prop_dd[dd] = prop_load_func(prop_file, "prop_B")
+      prop_cache[prop_file] = prop_dd[dd]
+    else
+      is_new = true
+    end
+  end
+
+  if is_new then
+    prop_dd = {}     -- purge to save memory
+    local tt = timer(string.format("CALC prop_B(%s)", list_tostring(ddlist)))
+    -- tslice map & phase
+    local tsnk_list = {}
+    local ph = L:Complex(0)
+    for i_csrc, csrc in ipairs(csrcgrp) do
+      local tsnk = (csrc[1+t_axis] + tsep) % latsize[1+t_axis]
+      list_append(tsnk_list, tsnk)
+      L:Subset({axis=t_axis, pos=tsnk}):where(function()
+          ph:set(L:planewave(csrc, space2full(psnk, t_axis))) end)
+    end
+    local tslice_mask = hyperslab_slice_mask(L, tsnk_list, t_axis)
+    -- src
+    local src_adj_dd = {}
+    local src_zero = L:DiracPropagator()
+    for dd in iter.litems(ddlist) do src_adj_dd[dd] = src_zero end
+    local srcgrp_seq_adj = L:DiracPropagator()
+    L:Subset(tslice_mask):where(function()
+          srcgrp_seq_adj:set(ph * (gamma{n=15} * baryon_sigma_seqsource_func[flav_bkw](
+              propgrp_F_sm, propgrp_F_sm, S2, S1, Tpol):adjoin()))
+        end)
+    src_adj_dd[''] = srcgrp_seq_adj
+    -- smearing
+    src_adj_dd = smear_bcd_func(src_adj_dd, {pos=tsnk_list})
+    for dd, p in iter.ordered_titems(src_adj_dd) do 
+      L:Subset(qcd.eq(tslice_mask, 0)):where(function() p:set_zero() end)
+    end                                                 ; tt("src")
+    -- propagator
+    local prop_adj_dd = solver_bcd_func(src_adj_dd)     ; tt("prop")
+    -- save & cache
+    for dd, p_adj in iter.ordered_titems(prop_adj_dd) do
+      prop_dd[dd] = p_adj:adjoin() * gamma{n=15}
+      local prop_file = prop_file_dd[dd]
+      prop_cache[prop_file] = prop_dd[dd]
+      if do_save_prop.Bg then
+        prop_save_func(prop_file, prop_dd[dd],
+            string.format("prop_B.bcd_%s", dd),
+            ama['prop_prec'])
+        done_prop(cfg_key, "prop_B", prop_file)
+      end
+    end
+    tt("done")
+  end
+
+  return prop_dd, is_new
+end
+
+-- return (prop_B, is_new)
+-- build "group bkw propagator" from independent bkw propagators using group 
+-- frw propagator `propgrp_F_sm' at csrc (in csrcgrp) to construct bkw seq sources
+function get_propgrp_indep_bcderiv_B(
+      L, cfg_key, csrcgrp, ama, tag, ddlist,
+      psnk, tsep, t_axis, S2, S1, Tpol, tpol_tag, flav_bkw,
+      propgrp_F_sm, csrc_hslab,
+      smear_bcd_func, solver_bcd_func, prop_cache)
+  local prop_dd = {}
+  local prop_file_dd = {}
+  local is_new = false
+  prop_cache = prop_cache or {}   -- if omitted
+  for dd in iter.litems(ddlist) do
+    local prop_file = get_bkwprop_grp_file(cfg_key, csrcgrp,
+              psnk, tsep, tpol_tag, flav_bkw, ama, get_tag_dd(tag, dd))
+    prop_file_dd[dd] = prop_file
+    -- try to find in cache or on disk
+    if nil ~= prop_cache[prop_file] then
+      printf("HAVE_CACHED prop_B '%s'\n", prop_file)
+      prop_dd[dd] = prop_cache[prop_file]
+    elseif have_prop(cfg_key, "prop_B", prop_file) then
+      printf("HAVE_SAVED prop_B '%s'\n", prop_file)
+      prop_dd[dd] = prop_load_func(prop_file, "prop_B")
+      prop_cache[prop_file] = prop_dd[dd]
+    else
+      is_new = true
+    end
+  end
+
+  if is_new then
+    prop_dd = {}
+    for dd in iter.litems(ddlist) do prop_dd[dd] = L:DiracPropagator() end
+    for i_csrc, csrc in ipairs(csrcgrp) do
+      local tsnk = (csrc[1+t_axis] + tsep) % latsize[1+t_axis]
+      local prop_B_bcd, is_new_i = get_prop_bcderiv_B(
+          L, cfg_key, csrc, ama, tag, ddlist,
+          psnk, tsnk, t_axis, S2, S1, Tpol, tpol_tag, flav_bkw, 
+          propgrp_F_sm, smear_bcd_func, solver_bcd_func, prop_cache)
+      for dd, p in iter.ordered_titems(prop_dd) do
+        csrc_hslab[i_csrc]:where(function()p:set(prop_B_bcd[dd])end)
+      end
+    end
+  end
+  return prop_dd, is_new
+end

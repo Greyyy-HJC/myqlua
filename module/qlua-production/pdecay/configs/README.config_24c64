@@ -1,0 +1,7 @@
+Usage)
+$(qlua binary) $(jobfile) $(config file) $(contraction) $(main script)
+--
+jobfile		= :	specifies config, network_geom
+config file	= config_24c64.merge_4222.qlua :	specifies config, evector file geom = 4222
+contraction	= pd_ops.qlua :	contraction type 1-5, momenta choice, etc.
+main script	= computes 2pt and 3pt

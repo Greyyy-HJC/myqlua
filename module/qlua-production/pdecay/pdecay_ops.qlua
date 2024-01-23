@@ -1,0 +1,234 @@
+require 'stdlib'
+require 'strict'
+
+module('pdecay', package.seeall)
+
+-- correlator polarizations for pdecay
+proton_Ssrc   = gamma{mu=0} * gamma{mu=2}
+gproj_R = .5*(1 + gamma{n=15})                      -- chiral proj Right
+gproj_L = .5*(1 - gamma{n=15})                      -- chiral proj Left
+tpol_pos= .5*(1 + gamma{mu=3})                      -- parity proj pos
+tpol_neg= .5*(1 - gamma{mu=3})                      -- parity proj neg
+tpol_Sz = -gamma{mu=0}*gamma{mu=1}*complex(0,1)     -- spin proj Sz
+tpol_posSz = tpol_pos * tpol_Sz
+pd_dqC  = gamma{mu=1} * gamma{mu=3} -- = gamma2*gamma4    charge conj. matrix TODO check conventions!
+pd_dqCR  = pd_dqC * gproj_R
+pd_dqCL  = pd_dqC * gproj_L
+
+
+
+---------------------------------------------------------------------------------------
+--Definition of tp1-5
+---------------------------------------------------------------------------------------
+do 
+  function tp1(u,d,Q,S1,S2,T)
+    S2 = gamma{n=8} * S2:adjoin() * gamma{n=8}    -- XXX SNS switch
+    local a1 = S1:transpose() * u
+    local a2 = Q * S2:transpose()
+    return (-T*u*(qcd.quarkContract13(a1,a2):spintrace())*tpol_pos):trace()
+  --  return (a1 *qcd.quarkContract13(a2,S1:transpose()*u):spintrace()):trace()
+  end
+
+
+  function tp2(u,d,Q,S1,S2,T)
+    S2 = gamma{n=8} * S2:adjoin() * gamma{n=8}    -- XXX SNS switch
+       local a1 = S1:transpose() * u
+       local a2 = Q* S2:transpose() 
+       return -(T*(d * (qcd.quarkContract13(a2, a1)))*tpol_pos):trace()
+  end
+
+  function tp3(u,d,Q,S1,S2,T)
+    S2 = gamma{n=8} * S2:adjoin() * gamma{n=8}    -- XXX SNS switch
+       local a1 = u * S1:transpose()
+       local a2 = S2:transpose() * d
+       return -((T*Q)*qcd.quarkContract13(a1, a2):spintrace()*tpol_pos):trace()
+  end
+
+  function tp4(u,d,Q,S1,S2,T)
+    S2 = gamma{n=8} * S2:adjoin() * gamma{n=8}    -- XXX SNS switch
+       local a1 = S1:transpose() * d
+       local a2 = u * S2:transpose()
+       return -(T*Q*(qcd.quarkContract13(a2, a1))*tpol_pos):trace()
+  end
+
+  function tp5(u,d,Q,S1,S2,T)
+    S2 = gamma{n=8} * S2:adjoin() * gamma{n=8}    -- XXX SNS switch
+       local a1 = S1:transpose() * Q
+       local a2 = d*(S2:transpose())
+       return - (T *u * qcd.quarkContract13(a2, a1)*tpol_pos):trace()
+  end
+
+  pdecay_old = { tp1 = tp1, tp2 = tp2, tp3 = tp3, tp4 = tp4, tp5 = tp5 }
+end
+
+pdecay = {
+--tpA(u,d,Q,Ssnk,Ssrc,T) = (-1)*Tr[ Q . SpinTr{qC13(u . Ssrc_bar^T, Ssnk^T . d)} . T ]
+--tpB(u,d,Q,Ssnk,Ssrc,T) = (-1)*Tr[ Q .        qc13(u . Ssrc_bar^T, Ssnk^T . d)  . T ]
+  tp1 = function(u, d, Q, S1, S2, opt)
+    --tp1(u,d,Q,S1,S2,T) = tpA(u, Q, u, S1:transpose(), S2:transpose()) [sic! S1,S2 transposed]
+    return qcd.contract_('baryon_pdecayA_UDQ', {u, Q, u, S1:transpose(), S2:transpose()}, opt)
+  end,
+
+  tp2 = function(u, d, Q, S1, S2, opt)
+    --tp2(u,d,Q,S1,S2,T) = tpB(Q, u, d, S1, S2, T)
+    return qcd.contract_('baryon_pdecayB_UDQ', {Q, u, d, S1, S2}, opt)
+  end,
+
+  -- XXX commented out to avoid using it
+  tp3 = function(u,d,Q, S1, S2, opt)
+    --tp3(u,d,Q,S1,S2,T) = tpA(Q, u, d, S2, S1, T)  [sic! order of S1,S2 switched]
+    return qcd.contract_('baryon_pdecayA_UDQ', {u, d, Q, S2, S1}, opt)
+  end,
+
+  tp3c = function(u,d,Q, S1, S2, opt)
+    --tp3c(u,d,Q,S1,S2,T) = tpA(Q, u, d, S1, S2, T)  [sic! corrected version of tp3]
+    return qcd.contract_('baryon_pdecayA_UDQ', {u, d, Q, S1, S2}, opt)
+  end,
+
+  tp4 = function(u, d, Q, S1, S2, opt)
+    --tp4(u,d,Q,S1,S2,T) = tpB(u, d, Q, S1, S2, T)
+    return qcd.contract_('baryon_pdecayB_UDQ', {u, d, Q, S1, S2}, opt)
+  end,
+
+  tp5 = function(u, d, Q, S1, S2, opt)
+    --tp5(u,d,Q,S1,S2,T) = tpB(d, Q, u, S1, S2, T)
+    return qcd.contract_('baryon_pdecayB_UDQ', {d, Q, u, S1, S2}, opt)
+  end,
+}
+--------------------------------------------------------------------------------------------
+
+
+-- momentum projection
+--    <Pi(psnk)|Op(q)|n(psrc)> = sum_{y,z} <Pi(y) Op(z) n(x)> exp(-i*psnk(y-x) -i*q*(z-x))
+
+op_list = {
+  tp1_LL = { func=pdecay.tp1, T=gproj_L, S=pd_dqCL },
+  tp2_LL = { func=pdecay.tp2, T=gproj_L, S=pd_dqCL },
+  tp3_LL = { func=pdecay.tp3, T=gproj_L, S=pd_dqCL },
+  tp4_LL = { func=pdecay.tp4, T=gproj_L, S=pd_dqCL },
+  tp5_LL = { func=pdecay.tp5, T=gproj_L, S=pd_dqCL },
+
+  tp1_RL = { func=pdecay.tp1, T=gproj_L, S=pd_dqCR },
+  tp2_RL = { func=pdecay.tp2, T=gproj_L, S=pd_dqCR },
+  tp3_RL = { func=pdecay.tp3, T=gproj_L, S=pd_dqCR },
+  tp4_RL = { func=pdecay.tp4, T=gproj_L, S=pd_dqCR },
+  tp5_RL = { func=pdecay.tp5, T=gproj_L, S=pd_dqCR },
+
+  tp1_LR = { func=pdecay.tp1, T=gproj_R, S=pd_dqCL },
+  tp2_LR = { func=pdecay.tp2, T=gproj_R, S=pd_dqCL },
+  tp3_LR = { func=pdecay.tp3, T=gproj_R, S=pd_dqCL },
+  tp4_LR = { func=pdecay.tp4, T=gproj_R, S=pd_dqCL },
+  tp5_LR = { func=pdecay.tp5, T=gproj_R, S=pd_dqCL },
+
+  tp1_RR = { func=pdecay.tp1, T=gproj_R, S=pd_dqCR },
+  tp2_RR = { func=pdecay.tp2, T=gproj_R, S=pd_dqCR },
+  tp3_RR = { func=pdecay.tp3, T=gproj_R, S=pd_dqCR },
+  tp4_RR = { func=pdecay.tp4, T=gproj_R, S=pd_dqCR },
+  tp5_RR = { func=pdecay.tp5, T=gproj_R, S=pd_dqCR },
+}
+
+LEC_op_list = {
+      tp1_LL = { func=pdecay.tp1, T=gproj_L, S=pd_dqCL },
+      tp2_LL = { func=pdecay.tp2, T=gproj_L, S=pd_dqCL },
+      tp1_RL = { func=pdecay.tp1, T=gproj_L, S=pd_dqCR },
+      tp2_RL = { func=pdecay.tp2, T=gproj_L, S=pd_dqCR },
+}
+
+pdecay_contract_list = {
+  { mgamma_tag  = 'Tg15',
+    flav_B      = 'UD',
+    psnk        = {1,1,1}, --{0,0,2} would be next choice
+    qext_list   = { -- range_prod({ {-2,-1, 0}, {-2,-1, 0}, {-2,-1, 0} })
+      {-2., -2., -2.}, {-2., -2., -1.}, {-2., -2., 0.},
+      {-2., -1., -2.}, {-2., -1., -1.}, {-2., -1., 0.},
+      {-2.,  0., -2.}, {-2.,  0., -1.}, {-2.,  0., 0.},
+      {-1., -2., -2.}, {-1., -2., -1.}, {-1., -2., 0.},
+      {-1., -1., -2.}, {-1., -1., -1.}, {-1., -1., 0.},
+      {-1.,  0., -2.}, {-1.,  0., -1.}, {-1.,  0., 0.},
+      { 0., -2., -2.}, { 0., -2., -1.}, { 0., -2., 0.},
+      { 0., -1., -2.}, { 0., -1., -1.}, { 0., -1., 0.},
+      { 0.,  0., -2.}, { 0.,  0., -1.}, { 0.,  0., 0.} },
+    pd_op_list = op_list  },
+  { mgamma_tag  = 'Tg15',
+    flav_B      = 'S',
+    psnk        = {0,0,1},
+    qext_list   = { -- range_prod({ {-1, 0, 1}, {-1, 0, 1}, {-2,-1, 0} })
+      {-1., -1., -2.} ,{-1., -1., -1.}, {-1., -1., 0.},
+      {-1.,  0., -2.} ,{-1.,  0., -1.}, {-1.,  0., 0.},
+      {-1.,  1., -2.} ,{-1.,  1., -1.}, {-1.,  1., 0.},
+      { 0., -1., -2.} ,{ 0., -1., -1.}, { 0., -1., 0.},
+      { 0.,  0., -2.} ,{ 0.,  0., -1.}, { 0.,  0., 0.},
+      { 0.,  1., -2.} ,{ 0.,  1., -1.}, { 0.,  1., 0.},
+      { 1., -1., -2.} ,{ 1., -1., -1.}, { 1., -1., 0.},
+      { 1.,  0., -2.} ,{ 1.,  0., -1.}, { 1.,  0., 0.},
+      { 1.,  1., -2.} ,{ 1.,  1., -1.}, { 1.,  1., 0.}}, -- psrc = psnk+qext= {{0,0,0},{1,0,0}}
+
+    pd_op_list = op_list  },
+
+  { mgamma_tag  = 'Tg15',
+    flav_B      = 'UD',
+    psnk        = {0,0,2}, --{0,0,2} would be next choice
+    qext_list   = { -- range_prod({ {-1, 0, 1}, {-1, 0, 1}, {-3,-2,-1} })
+      {-1., -1., -3.}, {-1., -1., -2.}, {-1., -1., -1.},
+      {-1.,  0., -3.}, {-1.,  0., -2.}, {-1.,  0., -1.},
+      {-1.,  1., -3.}, {-1.,  1., -2.}, {-1.,  1., -1.},
+      { 0., -1., -3.}, { 0., -1., -2.}, { 0., -1., -1.},
+      { 0.,  0., -3.}, { 0.,  0., -2.}, { 0.,  0., -1.},
+      { 0.,  1., -3.}, { 0.,  1., -2.}, { 0.,  1., -1.},
+      { 1., -1., -3.}, { 1., -1., -2.}, { 1., -1., -1.},
+      { 1.,  0., -3.}, { 1.,  0., -2.}, { 1.,  0., -1.},
+      { 1.,  1., -3.}, { 1.,  1., -2.}, { 1.,  1., -1.} }, -- psrc = psnk+qext= {{0,0,0},{1,-1,1},{-1,0,1},{0,0,1} and its cyclic pairs}
+
+ -- psrc = psnk+qext= {{0,0,0},{1,-1,1},{-1,0,1},{0,0,1} and its cyclic pairs}
+    pd_op_list = op_list  },
+  { mgamma_tag  = 'Tg15',
+    flav_B      = 'S',
+    psnk        = {0,1,1},
+    qext_list   = { -- range_prod({ {-1, 0, 1}, {-2,-1, 0}, {-2,-1, 0} })
+      {-1., -2., -2.}, {-1., -2., -1.}, {-1., -2., 0.},
+      {-1., -1., -2.}, {-1., -1., -1.}, {-1., -1., 0.},
+      {-1.,  0., -2.}, {-1.,  0., -1.}, {-1.,  0., 0.},
+      { 0., -2., -2.}, { 0., -2., -1.}, { 0., -2., 0.},
+      { 0., -1., -2.}, { 0., -1., -1.}, { 0., -1., 0.},
+      { 0.,  0., -2.}, { 0.,  0., -1.}, { 0.,  0., 0.},
+      { 1., -2., -2.}, { 1., -2., -1.}, { 1., -2., 0.},
+      { 1., -1., -2.}, { 1., -1., -1.}, { 1., -1., 0.},
+      { 1.,  0., -2.}, { 1.,  0., -1.}, { 1.,  0., 0.} }, -- psrc = psnk+qext= {{0,0,0},{1,0,0}}
+    pd_op_list = op_list  },
+}
+
+pdecay_contract_list_ext = {
+  -- sns 2019/03/28
+  -- "list_ext": c3pt grouped by flavor to compute bkwprops simultaneously with solver_list(eg splitCG)
+  --  mgamma_tag->mgamma_tag_list,
+  --  psnk -> psnk_list
+  -- pd_op_list and qext_list are relevant only for the final contraction (op insertion)
+  -- qext_list is extented to all momenta necessary for any psnk in psnk_list
+  -- TODO use union for qext_list's instead of enclosing boxes (not list_join: need only unique momenta)
+  { flav_B          = 'UD',
+    mgamma_tag_list = { 'Tg15' },
+    psnk_list       = { { 1, 1, 1}, { 0, 0, 2} },
+    -- XXX joined together 2*(3x3x3=27mom) ranges into the encosing "box" 4x4x4=64mom
+    --  range_prod({ {-2,-1, 0}, {-2,-1, 0}, {-2,-1, 0} })  -- ???
+    --  range_prod({ {-1, 0, 1}, {-1, 0, 1}, {-3,-2,-1} })  -- psrc = psnk+qext= {{0,0,0},{1,-1,1},{-1,0,1},{0,0,1} and its cyclic pairs}
+    qext_list       = range_prod({ {-2,-1, 0, 1}, {-2,-1, 0, 1}, {-3,-2,-1,0} }),
+    pd_op_list      = op_list  },
+
+  { mgamma_tag_list = { 'Tg15' },
+    flav_B          = 'S',
+    psnk_list       = { { 0, 0, 1}, { 0, 1, 1} },
+    -- XXX joined together 2*(3x3x3=27mom) ranges into the encosing "box" 3x4x3=36mom
+    --  range_prod({ {-1, 0, 1}, {-1, 0, 1}, {-2,-1, 0} })  -- psrc = psnk+qext= {{0,0,0},{1,0,0}}
+    --  range_prod({ {-1, 0, 1}, {-2,-1, 0}, {-2,-1, 0} })  -- psrc = psnk+qext= {{0,0,0},{1,0,0}}
+    qext_list       = range_prod({ {-1, 0, 1}, {-2, -1, 0, 1}, {-2,-1, 0} }), 
+    pd_op_list = op_list  },
+}
+
+LEC_contract_list = {
+  { mgamma_tag  = 'Tg15',
+    psnk        = { 0, 0, 0},
+    qext_list   = { {0, 0, 0} }, -- psrc = psnk+qext= {{0,0,0},{1,0,0}}
+    pd_op_list = LEC_op_list  },
+}
+
+

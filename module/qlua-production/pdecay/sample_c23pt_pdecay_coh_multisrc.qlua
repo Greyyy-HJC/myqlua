@@ -1,0 +1,252 @@
+require 'pdecay/pdecay_get_prop'
+
+module('pdecay', package.seeall)
+
+------------------------------------------------------------------------------
+-- function to sample one source location
+------------------------------------------------------------------------------
+function sample_c23pt_pdecay_coh_multisrc(
+        L, cfg_key, csrcgrp_list, hslab_len_t, ama,
+        c2pt_psnk_list, c3pt_tsep_list,
+        Ssrc, pdecay_contract_list,  -- {{ mgamma_tag=, flav_B=, psnk=, qext_list=, {op={func=, T=, S=},..}},..}
+        smear_func, solver_func_UD, solver_func_S,
+        t_axis, ferm_bc)
+  -- parameters
+  --  L               lattice object
+  --  cfg_key         gauge cfg "key" : string
+  --  csrcgrp_list    [isrc][igrp][mu] coordinates of sources
+  --                  isrc: compute props together in splitCG
+  --                  igrp: compute backward props together (coh)
+  --  ama             AMA parameter for saving files
+  --  c2pt_psnk_list  list of sink momenta for c2pt
+  --  c3pt_tsep_list  list of source-sink separations (tsep)
+  --  Ssrc            nucleon source diquark spin structure
+  --  pdecay_contract_list    list of pdecay contractions in the form
+  --                   {{ mgamma_tag=, flav_B=, psnk=, qext_list=, {op={func=, T=, S=},..}},..}
+  --  smear_func      source smearing function x_smeared = smear_func(x_point)
+  --  solver_func_UD, solver_func_S
+  --    fermion solvers for light(UD) and strange(S) quarks
+  --        x = solver_func(y) <-> Dslash.x = y, for light(UD) and S quarks
+  -- also requires global functions for data file names
+  --    get_*_file
+  -- and variables
+  -- XXX envs : 
+  --    latsize
+  
+  local timer_1src  = timer('1src')                 -- function timer
+  local tt    -- timer                              -- local timer
+  local bc_quark_t  = ferm_bc[1+t_axis]             -- time BC for quarks
+  local bc_baryon_t = bc_quark_t^3                  -- time BC for baryons
+  local bc_meson_t  = bc_quark_t^2                  -- time BC for mesons
+  local nsrc = #csrcgrp_list
+  assert(0 < nsrc)
+  local ngrp = #(csrcgrp_list[1])                   -- same as ncoh
+  assert(0 < ngrp)
+
+  local solver_func_map = {['UD']=solver_func_UD, ['S']=solver_func_S}
+
+  -- flatten the list of sources
+  local csrc_list_flat = {}     -- flat list of csrc for computing frw props
+  local csrc_hslab_list = {}    -- hyperslab subsets for constructing propgrp_F
+  for isrc, csrcgrp in ipairs(csrcgrp_list) do
+    list_append(csrc_hslab_list, hyperslab_subset_grp(
+          L, csrcgrp, hslab_len_t, t_axis, {verbose=true}))
+    for igrp, csrc in ipairs(csrcgrp) do 
+      list_append(csrc_list_flat, csrc) 
+    end
+  end
+
+  -- function to avoid code duplication: produce all frw props for `flav'
+  local function make_frw_props(flav)
+    local prop_list_flat, is_new_list  = get_prop_F_list(L, cfg_key, 
+        csrc_list_flat, ama, flav, smear_func, solver_func_map[flav]) -- usual SP forward props
+    local prop_sm_list_flat = {}    -- [isrc_flat]smeared props
+    local propgrp_list = {}         -- [isrc] `group' forward props, same as bkwprop
+    local propgrp_sm_list = {}      -- [isrc] same, smeared
+    local isrc_flat = 1
+    for isrc, csrcgrp in ipairs(csrcgrp_list) do
+      local propgrp = L:DiracPropagator()
+      local propgrp_sm = L:DiracPropagator()
+      for igrp, csrc in ipairs(csrcgrp) do
+        local prop    = prop_list_flat[isrc_flat]
+        tt = timer(string.format("smear_prop_F_%s", flav))
+        local prop_sm = smear_func(prop)    ; tt('done')
+        prop_sm_list_flat[isrc_flat] = prop_sm
+        csrc_hslab_list[isrc][igrp]:where(function() propgrp:set(prop) end)
+        csrc_hslab_list[isrc][igrp]:where(function() propgrp_sm:set(prop_sm) end)
+        isrc_flat = isrc_flat + 1
+      end
+      propgrp_list[isrc]    = propgrp
+      propgrp_sm_list[isrc] = propgrp_sm
+      tt('done')
+    end 
+    return prop_list_flat, prop_sm_list_flat, propgrp_list, propgrp_sm_list, is_new_list
+  end
+
+  -- light quark props 
+  local prop_F_list_flat, prop_F_sm_list_flat, propgrp_F_list, propgrp_F_sm_list, is_new_F  = make_frw_props('UD')
+
+  -- S-quark props for meson 2pts
+  local prop_Fs_list_flat, prop_Fs_sm_list_flat, propgrp_Fs_list, propgrp_Fs_sm_list, is_new_Fs = make_frw_props('S')
+
+
+  -- c2pt contractions
+  for isrc_flat, csrc in ipairs(csrc_list_flat) do 
+    local prop_F    = prop_F_list_flat    [isrc_flat]
+    local prop_F_sm = prop_F_sm_list_flat [isrc_flat]
+    local prop_Fs   = prop_Fs_list_flat   [isrc_flat]
+    local prop_Fs_sm= prop_Fs_sm_list_flat[isrc_flat]
+
+    local hadspec_file = get_hadspec_file(cfg_key, csrc, ama)
+    printf('[save_hadspec] %s\n', hadspec_file)
+    os.mkdir_path(dirname(hadspec_file))
+    local aff_hadspec = qcd.aff.Writer(hadspec_file)
+    local copt = { 
+        result  = false,                -- do not return complex fields 
+        backend = 'cpu',   -- on CPU by default
+        save    = { file=aff_hadspec, kpath=false--[[XXX set]], fkey='Tg', mkey='P' },
+        momproj = { csrc=csrc, mom_list=c2pt_psnk_list, t_axis=t_axis, 
+                    ft_sign=-1, bc_t=false--[[XXX set]] } }
+    
+    -- light-quark baryons      
+    tt  = timer("save_hadspec_baryon") 
+    qcd.contract_('baryon_sigma_UUS', { prop_F, prop_F, prop_F, Ssrc, Ssrc }, 
+        table_deepjoin(copt, {save={kpath='/c2pt/nucleon/SP'}, momproj={bc_t=bc_baryon_t}}))
+    qcd.contract_('baryon_sigma_UUS', { prop_F_sm, prop_F_sm, prop_F_sm, Ssrc, Ssrc }, 
+        table_deepjoin(copt, {save={kpath='/c2pt/nucleon/SS'}, momproj={bc_t=bc_baryon_t}}))
+    tt('done')
+
+    -- TODO consider lambda, omega baryons
+
+    -- light-quark mesons
+    tt  = timer("save_hadspec_meson_ll") 
+    qcd.contract_('meson_F_hB', { prop_F, prop_F }, 
+        table_deepjoin(copt, {save={kpath='/c2pt/meson_ll/SP'}, momproj={bc_t=bc_meson_t}}))
+    qcd.contract_('meson_F_hB', { prop_F_sm, prop_F_sm }, 
+        table_deepjoin(copt, {save={kpath='/c2pt/meson_ll/SS'}, momproj={bc_t=bc_meson_t}}))
+    tt('done')
+
+    -- strange-light mesons
+    tt  = timer("save_hadspec_meson_sl") 
+    qcd.contract_('meson_F_hB', { prop_Fs, prop_F }, 
+        table_deepjoin(copt, {save={kpath='/c2pt/meson_sl/SP'}, momproj={bc_t=bc_meson_t}}))
+    qcd.contract_('meson_F_hB', { prop_Fs_sm, prop_F_sm }, 
+        table_deepjoin(copt, {save={kpath='/c2pt/meson_sl/SS'}, momproj={bc_t=bc_meson_t}}))
+    tt('done')
+
+    -- strange-strange mesons
+    tt  = timer("save_hadspec_meson_ss") 
+    qcd.contract_('meson_F_hB', { prop_Fs, prop_Fs }, 
+        table_deepjoin(copt, {save={kpath='/c2pt/meson_ss/SP'}, momproj={bc_t=bc_meson_t}}))
+    qcd.contract_('meson_F_hB', { prop_Fs_sm, prop_Fs_sm },
+        table_deepjoin(copt, {save={kpath='/c2pt/meson_ss/SS'}, momproj={bc_t=bc_meson_t}}))
+    tt('done')
+
+    aff_hadspec:close()
+  end
+    
+
+  -- 2pt pdecay LEC contractions
+  for isrc_flat, csrc in ipairs(csrc_list_flat) do 
+    local prop_F    = prop_F_list_flat[isrc_flat]
+    local lec_pdecay_file = get_lec_file(cfg_key, csrc, ama)
+    os.mkdir_path(dirname(lec_pdecay_file))
+    printf("[save_lec_pdecay] %s\n", lec_pdecay_file)
+
+    local lec_pdecay_aff = qcd.aff.Writer(lec_pdecay_file)
+    local copt = { 
+        result  = false,    -- do not return complex fields 
+        backend = 'cpu',        
+        save    = { file=lec_pdecay_aff, kpath=false--[[XXX set]], fkey='Tg', mkey='P' },
+        momproj = { csrc=csrc, mom_list=false--[[XXX set]], t_axis=t_axis, 
+                    ft_sign=-1, bc_t=bc_baryon_t } }
+
+    for i_lec_contract, lec in pairs(LEC_contract_list) do
+      for lec_op_tag, lec_op in pairs(lec.pd_op_list) do
+        local kpath = string.format("/lec_pdecay/SP/lec/%s", lec_op_tag)
+        -- XXX this is new-style function that saves all all 16 T independently directly into AFF
+        -- XXX instead of looping over tg to compute tkX with T=[tpol_pos*]gamma{n=tg}*lec_op.T
+        lec_op.func(prop_F, prop_F, prop_F, lec_op.S, Ssrc, 
+            table_deepjoin(copt, {save={kpath=kpath}, momproj={mom_list=lec.qext_list}}))
+      end -- for lec_op
+    end -- for lec
+
+    lec_pdecay_aff:close()
+  end -- for isrc igrp
+
+  -- make sure gc does not get stuck later
+  prop_F_list_flat, prop_F_sm_list_flat   = nil, nil    
+  prop_Fs_list_flat, prop_Fs_sm_list_flat = nil, nil    
+
+
+  -- 3pt pdecay contractions
+  for i_tsep, tsep in pairs(c3pt_tsep_list) do
+    for i_pdecay_contract, pdc in pairs(pdecay_contract_list) do
+      -- select solver
+      local solver_func_B = solver_func_map[pdc.flav_B]   --flav_B provides flavor of the second Dirac inversion
+      assert(solver_func_B)
+
+      -- compute prop_B
+      local propgrp_B_list, is_new_B = get_propgrp_B_list(
+          L, cfg_key, csrcgrp_list, ama, pdc.psnk, tsep,
+          pdc.mgamma_tag, 'UD'--[[frw]], pdc.flav_B--[[bkw]],
+          propgrp_F_sm_list, smear_func, solver_func_B)
+
+      for isrc, csrcgrp in ipairs(csrcgrp_list) do
+        local propgrp_F = propgrp_F_list[isrc]
+        local propgrp_B = propgrp_B_list[isrc]
+        local csrc_coh0 = csrcgrp[1]
+
+        local c3pt_pdecay_file = get_c3pt_pdecay_grp_file(cfg_key, csrcgrp, 
+              pdc.psnk, tsep, pdc.mgamma_tag, pdc.flav_B, ama)
+        local is_new = not have_c3pt(cfg_key, c3pt_pdecay_file)
+        if is_new then
+          printf("[CALC c3pt]: %s\n", c3pt_pdecay_file) 
+          printf("[save_c3pt_pdecay] %s\n", c3pt_pdecay_file)
+          os.mkdir_path(dirname(c3pt_pdecay_file))
+          local c3pt_pdecay_aff  = qcd.aff.Writer(c3pt_pdecay_file)
+          local copt = { 
+              result  = false,      -- do not return complex fields 
+              backend = 'cpu',
+              save    = { file=c3pt_pdecay_aff, kpath=false--[[XXX set]], fkey='Tg', mkey='P' },
+              -- XXX BC are applied when t_op wraps around (t_op = (tsrc + tau)%lt < tsnk) (3 quark lines!)
+              -- XXX c3pt(psnk, qext) = sum_{y,z} exp(-i*psnk*(y-x) - i*qext*(z-x)) <M(y) Op(z) Nbar(x)>
+              -- XXX psnk + qext = psrc
+              -- XXX need to apply phase correction if csrc[i][1,2,3] != csrc_coh0[1,2,3]
+              momproj = { csrc=csrc_coh0, mom_list=pdc.qext_list, t_axis=t_axis, 
+                          ft_sign=-1, bc_t=bc_baryon_t } }
+          tt = timer("save_c3pt_pdecay")
+
+          for pd_op_tag, pd_op in pairs(pdc.pd_op_list) do
+            -- compute pdecay contraction for this op, S
+            -- save projections on a list of momenta
+            local c3pt_snk_str = string.format("PX%d_PY%d_PZ%d_dt%d", -- kpath element
+                  pdc.psnk[1], pdc.psnk[2], pdc.psnk[3], tsep)
+            local kpath = string.format("/c3pt_pdecay/SS/proton/%s/%s/%s/%s", 
+                pdc.mgamma_tag, pdc.flav_B, pd_op_tag, c3pt_snk_str)
+            -- XXX this is new-style function that saves all all 16 T independently directly into AFF
+            -- XXX instead of looping over tg to compute tkX with T=[tpol_pos*]gamma{n=tg}*pd_op.T
+            -- XXX modified analysis is required
+            pd_op.func(propgrp_F, propgrp_F, propgrp_B, pd_op.S, Ssrc,   
+                table_deepjoin(copt, {save={kpath=kpath}}))
+          end -- for pd_op
+          c3pt_pdecay_aff:close()
+          tt("done")
+
+          done_c3pt(cfg_key, c3pt_pdecay_file)
+          force_gc("save_c3pt_pdecay")
+        else 
+          printf("[HAVE c3pt]: %s\n",c3pt_pdecay_file) 
+        end -- is_new
+      end -- for isrc
+    end -- for pdecay_contract
+  end -- for tsep
+
+
+  prop_F_list_grp, prop_Fs_list_grp = nil, nil
+  prop_F_sm_list_grp, prop_Fs_sm_list_grp = nil
+  force_gc("sample_pdecay")
+
+  timer_1src('done')
+end
+

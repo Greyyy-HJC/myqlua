@@ -1,0 +1,280 @@
+-- position space npr calculation:
+--  * propagators : need "<data_pdir>/prop_log" directory for propagator log
+--    prop_Fp ->  "<data_pdir>/frw_prop_pt" directory
+--  * correlators -> "<data>/posnpr" directory
+--    position-space NPR ->
+-- XXX remember to create directories above
+
+package.path = 'qlua-production/?.qlua;qlib-lhpc/?.qlua;qlib/?.qlua;' .. package.path
+require "strict"    -- catch all undefined (nil) variables
+require "stdlib"    -- standard printf, etc
+require "lhpc-std"  -- make_source, etc
+require "gauge"
+require "qdpc_io"
+require "setup_util"
+require "latvec"
+
+require "hadspec"
+require "madwf_sns"
+
+require "cedm/cedm-seq"  -- sequential sources
+
+------------------------------------------------------------------------------
+-- INITIALIZATION
+------------------------------------------------------------------------------
+tot_timer = timer("total")
+L = qcd.lattice(latsize, {network=network_geom})
+S = rnd_init(L, rnd_seed)
+
+
+------------------------------------------------------------------------------
+-- aux functions
+------------------------------------------------------------------------------
+function have_prop(cfg_key, prop_kind, prop_file)
+  local prop_log = get_prop_log_file(cfg_key, prop_kind)
+  local bn = basename(prop_file)
+  if not io.fexists(prop_log) then return false end
+  for s in io.lines(prop_log) do
+    if s == bn then return true end
+  end
+  return false
+end
+function done_prop(cfg_key, prop_kind, prop_file)
+  local prop_log = get_prop_log_file(cfg_key, prop_kind)
+  local bn = basename(prop_file)
+  local f = io.open(prop_log, "a")
+  f:write(string.format("%s\n", bn))
+  f:flush()
+  f:close()
+end
+function prop_save_func(fname, x, title, prop_prec)
+  -- requires in the scope:
+  --  prop_volfmt       part_dir for fast
+  --  prop_vol_stride   spacing between ranks doing IO (set equal to the number of ranks per 1 IO node)
+  if nil == title then
+    title = tostring(x)
+  end
+  printf("SAVE %s '%s'\n", title, fname)
+  local tt = timer(string.format("SAVE %s", title))
+  local qio_w = open_qdpc_write(L, fname, "", prop_qio_volfmt, 
+                    {rank_stride=prop_qio_stride})
+  qio_w:DiracPropagator(prop_prec, x, title)
+  qio_w:close()
+  tt("done")
+end
+function prop_load_func(fname, title)
+  -- requires in the scope:
+  --  prop_vol_stride   spacing between ranks doing IO (set equal to the number of ranks per 1 IO node)
+  if nil == title then
+    title = ''
+  end
+  printf("LOAD %s '%s'\n", title, fname)
+  local tt = timer(string.format("LOAD %s", title))
+  local qio_r = open_qdpc_read(L, fname, {rank_stride=prop_qio_stride})
+  local res = qio_r:DiracPropagator()
+  qio_r:close()
+  tt("done")
+  return res
+end
+
+
+------------------------------------------------------------------------------
+-- load or compute propagators
+------------------------------------------------------------------------------
+-- general parameter order :
+--    coord; [polaris/flavor]; [prop(s)]; [gf] ; smear/solve
+-- return (prop_Fp, is_new) : forward propagator with point source
+function get_prop_Fp(
+      L, cfg_key, csrc, ama, 
+      solver_func)
+  local prop = nil
+  local prop_type = "prop_Fp"
+  local prop_file = get_frwprop_pt_file(cfg_key, csrc, ama)
+  local is_new = not have_prop(cfg_key, prop_type, prop_file) 
+  if is_new then
+    local tt = timer(string.format("CALC %s", prop_type))
+    local src = make_source_point(L, csrc)            ; tt("src")
+    prop  = solver_func(src)                          ; tt("prop")
+    prop_save_func(prop_file, prop, prop_type, ama['prop_prec'])
+    done_prop(cfg_key, prop_type, prop_file)
+    tt("done")
+  else
+    prop = prop_load_func(prop_file, prop_type)
+  end
+  return prop, is_new
+end
+
+
+------------------------------------------------------------------------------
+-- function to sample one source location
+------------------------------------------------------------------------------
+function sample_posnpr_cpv(
+        L, cfg_key, csrc, ama,
+        gf_link, gf_clov_list,
+        solver_func, 
+        ferm_bc,
+        redo_contract)
+  -- parameters
+  --  L               lattice object
+  --  cfg_key          gauge cfg "key" : string
+  --  csrc            forward source position for the sample
+  --  ama             AMA parameter for saving files
+  --  flav_list       flavors for cedm and current insertions
+  --  gf_link         gauge links (not used atm)
+  --  gf_clov_list    table of (smeared) gauge clover term for the cEDM insertions
+  --  smear_func      source smearing function x_smeared = smear_func(x_point)
+  --  solver_func     fermion solver x = solver_func(y) <-> Dslash.x = y
+
+  -- also requires global functions for propagator storage
+  --  get_posnpr_file
+  -- and variables
+
+  -- XXX envs : 
+  --    latsize
+  local timer_1src  = timer('1src')
+  local tt    -- timer
+  local bc_quark_t  = ferm_bc[1+t_axis]
+  local csrc_str_k  = string.format("x%d_y%d_z%d_t%d", 
+            csrc[1],csrc[2],csrc[3],csrc[4])
+  
+  local prop_Fp, is_new_Fp = get_prop_Fp(L, cfg_key, csrc, ama, solver_func)
+  if is_new_Fp or redo_contract then -- contract hadspec, c2pt (CP-even)
+    for gf_tag, gf_clov in pairs(gf_clov_list) do
+      -- make a constant clover term equal to the value at csrc
+      local gf_clov_csrc = {}
+      -- TODO change to a latvec 'field to global' function and move to library
+      for i = 0, #L-1 do
+        gf_clov_csrc[1+i] = {}
+        gf_clov_csrc[1+i][1+i] = false
+        for j = 0, i - 1 do
+          local c = L:ColorMatrix(gf_clov[1+i][1+j][csrc])
+          gf_clov_csrc[1+i][1+j] =  c
+          gf_clov_csrc[1+j][1+i] = -c
+        end
+      end
+      -- posnpr
+      tt  = timer("save_posnpr") 
+      local g5 = gamma{n=15}  -- just a short alias
+      local cedm_prop_Fp  = cedm_seqsrc_edm(prop_Fp, gf_clov) 
+      local prop_Fp_rev   = g5 * prop_Fp:adjoin() * g5
+      local cedm_prop_Fp_rev = cedm_seqsrc_edm(prop_Fp_rev, gf_clov_csrc)
+      local posnpr = {}
+
+      posnpr['g5_g5']     = (g5 * prop_Fp_rev * g5 * prop_Fp):trace()
+      posnpr['g5_sGg5']   = (g5 * prop_Fp_rev * cedm_prop_Fp):trace()
+      posnpr['sGg5_g5']   = (cedm_prop_Fp_rev * g5 * prop_Fp):trace()
+      posnpr['sGg5_sGg5'] = (cedm_prop_Fp_rev * cedm_prop_Fp):trace()
+
+      if false then -- save as qio
+        local posnpr_file_h5 = get_posnpr_file_h5(cfg_key, csrc, ama, gf_tag)
+        printf('[save_posnpr] %s\n', posnpr_file_h5)
+        local posnpr_h5f = qcd.hdf5.Writer(posnpr_file_h5, {method="phdf5"})
+        local kpath = string.format("/posnpr/%s/%s", csrc_str_k, gf_tag)
+        for k,v in pairs(posnpr) do
+          posnpr_h5f:write(string.format("%s/%s", kpath, k), v, 
+              {lattice=L, sha256="ignore", precision="double"})
+        end
+        posnpr_h5f:flush()
+        posnpr_h5f:close()
+      else
+        local posnpr_file_qio = get_posnpr_file_qio(cfg_key, csrc, ama, gf_tag)
+        local posnpr_qio = open_qdpc_write(L, posnpr_file_qio, 'posnpr', 'single') -- 'single' -> 'part', 'part_dir'
+        for i_v, v in pairs({'g5_g5', 'g5_sGg5', 'sGg5_g5', 'sGg5_sGg5'}) do
+          if not posnpr_qio:Complex(posnpr[v], v) then
+            error("Error writing Complex to '%s'\n", posnpr_name_qio)
+            os.exit(1)
+          end
+        end
+        posnpr_qio:close()
+      end
+    end
+  end
+
+  force_gc("sample_posnpr")
+  timer_1src('done')
+end
+
+
+------------------------------------------------------------------------------
+-- MAIN
+------------------------------------------------------------------------------
+
+cur_timer = timer("gauge_read")
+printf("read gauge '%s'\n", get_gauge_file(cfg_key))
+gauge_u = qcd.nersc.read_gauge(L, get_gauge_file(cfg_key))
+cur_timer("done")
+
+-- gauge field for source construction
+
+-- calc gauge_clover term
+function gauge_clover_cedm(gauge_u)
+  -- calc clover G_{mu nu} with color trace subtracted
+  local L = latvec.lattice(gauge_u)
+  local cm_1 = L:ColorMatrix(1.)
+  local gauge_gmunu = {}
+  for i = 0, #L-1 do
+    gauge_gmunu[1+i] = {}
+    gauge_gmunu[1+i][1+i] = false
+    for j = 0, i - 1 do
+      local c = gauge_clover(gauge_u, i, j)
+      c = c - (c:trace() / c:colors()) * cm_1
+      gauge_gmunu[1+i][1+j]  =  c
+      gauge_gmunu[1+j][1+i]  = -c
+    end
+  end
+  return gauge_gmunu
+end
+gf_clov_list = {
+  orig  = gauge_clover_cedm(gauge_u)
+}
+
+-------------------------------------------------------------------------------
+-- initialize mdwf object 
+-- LOAD EIGENVECTORS
+-------------------------------------------------------------------------------
+-- XXX init mdwf and load defl.evecs ONLY if (re)computing props
+--     if props are not available on disc, the call to solver will raise error
+mdwf, mdwf_eigcg_df = nil, nil
+if not do_contract_only then    
+  mdwf  = qcd.MDWF.generic(gauge_u, ferm_bc, 
+              mdwf_L5, mdwf_M5, mdwf_mf,
+              mdwf_b5, mdwf_c5)
+  mdwf_eigcg_df = mdwf:eig_deflator(eigcg_vmax, eigcg_nev, eigcg_tol, l_nev)
+
+  local evecs_perm = mdwf_evec_file(cfg_key, l_nev)
+  local evecs_scratch = mdwf_evec_file_scratch(cfg_key, l_nev)
+
+  if evecs_scratch ~= evecs_perm then
+    cur_timer = timer("evecs_rawdump_sync")
+    printf("evecs_rawdump_sync: '%s' -> '%s'\n", evecs_perm, evecs_scratch)
+    evecs_rawdump_sync(evecs_perm, evecs_scratch, evec_rawdump_stride)
+    cur_timer("done")
+  end
+
+  cur_timer = timer("evecs_rawload")
+  printf("[evec_read] %s\n", evecs_scratch)
+  mdwf_eigcg_df:evecs_rawload(evecs_scratch, l_nev, 
+                {rank_stride=evec_rawdump_stride})
+  mdwf_eigcg_df:stop()
+  cur_timer("done")
+end
+
+
+for i_ama, ama in pairs(ama_list) do
+  local solver_func = make_solver(mdwf_eigcg_df, gauge_u, ferm_bc, ama)
+  for i_csrc, csrc in pairs(ama['csrc_list']) do 
+    sample_posnpr_cpv(L, cfg_key, csrc, ama,
+              gauge_u, gf_clov_list,
+              solver_func, 
+              ferm_bc,
+              true    -- redo contractions
+              )
+  end
+  solver_func = nil
+  force_gc()
+  print_obj(qcd.memory_usage())
+end
+
+tot_timer("done")
+printf("QLUA_RUN_SUCCESS\n")
+-- vim : syn=lua

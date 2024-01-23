@@ -1,0 +1,46 @@
+require 'strict'
+require 'stdlib'
+
+function list_extend(list_dst, list_new)
+  for i,v in ipairs(list_new) do
+    list_dst[1+#list_dst] = v
+  end
+end
+function list_append(list_dst, v_new)
+  list_dst[1+#list_dst] = v_new
+end
+function list_csrc(ama) 
+  if nil ~= ama['csrc_list'] then return ama['csrc_list']
+  elseif nil ~= ama['csrcgrp_list'] then
+    local res = {}
+    for k,v in pairs(ama['csrcgrp_list']) do
+      list_extend(res, v)
+    end
+    return res
+  else error("no source list")
+  end
+end
+function list_csrc_first(ama) 
+  if nil ~= ama['csrc_list'] then return ama['csrc_list']
+  elseif nil ~= ama['csrcgrp_list'] then
+    local res = {}
+    for k,v in pairs(ama['csrcgrp_list']) do
+      list_append(res, v[1])
+    end
+    return res
+  else error("no source list")
+  end
+end
+
+function mklist_propC(cfgkey, ama, gf_tag_list) 
+  for i_csrc, csrc in ipairs(list_csrc(ama)) do
+    for i_gf, gf_tag in pairs(gf_tag_list) do 
+      printf('%s\n', get_cedmseqprop_file(cfgkey, csrc, gf_tag, ama))
+    end
+  end
+end
+cfg_key = assert(job_key)
+
+for i_ama, ama in pairs(ama_list) do
+  mklist_propC(cfg_key, ama, {'orig'})
+end

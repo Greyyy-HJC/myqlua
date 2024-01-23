@@ -1,0 +1,226 @@
+require "stdlib"
+require "gauge"
+require "latvec"
+require 'rcparams'
+
+require 'hadron/qbarq_wline'
+
+function baryon_sigma_twopt(Fu, Fd, S2, S1, T)
+  -- baryon spin-1/2,isospin-1/2 (nucleon, sigma) contraction
+  --    source  = (dbar S1bar ubar^T) ubar
+  --    sink    = u (u^T S2 d)
+  --  Fu = <u ubar>, Fd = <d dbar>
+  --  S2, S1      diquark spin structure in the nucleon operators 
+  --              at the sink and the source, respectively
+  --  Tpol        nucleon polarization matrix
+  local ut      = Fu * T
+  local S1bar   = gamma{mu=3} * S1:adjoin() * gamma{mu=3}:transpose()
+  local us2ds1b = qcd.quarkContract24(Fu, S2 * Fd * S1bar)
+  return (   (ut:spintrace() * us2ds1b:spintrace()):trace() 
+           + (ut * us2ds1b):trace() )
+end
+-- aliases
+baryon_sigma_2pt_general = baryon_sigma_twopt
+
+
+function baryon_sigma_twopt_asymsrc(Fu1, Fu2, Fd, S2, S1, T)
+  -- general nucleon propagator "asymmetric" u-quarks at the source
+  -- asymmetry is fictional, needed to lift degeneracy to have a right
+  -- to enumerate quarks at the source so that one of the u-propagators 
+  -- can be distinct from the other, e.g. if it is cedm-sequential
+  --    source  = (dbar S1bar ubar2^T) ubar1
+  --    sink    = u (u^T S2 d)
+  --  Fu1 = <u ubar1>, Fu2 = <u ubar2>, Fd = <d dbar>
+  --  S2, S1      diquark spin structure in the nucleon operators 
+  --              at the sink and the source, respectively
+  --  Tpol        nucleon polarization matrix
+  local ut      = Fu1 * T
+  local S1bar   = gamma{mu=3} * S1:adjoin() * gamma{mu=3}:transpose()
+  local us2ds1b = qcd.quarkContract24(Fu2, S2 * Fd * S1bar)
+  return (   (ut:spintrace() * us2ds1b:spintrace()):trace() 
+           + (ut * us2ds1b):trace() )
+end
+
+-- TODO make fully asymmetric cedm_baryon_sigma_asym 
+--      (less economic than asym_src version : cannot reuse temporaries)
+function baryon_sigma_twopt_seqone(Fu, Fd, Cseq, seq_flav, S2, S1, T)
+  -- one of quark propagators is forward sequential through a bilinear
+  --  Fu,Fd       normal forward props
+  --  Cseq        forwar sequential prop
+  --  seq_flav    which flavor is sequential
+  --  S2, S1      ...
+  --  T           ...
+  if 'U' == seq_flav then 
+    return (  baryon_sigma_twopt_asymsrc(Cseq, Fu, Fd, S2, S1, T)
+            + baryon_sigma_twopt_asymsrc(Fu, Cseq, Fd, S2, S1, T))
+  elseif 'D' == seq_flav then
+    return cedm_baryon_sigma(Fu, Cseq, S2, S1, T)
+  else
+    error(string.format("unknown flavor '%s'", seq_flav))
+  end
+end
+
+-- version using qcd.contract_, for all 16 polarizations
+function baryon_sigma_twopt_seqone_backend(Fu, Fd, Cseq, seq_flav, S2, S1)
+  -- one of quark propagators is forward sequential through a bilinear
+  --  Fu,Fd       normal forward props
+  --  Cseq        forwar sequential prop
+  --  seq_flav    which flavor is sequential
+  --  S2, S1      ...
+  --  T           ...
+  local opt = {result=true, backend = contract_backend()}
+  if 'U' == seq_flav then
+    return latvec.add(qcd.contract_('baryon_sigma_UUS', {Cseq, Fu, Fd, S2, S1}, opt),
+                      qcd.contract_('baryon_sigma_UUS', {Fu, Cseq, Fd, S2, S1}, opt))
+  elseif 'D' == seq_flav then
+    return qcd.contract_('baryon_sigma_UUS', {Fu, Fu, Cseq, S2, S1}, opt)
+  else
+    error(string.format("unknown flavor '%s'", seq_flav))
+  end
+end
+
+function baryon_sigma_seqsource_u(Fu, Fd, S2, S1, T)
+  --  S2, S1      diquark spin structure in the nucleon operators 
+  --              at the sink and the source, respectively
+  --  Tpol        nucleon polarization matrix
+  local L       = Fu.lattice
+  local ut      = Fu * T
+  local s1bar   = gamma{mu=3} * S1:adjoin() * gamma{mu=3}:transpose()
+  local s2ds1b  = S2 * Fd * s1bar
+  return (  T * L:DiracPropagator(qcd.quarkContract24(Fu, s2ds1b):spintrace())
+          + qcd.quarkContract12(ut, s2ds1b):spintranspose()
+          + qcd.quarkContract24(T * Fu, s2ds1b)
+          + qcd.quarkContract13(s2ds1b, ut)
+         )
+end
+
+function baryon_sigma_seqsource_d(Fu1, Fu2, S2, S1, T)
+  -- Fu1, Fu2 are enumerated according to the source (ubar) quark 
+  -- in the nucleon source
+  --  S2, S1      diquark spin structure in the nucleon operators 
+  --              at the sink and the source, respectively
+  --  Tpol        nucleon polarization matrix
+  local L       = Fu1.lattice
+  local u1t     = Fu1 * T
+  local s1bar   = gamma{mu=3} * S1:adjoin() * gamma{mu=3}:transpose()
+  return s1bar * (  qcd.quarkContract12(u1t, Fu2) 
+           + qcd.quarkContract23(u1t, Fu2) ):spintranspose() * S2
+end
+
+baryon_sigma_seqsource_func = {
+  U = baryon_sigma_seqsource_u,
+  D = baryon_sigma_seqsource_d 
+}
+
+
+function baryon_sigma_seqsrc_sink(seq_flav, frw_prop_A, frw_prop_B, csrc, psnk, tsnk, S2, S1, Tpol)
+  -- parameters 
+  --  seq_flav    {"U"|"D"} flavor "switch" for the outgoing flavor
+  --  frw_prop_A,
+  --  frw_prop_B  forward propagators for u and d flavors, or u1 and u2, respectively
+  --  csrc        coordinate of the source for planewave phases
+  --  psnk, tsnk  momentum and t-position of the sink
+  --  S2, S1      diquark spin structure in the nucleon operators 
+  --              at the sink and the source, respectively
+  --  Tpol        nucleon polarization matrix
+  local L = frw_prop_A.lattice
+  local ss = L:DiracPropagator()        -- filled with zeros
+  L:Subset({axis=#L-1, position=tsnk}):where(
+    function() ss:set(baryon_sigma_seqsource_func[seq_flav](
+                        frw_prop_A, frw_prop_B, S2, S1, Tpol)
+                        -- FIXME mom4->space2full
+                        -- FIXME pass t_axis, 0 as args (also need t_axis as input)
+                      * L:planewave(csrc, mom4(psnk)):conj())
+      end)
+  return ss
+end
+
+-- TODO need qcd.momentum_project(field, momentum, t_axis)
+-- better to have single function for fields = real, complex, color&Dirac vectors&matrices
+-- and for 3d & 4d mom projections:
+--    d=3 if t_axis is present; momentum[t_axis+1] is ignored; return vector.<whatever>
+--    d=4 if no t_axis given; return scalar; required for NPR implementation
+
+function baryon_save_bb(
+    L,
+    csrc,               -- source coord: x,y,z,t
+    tsnk, psnk,         -- sink timeslice, sink momentum
+    aff_w,              -- aff writer
+    aff_kpath_prefix,   -- keypath prefix
+    lpath_min,lpath_max,-- min/max linkpath length to save
+    fw_p,               -- (list of) forward propagator
+    bw_p,               -- (list of) backward propagator, (SeqSrc * Dslash^-1) 
+                        -- XXX different from calc_bb which takes bw_p_adj!!!
+    gauge_u_,           -- gauge field without BC applied (applied internally)
+    qlist,              -- list of insertion momenta {q}; each q be with #q = #L
+    t_axis,             -- axis; currently works for t_axis ==3
+    bc_quark
+    )
+  -- this function is kept ONLY to preserve compatibility with older code
+  -- adds csrc_str, snk_str to kpath
+  printf("WARNING: `baryon_save_bb' has legacy interface; use `general_save_bb' instead\n")
+  latvec.lattice(fw_p, L)
+  latvec.lattice(bw_p, L)
+  local lt = L[t_axis]
+  local tsep = (tsnk + lt - csrc[1+t_axis]) % lt
+  if (0 < aff_kpath_prefix:len()) then aff_kpath_prefix = aff_kpath_prefix .. '/' end
+  local csrc_str  = string.format("x%d_y%d_z%d_t%d", csrc[1], csrc[2], csrc[3], csrc[4])
+  local snk_str   = string.format("PX%d_PY%d_PZ%d_T%d", psnk[1], psnk[2], psnk[3], tsnk)
+  local aff_kpath = string.format("%s%s/%s", aff_kpath_prefix, csrc_str, snk_str)
+  return general_save_bb(
+      aff_w, aff_kpath, 
+      fw_p, bw_p, gauge_u_, 
+      csrc, tsep, 
+      lpath_min,lpath_max, 
+      qlist, t_axis, bc_quark)
+end
+
+function cedm_save_bb(
+    aff_w,              -- aff writer
+    aff_kpath_prefix,   -- keypath prefix
+    csrc,               -- source coord: x,y,z,t
+    tsnk, psnk,         -- sink timeslice, sink momentum
+    lpath_min,lpath_max,-- min/max linkpath length to save
+    fw_p,               -- (list of) forward propagator
+    bw_p,               -- (list of) backward propagator, (SeqSrc * Dslash^-1) 
+                        -- XXX different from calc_bb which takes bw_p_adj!!!
+    gauge_u_,           -- gauge field without BC applied (applied internally)
+    qlist,              -- list of insertion momenta {q}; each q be with #q = #L
+    t_axis,             -- axis; currently works for t_axis ==3
+    bc_quark
+    )
+  printf("WARNING: `cedm_save_bb' has legacy interface; use `general_save_bb' instead\n")
+  local L = latvec.lattice(fw_p)
+  return baryon_save_bb(
+      L, csrc, tsnk, psnk, 
+      aff_w, aff_kpath_prefix,
+      lpath_min,lpath_max,
+      fw_p, bw_p, gauge_u_,
+      qlist, t_axis, bc_quark)
+end
+
+-- save contractions in position space
+function save_qbarq_space_h5(h5f_w, kpath, F, B, gamma_ins, tabopt)
+  tabopt = tabopt or {} 
+  local h5w_opt = {  
+      sha256 = tabopt.sha256 or "ignore",
+      precision = tabopt.precision or tabopt.prec or "double",
+      lattice = F.lattice }
+  local FB = F * B
+  for gtag, g in pairs(gamma_ins) do
+    local kg = string.format("%s/%s", kpath, gtag)
+    h5f_w:remove(kg)
+    h5f_w:write(kg, (g * FB):trace(), h5w_opt)
+  end
+  h5f_w:flush()
+end
+
+function save_qbarq_space_qio(qio_w, kpath, F, B, gamma_ins, tabopt)
+  tabopt = tabopt or {} 
+  local precision = tabopt.precision or tabopt.prec or "double"
+  local FB = F * B
+  for gtag, g in pairs(gamma_ins) do
+    local kg = string.format("%s/%s", kpath, gtag)
+    qio_w:Complex(precision, (g * FB):trace(), kg)
+  end
+end

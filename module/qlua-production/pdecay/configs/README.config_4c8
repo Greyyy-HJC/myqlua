@@ -1,0 +1,26 @@
+1) make links
+qlua-production -> qlua-production dist
+qlib -> qlua/qlib
+qlib-lhpc -> qlua/lhpc
+
+2) make directories
+TEST4c8/data/c2pt			# c2pt data output
+TEST4c8/data/c3pt_pdecay		# c3pt data output
+TEST4c8/data/hadspec			# hadspec data output
+TEST4c8/data_pdir/bkw_prop		# tmp storage of backward props
+TEST4c8/data_pdir/frw_prop		# tmp storage of forward props
+TEST4c8/data_pdir/prop_log		# logs of stored props (cleanup to recompoute props)
+TEST4c8/evec_rawdump			# storage for eigenvectors
+
+3) make sure the following files are available
+TEST4c8/gauge/ckpoint_lat.TEST4c8	# test gauge file
+TEST4c8/job_n4.qlua			# job run params
+TEST4c8/list.cfg.all			# list enumerating configs
+
+4) set PATH and LD_LIBRARY_PATH to have mpirun bin and lib, ie
+export PATH="$BUILD_DIR/openmpi-1.4.4/bin:$PATH"
+export LD_LIBRARY_PATH="$BUILD_DIR:openmpi-1.4.4/lib:$LD_LIBRARY_PATH"
+
+5) run e.g. with 4 MPI jobs
+mpirun --np 4 QLUA_DIR/qlua TEST4c8/job_n4.qlua qlua-production/pdecay/configs/config_4c8.qlua qlua-production/pdecay/calc_c23pt_pdecay.qlua
+

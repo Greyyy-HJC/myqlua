@@ -1,0 +1,121 @@
+require "stdlib"
+require "gauge"
+require "latvec"
+require "lhpc-std"
+require "hadspec"
+require "qdpc_io"
+
+require "ape-smear"
+require "stout-smear"
+require "wuppertal-smear"
+
+total_timer = timer("total")
+
+-------------------------------------------------------------------------------
+-- init
+-------------------------------------------------------------------------------
+L = qcd.lattice(latsize, {network=network_geom})
+print_network_settings()
+print_subgrid_settings(L)
+
+
+function do_sources_hspec(cfg_key, ama, calc_prop, gauge_u_ape, wup_alpha, wup_n)
+  local cur_timer
+  local smear_wup_tag = string.format('GN%sx%d', tostring(wup_alpha), wup_n)
+  printf("cfg_key='%s'  smear=%s\n", cfg_key, smear_wup_tag)
+  local bc_quark_t  = ferm_bc[1+t_axis]
+  local bc_baryon_t = bc_quark_t * bc_quark_t * bc_quark_t
+  
+  -- cycle over sources
+  for i_src, csrc in pairs(ama['csrc_list']) do
+    local timer_1src = timer(string.format('src #%03d csrc={%d,%d,%d,%d}', 
+                            i_src, csrc[1], csrc[2], csrc[3], csrc[4]))
+    printf('csrc={%d,%d,%d,%d}\n', csrc[1], csrc[2], csrc[3], csrc[4])
+    local tsrc = csrc[1+t_axis]
+
+    -- calc fwprop
+    cur_timer = timer('frw_prop_source')
+    local frw_src = make_source(gauge_u_ape, csrc, wup_alpha, wup_n, t_axis)
+    cur_timer('done')
+
+    cur_timer = timer('frw_prop_inv')
+    local frw_prop = calc_prop(frw_src)
+    cur_timer('done')
+
+    -- calc & save hadspec
+    cur_timer = timer('frw_prop_smear')
+    local frw_prop_smear = wuppertal_smear(gauge_u_ape, wup_alpha, wup_n, frw_prop, t_axis)
+    cur_timer('done')
+
+    local hadspec_file = get_hadspec_file_tag(cfg_key, csrc, ama, smear_wup_tag)
+    local aff_hadspec = qcd.aff.Writer(hadspec_file)
+    printf('write[hadspec]: %s\n', hadspec_file)
+  
+    cur_timer = timer('hadspec')
+    save_hadspec_list(L, aff_hadspec,
+                 string.format('/cfg%s/hspectrum/%s-P',    -- smear-point
+                               cfg_key, smear_wup_tag),
+                 frw_prop, frw_prop, csrc, hadspec_psnk_list,
+                 t_axis, bc_quark_t, hadspec_baryon_list, hadspec_meson_list)
+    save_hadspec_list(L, aff_hadspec,
+                 string.format('/cfg%s/hspectrum/%s-%s',   -- smear-smear
+                               cfg_key, smear_wup_tag, smear_wup_tag),
+                 frw_prop_smear, frw_prop_smear, csrc, hadspec_psnk_list,
+                 t_axis, bc_quark_t, hadspec_baryon_list, hadspec_meson_list)
+    cur_timer('done')
+    force_gc('do_sources_cycle|')
+    timer_1src('done')
+    
+    aff_hadspec:close()
+  end
+end
+
+
+-------------------------------------------------------------------------------
+-- main
+-------------------------------------------------------------------------------
+do
+  -- read gauge field 
+  local cur_timer
+  local gf_file = get_gauge_file(cfg_key)
+  cur_timer = timer('gauge_load')
+  printf('read[gauge]: "%s"\n', gf_file)
+  local qio_r   = open_qdpc_read(L, gf_file)
+  local gauge_u = qio_r:ColorMatrix(4)
+  qio_r:close()
+  cur_timer('done')
+
+  -- smear gauge field
+  cur_timer = timer('gauge_smear')
+  local gauge_u_ape = APE_smear(gauge_u, ape_alpha, ape_N, ape_accu, ape_maxiter, t_axis)
+  cur_timer('done')
+
+  -- solver with smeared field
+  cur_timer = timer("stout_smear")
+  local gauge_u_stout  = stout_smear_full(gauge_u, stout_rho, stout_n)
+  cur_timer("done")
+
+  -- init QOP-MG
+  cur_timer = timer("init_mg")
+  print_obj(mg_param, "mg_param")
+  local mg = qcd.qop.WilsonMG(gauge_u_stout, mg_param)
+  cur_timer("done")
+  
+  -- ama loop
+  for i_ama, ama in pairs(ama_list) do
+    -- init solver for given AMA mode
+    local mg_prec = { residual = { rsqmin = ama['tol']^2, relmin = 0 } }
+    print_obj(mg_prec, "mg_prec")
+    local calc_prop  = make_mg_solver(mg, ama, 2 * kappa_l)
+    cur_timer = timer(string.format('AMA="%s", #src=%d', ama['approx'], #(ama['csrc_list'])))
+    -- wup scan loop
+    for i_wup_n = 1, #scan_wup_list do
+      do_sources_hspec(cfg_key, ama, calc_prop, gauge_u_ape,
+                       wup_alpha, scan_wup_list[i_wup_n])
+    end
+    cur_timer("done")
+  end
+end
+
+total_timer("done")
+printf("QLUA_RUN_SUCCESS\n")

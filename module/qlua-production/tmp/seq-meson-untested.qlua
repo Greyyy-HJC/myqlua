@@ -1,0 +1,55 @@
+require "strict"
+
+function mom4(psnk)
+  -- create D-dimensional vector from (D-1)-dimensional, 
+  -- adding zero as the last component
+  local psnk4 = {}
+  for i, p_i in pairs(psnk) do
+    psnk4[i] = p_i
+  end
+  psnk4[1+#psnk4] = 0
+end
+function seqsrc_meson(frw_prop_1, csrc, psnk, tsnk, gamma_meson)
+  -- create sequential source through a meson sink bar{q}_2 \Gamma q_1
+  -- sink momentum projection is \sum_y exp(-i*psnk*(y-x)) 
+  -- parameters 
+  --  frw_prop    forward propagator 
+  --  csrc        coordinate of the source for planewave phases
+  --  psnk, tsnk  momentum and t-position of the sink
+  --  gamma_meson meson structure matrix bar{q}_1 \Gamma q_2
+  local L = frw_prop_1.lattice
+  local ss = L:DiracPropagator()                -- filled with zeros
+  L:Subset({axis=#L-1, position=tsnk}):where(   -- only the sink timeslice
+    function() ss:set(gamma_meson * frw_prop_1 
+      * L:planewave(csrc, mom4(psnk)):conj())   -- sink momentum projection
+      end)
+  return ss
+end
+
+function calculate_the_meson_three_point_function_using_sequential_propagator_oliver_asked_about(
+        L,                    -- lattice object
+        solver_1, smear_1,    -- all for quark_1
+        solver_2, smear_2,    -- all for quark_2
+        csrc, psnk, tsnk,     -- source & sink position/momentum
+        gamma_src, gamma_snk, -- source & sink gamma structures
+        gamma_op)             -- insertion gamma matrix
+  -- compute the three-point function 
+  --      \sum_y exp(-i*psnk*(y-x)
+  --          \langle (\bar{q}_2 \Gamma_{snk} q_1)_y 
+  --                  (\bar{q}_2 \Gamma_{op} q_2)_z 
+  --                  (\bar{q}_1 \Gamma_{src} q_1)_x \rangle
+  --      = Tr[Dslash_inv_2(x,z) . Gamma_op . Dslash_inv_2(z,y) . Gamma_snk . Dslash_inv_1(y,x) . Gamma_src]
+  -- return complex field[z] (operator insertion coordinate)
+  local src_X       = make_point_src(L, csrc)   -- make_point_src is implemented somewhere
+  -- forward propagator for q1
+  local src_F1      = smear_1(src_X)
+  local prop_F1     = solver_1(src_F1)          -- Dslash_inv(z,x)
+  -- backward propagator for \bar{q}_2
+  local src_B2      = smear_2(seqsrc_meson(smear_1(prop_F_1)))
+  local prop_B2     = solver_2(src_B2)
+  -- forward propagator for \bar{q}_2 with gamma_5 trick
+  local src_F2_g5adj= gamma{n=15} * (smear_2(src_X)):adjoin()
+  local prop_F2     = (gamma{n=15} * solver_2(src_F2_g5adj)):adjoin() -- Dslash_inv(x,z)
+  -- final contraction
+  return (prop_B2 * prop_F2):trace()
+end

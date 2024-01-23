@@ -1,0 +1,136 @@
+package.path = package.path .. ';qlib/?.qlua;qlib-lhpc/?.qlua'
+require "strict"
+require "gaugefix"
+require "stdlib"
+require "lhpc-std"
+require "qdpc_io"
+
+
+function subvol_scatter(L_src, c0_src, L_dst, c0_dst)
+  -- make int map for scatter: x_dst[s] = x_src[map[s]] so that
+  --   select 'scatter' selects contig.subvol [ c0_src; (c0_src + L_dst)%L_dst )
+  --   and copies it to [c0_dst ; (c0_dst + L_dst)%L_dst ) range on x_dst
+  --   (discontinuity may appear ONLY at c0_dst)
+  -- XXX in all dim, L_dst <= L_src
+  local ndim = #L_src
+  assert (#c0_src == ndim)
+  assert (#L_dst == ndim)
+  assert (#c0_dst == ndim)
+  local sc_map = {}
+  for mu = 0, ndim - 1 do
+    local i = L_dst:pcoord(mu)
+    sc_map[1+mu] = ( (L_dst:pcoord(mu) + L_dst[mu] - c0_dst[1+mu])
+                      % L_dst[mu] + c0_src[1+mu]) % L_src[mu]
+  end
+  return qcd.scatter(L_dst, L_src, sc_map)
+end
+
+
+tot_timer = timer("total")
+
+print_network_settings()
+L = qcd.lattice(latsize, {network=network_geom})
+Lout = qcd.lattice(latsize_out, {network=network_geom})
+print_subgrid_settings(L)
+
+c0_src = {}
+c0_dst = {}
+for mu = 0, #L - 1 do
+  local pmax = math.floor(Lout[mu] / 2)
+  c0_src[1+mu] = L[mu] - pmax -- select range [-pmax; pmax)
+  c0_dst[1+mu] = Lout[mu] - pmax -- and put it into [-pmax ; pmax) ({0} -> {0})
+end
+select_subvol = subvol_scatter(L, c0_src, Lout, c0_dst)
+
+
+function dirprop2colmat(dp, is, js)
+  local cm = L:ColorMatrix()
+  for jc = 0, 2 do
+    cm[{b=jc}] = dp[{d=js, c=jc}][{d=is}]
+  end
+  return cm
+end
+function colmat2dirprop_set(dp, is, js, cm)
+  for jc = 0, 2 do
+    local df = dp[{d=js,c=jc}]
+    df[{d=is}] = cm[{b=jc}]
+    dp[{d=js,c=jc}] = df
+  end
+end
+
+
+function do_ft_cycle(cfg_key, csrc, gfix_cm, ama_mode)
+  -- global vars
+  assert(L)
+  assert(Lout)
+  assert(select_subvol)
+
+  local one_prop_timer = timer("save FT: one frw prop")
+  local cur_timer
+
+  cur_timer = timer("load frwprop")
+  local frwprop_file = get_frwprop_file(cfg_key, csrc, ama_mode)
+  printf("read[frwprop]: %s\n", frwprop_file)
+  local qio_r = open_qdpc_read(L, frwprop_file)
+  local frw_p = qio_r:DiracPropagator()
+  qio_r:close()
+  cur_timer("done")
+
+  -- correct FT for non-zero initial coord
+  local csrc_phase  = L:planewave({0,0,0,0}, csrc):conj() -- [k]=exp(-2*pi*i* k.{csrc / L))
+  local twist_phase = L:planewave(csrc, ft_twist) -- [y]=exp(+2*pi*i* twist.{(y - csrc)/L})
+  cur_timer = timer("calc ft prop")
+  local frw_ft_p = Lout:DiracPropagator()
+  local frw_ft_trsq= L:Real(0.)
+  for jc = 0, 2 do for js = 0, 3 do
+    local frw_d = frw_p[{d=js,c=jc}]
+    frw_d = gfix_cm * frw_d --- gauge transform of <q qbar> sink
+    local frw_ft_d = Lout:DiracFermion()
+    for ic = 0, 2 do for is = 0, 3 do
+      local c_ft = qcd.fourier_transf(frw_d[{d=is, c=ic}] * twist_phase, 1) * csrc_phase
+      frw_ft_trsq = frw_ft_trsq + c_ft * c_ft:conj()
+      frw_ft_d[{d=is, c=ic}] = select_subvol(c_ft)
+      printf("prop ft: [{%d,%d}, {%d,%d}]\n", is,ic, js,jc)
+    end end
+    frw_ft_p[{d=js,c=jc}] = frw_ft_d
+  end end
+  frw_ft_p = frw_ft_p * Lout:ColorMatrix(gfix_cm[csrc]):adjoin() -- gauge transform of <q qbar> source
+  cur_timer("done")
+
+  cur_timer = timer("write ft prop to HDF5")
+  local frwprop_ft_name = get_frwprop_ft_file(cfg_key, csrc, ama_mode)
+  printf("write[frwprop_ft]: %s\n", frwprop_ft_name)
+  local h5_w = qcd.hdf5.Writer(frwprop_ft_name, {method="phdf5"})
+  local prop_ft_key = '/x/prop_ft'
+  local prop_ft_trsq_key = '/x/prop_ft_trsq'
+  h5_w:remove(prop_ft_key)
+  h5_w:flush()
+  h5_w:write(prop_ft_key, frw_ft_p, {lattice=Lout, sha256="ignore", precision="double"})
+  h5_w:flush()
+  h5_w:remove(prop_ft_trsq_key)
+  h5_w:flush()
+  h5_w:write(prop_ft_trsq_key, frw_ft_trsq, {lattice=L, sha256="ignore", precision="double"})
+  h5_w:flush()
+  h5_w:close()
+  cur_timer("done")
+
+  force_gc("|do_ft_cycle")
+  one_prop_timer("done")
+end
+
+
+assert(job_key)
+cfg_key = job_key
+
+cur_timer = timer("load colmat landaufix")
+gfix_cm, finfo, rinfo = load_qdpc_colmat(L, get_colmat_landaufix_file(cfg_key))
+cur_timer("done")
+
+assert(ama_mode_list)
+for i_ama_mode, ama_mode in pairs(ama_mode_list) do
+  for i_csrc, csrc in pairs(ama_mode['csrc_list']) do
+    do_ft_cycle(cfg_key, csrc, gfix_cm, ama_mode)
+  end
+end
+
+tot_timer("done")

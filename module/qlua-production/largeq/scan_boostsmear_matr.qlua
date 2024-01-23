@@ -1,0 +1,164 @@
+-- XXX derived from qpdf/scan_boostsmear_matr.qlua by removing meson part to save on props
+-- compute c2pt with varying source and sink smearing
+
+
+package.path = 'qlua-production/?.qlua;qlib-lhpc/?.qlua;qlib/?.qlua;' .. package.path
+require 'strict'    -- catch all undefined (nil) variables
+require 'stdlib'    -- standard printf, etc
+require 'lhpc-std'  -- make_source, etc
+require 'ape-smear' -- gauge smear
+require 'hex-smear'
+require 'gauge'
+require 'qdpc_io'
+require 'setup_util'
+require 'debug_util'
+require 'latvec'
+
+require 'hadspec'
+
+require 'hadron/baryon_corr'
+require 'smear/field_smear'
+require 'util/file'
+require 'util/strkey'
+
+
+
+function have_sample(cfg_key, sample_tag)
+  return log_have_tag(sample_log_file(cfg_key), sample_tag)
+end
+function done_sample(cfg_key, sample_tag)
+  return log_done_tag(sample_log_file(cfg_key), sample_tag)
+end
+
+
+------------------------------------------------------------------------------
+-- function to sample one source location
+------------------------------------------------------------------------------
+function sample_c2pt_boostsm_matr(
+        L, cfg_key, csrc, ama,
+        c2pt_psnk_list, 
+        proton_snk_S, proton_src_S,
+        sm_tag_opt_list, solver_func,
+        t_axis, ferm_bc,
+        opt)
+  -- parameters
+  --  L               lattice object
+  --  cfg_key          gauge cfg "key" : string
+  --  csrc            forward source position for the sample
+  --  ama             AMA parameter for saving files
+  --  c2pt_psnk_list  sink momentum for c2pt, c2pt_volcedm
+  --  smear_func      source smearing function x_smeared = smear_func(x_point)
+  --  solver_func     fermion solver x = solver_func(y) <-> Dslash.x = y
+
+  -- also requires global functions for propagator storage
+  --  get_frwprop_file            F
+  --  get_c2pt_file
+  -- and variables
+
+  -- XXX envs : 
+  --    latsize
+  --    hadspec_baryon_list, hadspec_meson_list 
+  opt = opt or {}
+  local timer_1src  = timer('1src')
+  local tt    -- timer
+  local bc_quark_t  = ferm_bc[1+t_axis]
+  local bc_baryon_t = bc_quark_t^3
+
+  local sm_func_q = {}
+  for sm_tag, sm_opt in pairs(sm_tag_opt_list) do
+    sm_func_q[sm_tag] = make_smear_func(L, sm_opt)
+  end
+
+  local function save_c2pt_all(F, file, kpath)
+    qcd.contract_('baryon_sigma_UUS', { F, F, F, proton_snk_S, proton_src_S }, 
+        { backend = contract_backend(),
+          save = { file=file, kpath=kpath, fkey='proton_Tg', mkey='P' },
+          momproj = { csrc=csrc, mom_list=c2pt_psnk_list,  t_axis=t_axis, 
+            ft_sign=-1, bc_t=bc_baryon_t}, })
+  end
+
+  for sm_tag_src, sm_opt_src in pairs(sm_tag_opt_list) do
+    local tsrc      = csrc[1+t_axis]
+
+    -- frw prop, quark
+    tt = timer("frwprop_q")
+    local frwsrc_q  = sm_func_q[sm_tag_src](
+        make_source_point(L, csrc), {pos=tsrc})                         ; tt("src")
+    local prop_Fq   = solver_func(frwsrc_q)                             ; tt("inv")
+
+    for sm_tag_snk, sm_opt_snk in pairs(sm_tag_opt_list) do
+      -- do full matrix or diag-only?
+      if opt.do_matrix or sm_opt_snk == sm_opt_src then     
+        local bsm_tag = string.format("%s_%s", sm_tag_src, sm_tag_snk)
+
+        tt = timer("frwprop_smear_q")
+        local prop_Fq_sm  = sm_func_q[sm_tag_snk](prop_Fq)              ; tt('done')
+
+        -- c2pt (all mesons, baryons)
+        tt = timer('save_c2pt')
+        local c2pt_file = get_c2pt_file_tag(cfg_key, csrc, ama, bsm_tag)
+        printf('[save_c2pt] %s\n', c2pt_file)
+        os.mkdir_path(dirname(c2pt_file))
+        local aff_c2pt = qcd.aff.Writer(c2pt_file)
+        save_c2pt_all(prop_Fq_sm, aff_c2pt, '/c2pt/SS')     ; tt('SS')
+
+        if sm_opt_snk == sm_opt_src then  -- also do SP once
+          save_c2pt_all(prop_Fq, aff_c2pt, '/c2pt/SP')         ; tt('SP')
+        end
+        aff_c2pt:close()
+        tt('done')
+      end
+    end
+  end
+  timer_1src('done')
+end
+
+
+
+------------------------------------------------------------------------------
+-- MAIN
+------------------------------------------------------------------------------
+do  -- main part
+  -- smear param scan loop
+  for i_ama, ama in pairs(ama_list) do
+    cur_timer = timer(string.format('AMA="%s", #src=%d', ama['approx'], #(ama['csrc_list'])))
+    local n_sample_tot = #ama['csrc_list']
+    local i_sample_list = range(1, 1 + n_sample_tot)
+    if sample_list then i_sample_list = list_slice(i_sample_list, sample_list) end
+    printf("INFO: select  samples {%s}\n", list_tostring(i_sample_list))
+
+    -- solver func for given AMA mode
+    local calc_prop = make_solver(ama)
+
+    -- csrc scan loop
+    for ii_s, i_sample in ipairs(i_sample_list) do
+      local csrc = ama['csrc_list'][i_sample]
+      local csrc_tag = strkey.csrc_str_f(csrc)
+      local sample_tag = string.format("%s.%s.c2pt", 
+          strkey.ama_str(ama), csrc_tag)
+      if have_sample(cfg_key, sample_tag) then 
+        printf("INFO: SKIP sample[%d] '%s': done\n", i_sample, sample_tag)
+      else
+        local sample_timer = timer(string.format("scan %s", sample_tag))
+        for i_sm_group, sm_tag_opt_list in pairs(smear_group_list) do
+          sample_c2pt_boostsm_matr(
+            L, cfg_key, csrc, ama,
+            c2pt_psnk_list, 
+            proton_snk_S, proton_src_S,
+            sm_tag_opt_list, calc_prop, 
+            t_axis, ferm_bc, 
+            {do_matrix=rawget(_G, 'smear_group_matrix') or false})
+        end
+        done_sample(cfg_key, sample_tag)
+        printf("INFO: DONE sample[%d] '%s'\n", i_sample, sample_tag)
+        sample_timer("done")
+      end
+    end
+    cur_timer("done")
+  end
+end
+
+
+qcd.qprof_print()
+tot_timer("done")
+printf("QLUA_RUN_SUCCESS\n")

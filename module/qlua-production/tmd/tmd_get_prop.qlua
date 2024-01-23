@@ -1,0 +1,241 @@
+-- XXX NOTES
+-- XXX propagators are defined and stored according to CEDM writeup conventions
+--    ie the backward propagator prop_B has the last Dslash applied on the right
+
+-- propgrp_B: coherent backwardprops
+
+--require 'cedm/cedm-seq'  -- sequential sources
+require 'tmd/configs/config_filenames'
+require 'hadron/baryon_corr'
+require 'util/file'
+
+  
+function have_prop(cfg_key, prop_kind, prop_file)
+  return log_have_tag(get_prop_log_file(cfg_key, prop_kind), basename(prop_file))
+end
+
+function done_prop(cfg_key, prop_kind, prop_file)
+  return log_done_tag(get_prop_log_file(cfg_key, prop_kind), basename(prop_file))
+end
+
+-- FIXME pass L as arg
+function prop_save_func(fname, x, title, prop_prec)
+  -- requires in the scope:
+  --  prop_volfmt       part_dir for fast
+  --  prop_vol_stride   spacing between ranks doing IO (set equal to the number of ranks per 1 IO node)
+  if nil == title then
+    title = tostring(x)
+  end
+  printf("SAVE %s '%s'\n", title, fname)
+  local tt = timer(string.format("SAVE %s", title))
+  os.mkdir_path(dirname(fname))
+  local qio_w = open_qdpc_write(L, fname, "", prop_qio_volfmt, 
+                    {rank_stride=prop_qio_stride})
+  qio_w:DiracPropagator(prop_prec, x, title)
+  qio_w:close()
+  tt("done")
+end
+
+-- FIXME pass L as arg
+function prop_load_func(fname, title)
+  -- requires in the scope:
+  --  prop_vol_stride   spacing between ranks doing IO (set equal to the number of ranks per 1 IO node)
+  if nil == title then
+    title = ''
+  end
+  printf("LOAD %s '%s'\n", title, fname)
+  local tt = timer(string.format("LOAD %s", title))
+  local qio_r = open_qdpc_read(L, fname, {rank_stride=prop_qio_stride})
+  local res = qio_r:DiracPropagator()
+  qio_r:close()
+  tt("done")
+  return res
+end
+
+
+------------------------------------------------------------------------------
+-- load or compute propagators
+------------------------------------------------------------------------------
+
+---------- forward(F) props ----------
+-- return (prop_F, is_new)
+function get_prop_F(
+      L, cfg_key, csrc, ama, tag, 
+      t_axis,
+      smear_func, solver_func, prop_cache)
+  local prop_F = nil
+  local prop_file = get_frwprop_file(cfg_key, csrc, ama, tag)
+  prop_cache = prop_cache or {}   -- if omitted
+  if nil ~= prop_cache[prop_file] then
+    printf("CACHED prop_F '%s'\n", prop_file)
+    return prop_cache[prop_file], false
+  end
+  local is_new = not have_prop(cfg_key, "prop_F", prop_file)
+  if is_new then
+    local tt = timer("CALC prop_F")
+    local tsrc = csrc[1+t_axis]
+    local src_F_pt = make_source_point(L, csrc)
+    local src_F = L:DiracPropagator()
+    L:Subset({axis=t_axis, pos=tsrc}):where(function() src_F:set(
+          smear_func(src_F_pt, {pos=tsrc})) end)                      ; tt("src")
+--    print_field_1axis(src_F, t_axis, "get_prop_F:src_F")
+    prop_F  = solver_func(src_F)                          ; tt("prop")
+    if do_save_prop.F then
+      prop_save_func(prop_file, prop_F, "prop_F", ama['prop_prec'])
+      done_prop(cfg_key, "prop_F", prop_file)
+    end
+    tt("done")
+  else
+    prop_F = prop_load_func(prop_file, "prop_F")
+  end
+  prop_cache[prop_file] = prop_F
+  return prop_F, is_new
+end
+
+---------- nucleon sink-sequential aka backward (B) props ----------
+-- return (prop_B, is_new)
+function get_prop_B(
+      L, cfg_key, csrc, ama, tag,
+      psnk, tsnk, t_axis, S2, S1, Tpol, tpol_tag, flav_bkw, 
+      prop_F_sm, 
+      smear_func, solver_func, prop_cache)
+  local prop_B = nil
+  local prop_file = get_bkwprop_file(cfg_key, csrc, psnk, tsnk, tpol_tag, flav_bkw, ama, tag)
+  prop_cache = prop_cache or {}   -- if omitted
+  if nil ~= prop_cache[prop_file] then
+    printf("CACHED prop_B '%s'\n", prop_file)
+    return prop_cache[prop_file], false
+  end
+  local is_new = not have_prop(cfg_key, "prop_B", prop_file)
+  if is_new then
+    local tt = timer("CALC prop_B")
+    local src_B_adj = L:DiracPropagator()
+    L:Subset({axis=t_axis, pos=tsnk}):where(function() 
+          local ph = L:planewave(csrc, space2full(psnk, t_axis))
+          src_B_adj:set(ph * (gamma{n=15} * baryon_sigma_seqsource_func[flav_bkw](
+              prop_F_sm, prop_F_sm, S2, S1, Tpol):adjoin()))
+        end)
+--    print_field_1axis(src_B_adj, t_axis, "get_prop_B:src_pt_B_adj")
+    local src_B_adj = smear_func(src_B_adj, {pos=tsnk})               ; tt("src")
+--    print_field_1axis(src_B_adj, t_axis, "get_prop_B:src_sm_B_adj")
+    prop_B = solver_func(src_B_adj):adjoin() * gamma{n=15}            ; tt("prop")
+    if do_save_prop.B then
+      prop_save_func(prop_file, prop_B, "prop_B", ama['prop_prec'])
+      done_prop(cfg_key, "prop_B", prop_file)
+    end
+    tt("done")
+  else
+    prop_B = prop_load_func(prop_file, "prop_B")
+  end
+  prop_cache[prop_file] = prop_B
+  return prop_B, is_new
+end
+
+-- return (prop_B, is_new)
+-- build coherent "group bkw propagator" with single inversion using group 
+-- frw propagator `propgrp_F_sm' at csrc (in csrcgrp) to construct bkw seq sources
+-- FIXME add `coh' to funcname
+-- FIXME rename local var prop_B -> propgrp_B for consistency
+function get_propgrp_B(
+      L, cfg_key, csrcgrp, ama, tag, 
+      psnk, tsep, t_axis, S2, S1, Tpol, tpol_tag, flav_bkw, 
+      propgrp_F_sm, 
+      smear_func, solver_func, prop_cache)
+  local prop_B = nil
+  local prop_file = get_bkwprop_grp_file(cfg_key, csrcgrp, 
+              psnk, tsep, tpol_tag, flav_bkw, ama, tag)
+  prop_cache = prop_cache or {}   -- if omitted
+  if nil ~= prop_cache[prop_file] then
+    printf("CACHED prop_B '%s'\n", prop_file)
+    return prop_cache[prop_file], false
+  end
+  local is_new = not have_prop(cfg_key, "prop_B", prop_file)
+  if is_new then
+    local tt = timer("CALC prop_B")
+    local src_B_adj = L:DiracPropagator()  -- zero
+    local tsnk_list = {}
+    for i_csrc, csrc in pairs(csrcgrp) do
+      local tsnk = (csrc[1+t_axis] + tsep) % latsize[1+t_axis]
+      list_append(tsnk_list, tsnk)
+      L:Subset({axis=t_axis, pos=tsnk}):where(function()
+          local ph = L:planewave(csrc, space2full(psnk, t_axis))
+          src_B_adj:set(ph * (gamma{n=15} * baryon_sigma_seqsource_func[flav_bkw](
+              propgrp_F_sm, propgrp_F_sm, S2, S1, Tpol):adjoin()))
+        end)
+    end
+--    print_field_1axis(src_B_adj, t_axis, "get_propgrp_B:src_pt_B_adj")
+    src_B_adj = smear_func(src_B_adj, {pos=tsnk_list})                ; tt("src")
+--    print_field_1axis(src_B_adj, t_axis, "get_propgrp_B:src_sm_B_adj")
+    prop_B = solver_func(src_B_adj):adjoin() * gamma{n=15}            ; tt("prop")
+    if do_save_prop.B then
+      prop_save_func(prop_file, prop_B, "prop_B", ama['prop_prec'])
+      done_prop(cfg_key, "prop_B", prop_file)
+    end
+    tt("done")
+  else
+    prop_B = prop_load_func(prop_file, "prop_B")
+  end
+  prop_cache[prop_file] = prop_B
+  return prop_B, is_new
+end
+
+-- return (prop_B, is_new)
+function get_propgrpemul_B(
+      L, cfg_key, csrcgrp, ama, tag,
+      psnk, tsep, t_axis, S2, S1, Tpol, tpol_tag, flav_bkw, 
+      propgrp_F_sm, 
+      smear_func, solver_func, prop_cache)
+  -- TODO ? check / update cache?
+  local is_new_grp = false
+  local propgrp_B = L:DiracPropagator()
+  for i_csrc, csrc in pairs(csrcgrp) do
+    local tsnk = (csrc[1+t_axis] + tsep) % latsize[1+t_axis]
+    local prop_B, is_new = get_prop_B(L, cfg_key, csrc, ama, tag,
+                  psnk, tsnk, S2, S1, Tpol, tpol_tag, flav_bkw, 
+                  propgrp_F_sm, smear_func, solver_func, prop_cache)
+    propgrp_B = propgrp_B + prop_B
+    is_new_grp= is_new_grp or is_new
+  end
+  return propgrp_B, is_new_grp
+end
+
+-- return (prop_B, is_new)
+-- build "group bkw propagator" from independent bkw propagators using group 
+-- frw propagator `propgrp_F_sm' at csrc (in csrcgrp) to construct bkw seq sources
+function get_propgrp_indep_B(
+      L, cfg_key, csrcgrp, ama, tag,
+      psnk, tsep, t_axis, S2, S1, Tpol, tpol_tag, flav_bkw, 
+      propgrp_F_sm, csrc_hslab,
+      smear_func, solver_func, prop_cache)
+  -- TODO ? check / update cache?
+  -- TODO mk lib function to shallow-print all args of a function 
+  --    (how to query list/names of all func.params?)
+  local propgrp_B = nil
+  local prop_file = get_bkwprop_grp_file(cfg_key, csrcgrp, 
+              psnk, tsep, tpol_tag, flav_bkw, ama, tag)
+  prop_cache = prop_cache or {}   -- if omitted
+  if nil ~= prop_cache[prop_file] then
+    printf("CACHED prop_B '%s'\n", prop_file)
+    return prop_cache[prop_file], false
+  end
+  local is_new_grp = not have_prop(cfg_key, "prop_B", prop_file)
+  if is_new_grp then
+    propgrp_B = L:DiracPropagator()
+    for i_csrc, csrc in pairs(csrcgrp) do
+      local tsnk = (csrc[1+t_axis] + tsep) % latsize[1+t_axis]
+      local prop_B, is_new = get_prop_B(L, cfg_key, csrc, ama, tag,
+                    psnk, tsnk, t_axis, S2, S1, Tpol, tpol_tag, flav_bkw, 
+                    propgrp_F_sm, smear_func, solver_func, prop_cache)
+      csrc_hslab[i_csrc]:where(function()propgrp_B:set(prop_B)end)
+      is_new_grp= is_new_grp or is_new
+    end
+    if do_save_prop.Bg then
+      prop_save_func(prop_file, propgrp_B, "prop_B", ama['prop_prec'])
+      done_prop(cfg_key, "prop_B", prop_file)
+    end
+  else
+    propgrp_B = prop_load_func(prop_file, "prop_B")
+  end
+  prop_cache[prop_file] = propgrp_B
+  return propgrp_B, is_new_grp
+end

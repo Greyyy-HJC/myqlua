@@ -1,0 +1,251 @@
+package.path = 'qlib/?.qlua;qlib-lhpc/?.qlua;' .. package.path
+require 'strict'
+require 'setup_util'
+require 'stdlib'
+
+-------------------------------------------------------------------------------
+-- general
+-------------------------------------------------------------------------------
+assert(job_key)
+cfg_key = job_key -- job# enumerates config#
+
+latsize = {32,32,32,64}
+t_axis = #latsize - 1
+rnd_seed= 1984
+
+-- for inverter test
+test_src_coord = {0,0,0,0}
+test_src_wup_N = 0
+
+-------------------------------------------------------------------------------
+-- quark action
+-------------------------------------------------------------------------------
+ferm_bc = {1,1,1,-1}
+mdwf_M5 = 1.8
+mdwf_mf = 0.001
+mdwf_L5_full = 32
+mdwf_b5_full = 1.
+mdwf_c5_full = 0.
+-- zMoebius params : etamax=1.45
+mdwf_L5  = 10
+mdwf_bmc5 = 1.
+mdwf_bpc5 = {
+  complex(4.953133333527814,  4.636759671022268),
+  complex(5.834549184435342, -0.847375749821817),
+  complex(3.727311567410276, 0),
+  complex(1.614590791824022, 0),
+  complex(0.835373070341761, 0),
+
+  complex(0.7053563878413177, 0),
+  complex(1.120047444033678, 0),
+  complex(2.420780639614394, 0),
+  complex(5.834549184435342,  0.847375749821817),
+  complex(4.953133333527814, -4.636759671022268),
+}
+assert(#mdwf_bpc5 == mdwf_L5)
+mdwf_b5, mdwf_c5 = {}, {}
+for s = 1, mdwf_L5 do 
+  mdwf_b5[s] = .5 * (mdwf_bpc5[s] + mdwf_bmc5)
+  mdwf_c5[s] = .5 * (mdwf_bpc5[s] - mdwf_bmc5)
+end
+
+
+-------------------------------------------------------------------------------
+-- AMA approximations
+-------------------------------------------------------------------------------
+-- * coordinates
+cfg_list = {}
+for s in io.lines('list.cfg.all') do
+  cfg_list[1+#cfg_list] = s
+end
+cfg_index = table_index(cfg_list, cfg_key)
+printf("cfg_key='%s' index=%d\n", cfg_key, cfg_index)
+
+sloppy_csrc_list = make_src_grid(
+    {  2,  2,  2,  4 },   -- n_src
+    latsize,
+    {0,0,0,0},            -- x0
+    {7,11,13,23}, cfg_index)   -- displacement by config#
+-- * approx modes
+ama_list = {
+  { ['approx']    = 'exact',
+    ['csrc_list'] = { sloppy_csrc_list[1] },
+--    ['tol']       = 1e-9 
+    ['prop_prec'] = 'double' },
+  { ['approx']    = 'sloppy',
+    ['csrc_list'] = sloppy_csrc_list,
+    ['ncg']       = 250,
+    ['prop_prec'] = 'float' }
+}
+function make_solver(mdwf, gauge_u, ferm_bc, ama)
+  local mixcg_maxiter_exact   = 10000
+  --   single prec. restart
+  local mixcg_tol1            = 1e-6
+  local mixcg_maxiter1        = 5000
+  local eps_moeb              = 2e-6
+
+  -- sic! the tolerance must be squared
+  if 'exact' == ama['approx'] then
+    local mdwf_invert = mdwf:mixed_solver(
+                mixcg_tol1^2, mixcg_maxiter1,   
+                eps_moeb^2,   mixcg_maxiter1) 
+    local madwf_solver = make_solver_MADCG_g5herm(
+        gauge_u, ferm_bc, mdwf_mf, mdwf_M5,
+        mdwf_L5, mdwf_b5, mdwf_c5,
+        mdwf_L5_full, mdwf_b5_full, mdwf_c5_full,
+        3,
+        { eps2_i    = 5e-6,
+          eps2_f    = 5e-5,
+          solver_moeb = mdwf_invert,
+          eps2_m1   = eps_moeb^2, -- to match short solve prec
+          eps2_1    = eps_moeb^2,
+          })
+    return madwf_solver
+  elseif 'sloppy' == ama['approx'] then
+    local mdwf_invert = mdwf:mixed_solver(
+                mixcg_tol1^2, mixcg_maxiter1,   
+                mixcg_tol1^2, ama['ncg']) 
+    return make_calc_mdwf_prop(mdwf_invert, gauge_u, ferm_bc, 
+                      mdwf_L5, mdwf_M5, mdwf_b5, mdwf_c5)
+  else
+    error(string.format("unknown approx='%s'"), ama['approx'])
+  end
+end
+
+
+-------------------------------------------------------------------------------
+-- source parameters
+-------------------------------------------------------------------------------
+ape_alpha   = 2.5   -- equiv to CPS ape_beta=0.4
+ape_N       = 25
+ape_accu    = 1e-6
+ape_maxiter = 150
+wup_N       = 75
+wup_alpha   = 2.5
+
+
+------------------------------------------------------------------------------
+-- Lanczos parameters
+------------------------------------------------------------------------------
+l_nev         = 1400   -- wanted vectors
+l_ncv         = 1550   -- +xx% unwanted vectors
+l_maxiter     = 50000
+l_tol         = 1e-6
+-- Chebyshev acc parameters
+l_poly_n      = 200
+l_poly_a      = 75.0e-5 -- adjusted for 1400 based on a 1600 run results; eval[1400=67e-5]
+l_poly_b      = 5.4  -- actual lambda_max=4.647 from an LR run
+l_poly_x0     = 0.  -- P_n normalization point
+-- eigcg parameters (used only to init space for Lanczos)
+eigcg_nev     = 2
+eigcg_tol     = 1e-6
+eigcg_vmax    = 10
+eigcg_umax    = l_ncv
+
+
+------------------------------------------------------------------------------
+-- correlator parameters
+------------------------------------------------------------------------------
+hadspec_psnk_list = make_mom_list(10)
+hadspec_baryon_list = {
+    "proton_1", "lambda_1", "delta_1", "proton_2",
+    "lambda_2", "delta_2", "proton_3", "lambda_3",
+    "delta_3", "proton_4", "proton_5", "proton_6",
+    "lambda_4", "xi_1", "lambda_5", "xi_2", "proton_negpar_3",
+    "proton_pp", "proton_np", "proton_pp5", "proton_np5"}
+hadspec_meson_list = {
+    "a0_1", "rho_x_1", "rho_y_1", "b1_z_1",
+    "rho_z_1", "b1_y_1", "b1_x_1", "pion_2",
+    "a0_2", "rho_x_2", "rho_y_2", "a1_z_1",
+    "rho_z_2", "a1_y_1", "a1_x_1", "pion_1" }
+
+-- correlators for cedm
+cedm_S1   = gamma{mu=0} * gamma{mu=2}
+cedm_S2   = cedm_S1
+c3pt_tsep_list = { 8 }
+c3pt_psnk_list = { {0,0,0} }
+c3pt_flav_list = { 'U', 'D' }
+c3pt_tpol_list = { 
+  pos5 = (1. + gamma{mu=3}) / 2 * gamma{n=15}, 
+  neg5 = (1. - gamma{mu=3}) / 2 * gamma{n=15},
+}
+
+
+------------------------------------------------------------------------------
+-- file locations
+------------------------------------------------------------------------------
+ens_top   = '/home/syritsyn/data_G15038/DWF+DSDR/mdwf_32c64_ml0.001'
+data_top  = 'data' 
+data_pdir = 'data_pdir'
+evec_pdir = 'evec_rawdump'
+--scratch_dir     = "/scratch/evec_rawdump"
+scratch_dir     = evec_pdir   -- taking chances ...
+evec_rawdump_stride = 32
+
+prop_qio_stride   = 1
+prop_qio_volfmt   = 'part_dir'
+have_frwprop      = true
+
+--evec_volfmt     = 'part_dir'
+--evec_pack_eopc  = true
+--evec_qio_prec   = 'float'
+--evec_qio_stride = 32
+out_tag         = string.format('zm%d', mdwf_L5)
+
+
+function get_gauge_file(key)
+  return string.format("%s/gauge/ckpoint_lat.%s",
+          ens_top, key)
+end
+
+function mdwf_evec_file(key, nev)
+  return string.format("%s/mdwf_evec_nev%05d.%s.%s.raw", 
+          evec_pdir, nev, out_tag, key)
+end
+function mdwf_evec_file_scratch(key, nev)
+  return string.format("%s/mdwf_evec_nev%05d.%s.%s.raw", 
+          scratch_dir, nev, out_tag, key)
+end
+
+function csrc_str(csrc)
+  return string.format("x%dy%dz%dt%d", csrc[1], csrc[2], csrc[3], csrc[4])
+end
+function snk_str(psnk, tsnk)
+  return string.format("PX%dPY%dPZ%dT%d", psnk[1], psnk[2], psnk[3], tsnk)
+end
+-- AMA-dependent output file names
+function ama_str(ama)
+  if 'exact' == ama['approx'] then
+    return string.format("ex")
+  elseif 'sloppy' == ama['approx'] then
+    return string.format("sl")
+  else
+    error(string.format('unknown ama="%s"', ama['approx']))
+  end
+end
+
+
+function get_frwprop_file(key, csrc, ama)
+  return string.format("%s/frw_prop/frw_prop.%s.%s.%s.lime", 
+          data_pdir, key, ama_str(ama), csrc_str(csrc))
+end
+function get_bkwprop_file(key, csrc, psnk, tsnk, baryon_pol_spec, flavor, ama)
+  return string.format("%s/bkw_prop/bkw_prop.%s.%s.%s.%s.%s.%s.lime", 
+          data_pdir, key, ama_str(ama), 
+          csrc_str(csrc), snk_str(psnk, tsnk), 
+          baryon_pol_spec, flavor)
+end
+
+
+function get_hadspec_file(key, csrc, ama)
+  return string.format('%s/hadspec/hadspec.%s.%s.%s.aff',
+          data_top, cfg_key, ama_str(ama), csrc_str(csrc))
+end
+function get_hadspec_cpbar_file(key, csrc, i_tpol, psnk, tsnk, ama)
+  return string.format('%s/hadspec_cpbar/hadspec_cpbar.%s.%s.%s.%s.%s.aff',
+          data_top, cfg_key, ama_str(ama), i_tpol, csrc_str(csrc), snk_str(psnk, tsnk))
+end
+function arpack_logfile(key)
+  return string.format("%s/arpack.log", logdir, key)
+end
+-- XXX mkdir -p data_pdir/{frw_prop,bkw_prop} data/{hadspec,hadspec_cpbar}

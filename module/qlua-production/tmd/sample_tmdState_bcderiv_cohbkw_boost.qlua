@@ -1,0 +1,353 @@
+require 'tmd/tmd_get_prop_bcderiv'
+require 'latvec'
+require 'rcparams'
+require 'util/strkey'
+require 'set'
+require 'iter'
+
+-- global options
+-- * do_save_prop.{F,Fg,B,Bg} save forward, forward-group, backward, backward-group
+-- * TODO enumerate 
+
+------------------------------------------------------------------------------
+-- sample cpeven c2,c3 (coherent)
+------------------------------------------------------------------------------
+function sample_tmdState_bcderiv_cohbkw_boost_v1(
+        L, cfg_key, csrcgrp,  ama,      -- [1-4]
+        hslab_tlen, c3pt_tlen,
+        src_smear_opt_q, c2pt_symm_psnk_list, 
+        c3pt_snk_spec_list, tsep_list, 
+        bcderiv_pair_list, lpspec_list_bfirst,
+        S2, S1, Tpol_list_c3pt,
+        flav_list, gf_lpath_, 
+        solver_bcd_func, 
+        t_axis, ferm_bc,
+        tabopt)
+  -- wrapper for orig interface
+  --  bcderiv_pair_list { {Fd1, Bd1}, ... } - forward and backward props/derivative pairs for contractions
+  --                  Fd1,Bd1 are strings ('' for no-deriv, 'x' for 1-deriv in x, ...)
+  local table_bcderiv_lpspec = {}
+  for i_dd, dd in iter.litems(bcderiv_pair_list) do
+    table_bcderiv_lpspec[dd] = lpspec_list_bfirst[i_dd]
+  end
+  return sample_tmdState_bcderiv_cohbkw_boost_v2(
+        L, cfg_key, csrcgrp,  ama,
+        hslab_tlen, c3pt_tlen,
+        src_smear_opt_q, c2pt_symm_psnk_list, 
+        c3pt_snk_spec_list, tsep_list, 
+        table_bcderiv_lpspec,
+        S2, S1, Tpol_list_c3pt,
+        flav_list, gf_lpath_, 
+        solver_bcd_func, 
+        t_axis, ferm_bc,
+        tabopt)
+end
+
+function sample_tmdState_bcderiv_cohbkw_boost_v2(
+        L, cfg_key, csrcgrp,  ama,      -- [1-4]
+        hslab_tlen, c3pt_tlen,
+        src_smear_opt_q, c2pt_symm_psnk_list, 
+        c3pt_snk_spec_list, tsep_list, 
+        table_bcderiv_lpspec,
+        S2, S1, Tpol_list_c3pt,
+        flav_list, gf_lpath_, 
+
+        solver_bcd_func, 
+        t_axis, ferm_bc,
+        tabopt)
+  -- XXX changes in v2: separate gauge link path lists for different bcderiv_pairs
+  --  (replaced "bcderiv_pair_list, tmd_lpspec_list_bfirst" with table_bcderiv_lpspec: { [ {Fd1, Bd1} ] = lpspec1, ... }
+  --
+  -- parameters
+  --  L               lattice object
+  --  cfg_key          gauge cfg "key" : string
+  --  csrcgrp         group of coherent sources for the coh.sample
+  --  ama             AMA parameter for saving files
+  --  c2pt_symm_psnk_list  sink momentum for c2pt, c2pt_volcedm
+  --  c3pt_psnk_list  sink momentum for c3pt, c2pt_cpbar
+  --  c3pt_qext_list  list of momenta for insertions
+  --  tsep_list       source-sink separation list
+  --  table_bcderiv_lpspec = { [ {Fd1, Bd1} ] = lpspec1, ... } - derivatives to contract&save for the propagators
+  --                  Fd1,Bd1 are strings ('' for no-deriv, 'x' for 1-deriv in x, ...)
+  --  S2, S1          sink and source diquark spin structures
+  --  Tpol_list
+  --                  list of nucleon polarization matrices for 0- and 1-st order in CEDM insertions
+  --  flav_list       flavors for cedm and current insertions
+  --  gf_lpath        gauge field for link paths in building blocks
+  --  solver_func     fermion solver x = solver_func(y) <-> Dslash.x = y
+  --  tabopt          { hadspec=false, c2pt=false,
+  --                    bb=true, bbspace=true,
+  --                    gg=<randomGransf>, 
+  --                    bkw_indep=nil}
+
+  -- also requires global functions for propagator storage
+  --  get_frwprop_file            F
+  --  get_hadspec_file
+  -- and variables
+
+  -- XXX envs : 
+  --    latsize
+  --    hadspec_baryon_list, hadspec_meson_list 
+  --    bb_link_min, bb_link_max,
+  --    bb_volcedm_link_min, bb_volcedm_link_max,
+  --    t_axis
+  --    ferm_bc
+  tabopt = tabopt or {}
+  local gg = tabopt.gg
+
+  local frw_ddlist, bkw_ddlist =  {}, {}
+  local taglist_bcderiv = {}
+  local tagmap_bcderiv_lpspec = {}
+  for p, lp in pairs(table_bcderiv_lpspec) do 
+    list_append(frw_ddlist, p[1])
+    list_append(bkw_ddlist, p[2])
+    local bcdp_tag = string.format("F%s_B%s", p[1], p[2])
+    tagmap_bcderiv_lpspec[bcdp_tag] = {p, lp}
+    list_append(taglist_bcderiv, bcdp_tag)
+  end
+  table.sort(taglist_bcderiv)
+  frw_ddlist = list_uniq(frw_ddlist)  ; table.sort(frw_ddlist) ; printf("frw_ddlist=[%s]\n", list_tostring(frw_ddlist, '%s'))
+  bkw_ddlist = list_uniq(bkw_ddlist)  ; table.sort(bkw_ddlist) ; printf("bkw_ddlist=[%s]\n", list_tostring(bkw_ddlist, '%s'))
+
+  assert(0 < #csrcgrp)
+  -- ensure all tsep are small enough
+  for i_tsep, tsep in ipairs(tsep_list) do assert(tsep < hslab_tlen) end
+  -- nontrivial bc are not implemented: require special treatment due to spatial coord shift 
+  for mu = 0, #L-1 do assert(mu == t_axis or 1 == ferm_bc[1+mu]) end
+
+  local timer_1srcgrp = timer(string.format('1srcgrp[%d] tmd_cohbkw', #csrcgrp))
+  local csrcgrp_key = strkey.csrcgrp_str(csrcgrp)
+  local tt    -- timer
+  local bc_quark_t  = ferm_bc[1+t_axis]
+  local bc_baryon_t = bc_quark_t^3
+  local bc_quark_tpos = table_copy(ferm_bc)
+  bc_quark_tpos[1+t_axis] = 1       -- for tmd
+  local lt          = L[t_axis]     -- time extent
+
+  local gf_lpath_bc = gauge_copy(gf_lpath_)
+  gauge_apply_boundary(gf_lpath_bc, ferm_bc)
+  if gg then gf_lpath_bc = gauge_transform_U(gg, gf_lpath_bc) end   --**
+
+  local csrc_coh0 = csrcgrp[1]
+  local csrc0_str  = strkey.csrc_str_k(csrc_coh0)
+  local tsrc_coh0 = csrc_coh0[1+t_axis]
+  local gg0
+  if gg then gg0 = L:ColorMatrix(gg[csrc_coh0]) end
+
+  -- build hyperslab subsets for constructing frwprop_grp, tmd
+  local csrc_hslab = hyperslab_subset_grp(L, csrcgrp, hslab_tlen, t_axis,
+          {verbose=true})
+
+  local ksrc_tag = src_smear_opt_q.tag
+  local bsm_tag_symm  = string.format('%s_%s', ksrc_tag, ksrc_tag)
+  local smfunc_ksrc_q = make_smear_func(L, 
+      table_deepmerge(src_smear_opt_q, {backend=tabopt.backend_smear}))
+  local smfunc_bcd_ksrc_q = make_smear_bcderiv_func(L, 
+      table_deepmerge(src_smear_opt_q, {backend=tabopt.backend_smear_bcderiv}))
+
+  -- XXX F-props are stored separately (need full Lt extent for volume insertions) 
+  local prop_F_bcd_srclist = {}    -- FIXME rearrange to compute F&C together, drop list to save RAM
+  local propgrp_F_bcd = iter.ordered_tmap_pair_table(
+      function(i, dd) return dd, L:DiracPropagator()end, frw_ddlist)
+  local is_new_F_grp = false
+  for i_csrc, csrc in ipairs(csrcgrp) do
+    local prop_F_bcd, is_new_F = get_prop_bcderiv_F(L, cfg_key, csrc, ama, ksrc_tag, 
+        frw_ddlist, t_axis, smfunc_bcd_ksrc_q, solver_bcd_func)
+    if gg then -- gauge inv.check
+      prop_F_bcd = iter.ordered_tmap_table(function(p) return gg * p * gg0:adjoin() end, prop_F_bcd)
+    end
+    is_new_F_grp = is_new_F_grp or is_new_F
+    prop_F_bcd_srclist[i_csrc]   = prop_F_bcd
+    for dd, p in iter.ordered_titems(prop_F_bcd) do
+      csrc_hslab[i_csrc]:where(function()propgrp_F_bcd[dd]:set(p)end)
+    end
+  end -- csrc
+
+  if do_save_prop.Fg then
+    for dd, p in iter.ordered_titems(prop_F_bcd) do
+      local prop_Fg_file = get_frwprop_grp_file(cfg_key, csrcgrp, ama, get_tag_dd(ksrc_tag, dd))
+      prop_save_func(prop_Fg_file, p, 'prop_Fg', ama['prop_prec'])
+    end
+  end
+
+  local tt  = timer('smear_prop_F')
+  -- XXX no snk-side bcderiv (spectator quarks)
+  -- XXX src-side bcderiv required(?) for 2pt functions 
+  local propgrp_F_sm  = smfunc_ksrc_q(propgrp_F_bcd[''])    ; tt('done')
+
+  if tabopt.c2pt then
+    local tt  = timer("save_c2pt") 
+    -- FIXME need c2pt with bcderiv ? 
+    local propgrp_F = propgrp_F_bcd['']
+
+    local c2pt_file = get_c2pt_file(cfg_key, csrcgrp, ama, bsm_tag_symm)
+    printf("[save_c2pt] %s\n", c2pt_file)
+    os.mkdir_path(dirname(c2pt_file))
+    local c2pt_aff  = qcd.aff.Writer(c2pt_file)
+
+    local opt = { result = false, backend = contract_backend(),
+                  save = { file=c2pt_aff, fkey='proton_Tg', mkey='P' },
+                  momproj = { csrc=csrc_coh0, mom_list=c2pt_symm_psnk_list,
+                              t_axis=t_axis, ft_sign=-1, bc_t=bc_baryon_t } }
+
+    opt.save.kpath = string.format('/c2pt/SP/%s/', csrcgrp_key)
+    qcd.contract_('baryon_sigma_UUS',
+        { propgrp_F, propgrp_F, propgrp_F, S2, S1 }, opt)
+
+    opt.save.kpath = string.format('/c2pt/SS/%s/', csrcgrp_key)
+    qcd.contract_('baryon_sigma_UUS',
+        { propgrp_F_sm, propgrp_F_sm, propgrp_F_sm, S2, S1 }, opt)
+
+    c2pt_aff:close()
+    tt('done')
+  end -- is_new_F_grp
+
+  for i_psnk, snk_spec in ipairs(c3pt_snk_spec_list) do
+    local snk_smear_opt_q, c2pt_skew_psnk_list, psnk, c3pt_qext_list = unpack(snk_spec)
+    local psnk_str = strkey.psnk_str_k(psnk)
+    local ksnk_tag = snk_smear_opt_q.tag
+    local bsm_tag_skew = string.format('%s_%s', ksrc_tag, ksnk_tag)
+    local smfunc_ksnk_q = make_smear_func(L,
+        table_deepmerge(snk_smear_opt_q, {backend=tabopt.backend_smear}))
+    local smfunc_bcd_ksnk_q = make_smear_bcderiv_func(L,
+        table_deepmerge(snk_smear_opt_q, {backend=tabopt.backend_smear_bcderiv}))
+
+    local propgrp_F_sm_skew  -- skew-smeared frw prop: reuse symm-smeared if possible
+    if bsm_tag_skew == bsm_tag_symm then propgrp_F_sm_skew = propgrp_F_sm
+    else  -- asymmetric smearing
+      propgrp_F_sm_skew = smfunc_ksnk_q(propgrp_F_bcd[''])
+  
+      if tabopt.c2pt then 
+        local tt  = timer("save_c2pt") 
+        -- FIXME need c2pt with bcderiv ? 
+        local propgrp_F = propgrp_F_bcd['']
+
+        local c2pt_file = get_c2pt_file(cfg_key, csrcgrp, ama, bsm_tag_skew)
+        printf("[save_c2pt] %s\n", c2pt_file)
+        os.mkdir_path(dirname(c2pt_file))
+        local c2pt_aff  = qcd.aff.Writer(c2pt_file)
+
+        local opt = { result = false, backend = contract_backend(),
+                      save = { file=c2pt_aff, fkey='proton_Tg', mkey='P' },
+                      momproj = { csrc=csrc_coh0, mom_list=c2pt_skew_psnk_list,
+                                  t_axis=t_axis, ft_sign=-1, bc_t=bc_baryon_t } }
+
+        -- XXX not duplicate of srcboostS-P : list of momenta may be different 
+        opt.save.kpath = string.format('/c2pt/SP/%s/', csrcgrp_key)
+        qcd.contract_('baryon_sigma_UUS',
+            { propgrp_F, propgrp_F, propgrp_F, S2, S1 }, opt)
+
+        opt.save.kpath = string.format('/c2pt/SS/%s/', csrcgrp_key)
+        qcd.contract_('baryon_sigma_UUS',
+            { propgrp_F_sm_skew, propgrp_F_sm_skew, propgrp_F_sm_skew, S2, S1 }, opt)
+
+        c2pt_aff:close()
+        tt('done')
+        
+      end
+    end
+
+    for i_tsep, tsep in ipairs(tsep_list) do
+      -- make chop geom dependent on tsep; round up to what GPU can handle
+      local c3pt_tlen_gpu = nil
+      local net_t = L:network()[1+t_axis]
+      local c3pt_tlen_tot = ceil_int(tsep * #csrcgrp, 2 * net_t) -- min 2 timeslices per GPU
+      c3pt_tlen_gpu = math.ceil(c3pt_tlen_tot / #csrcgrp)
+      local c3pt_tlen = c3pt_tlen or c3pt_tlen_gpu -- use only if not set as param
+      printf("CHOP c3pt_tlen=%d\n", c3pt_tlen)
+      -- scatter map for TMD prop & gf "chopping"
+      local tmd_chop_map, tmd_L = hyperslab_subvol_scatter_grp(L, csrcgrp, 
+              c3pt_tlen, t_axis, 
+              { copy_network=true,  -- use the same network_geom as L
+                shift_space=false   -- all spatial coordinates shifted to (0,0,0)
+              })
+      local csrc_chop0 = list_copy(csrc_coh0)
+      csrc_chop0[1+t_axis] = 0
+      local lt_chop = tmd_L[t_axis]
+      assert(lt_chop == c3pt_tlen * #csrcgrp)
+
+      -- create "chopped" gauge field for TMD
+      local tt = timer('gauge_chop')
+      local gf_lpath_bc_chop = latvec.apply(tmd_chop_map, gf_lpath_bc)     ; tt('done')
+  
+      local tt = timer('propgrp_F_chop')
+      local propgrp_F_bcd_chop = iter.ordered_tmap_table(
+          function(p) return tmd_chop_map(p) end, propgrp_F_bcd)            ; tt('done')
+
+      for tpol_tag, tpol in iter.ordered_titems(Tpol_list_c3pt) do
+        for i_flav_cur, flav_cur in ipairs(flav_list) do
+          -- compute prop_B, save TMD
+          local propgrp_B_bcd, is_new_B_grp
+          if tabopt.bkw_indep then 
+              propgrp_B_bcd, is_new_B_grp = get_propgrp_indep_bcderiv_B(
+                  L, cfg_key, csrcgrp, ama, bsm_tag_skew, bkw_ddlist,
+                  psnk, tsep, t_axis, S2, S1, tpol, tpol_tag, flav_cur, 
+                  propgrp_F_sm_skew, csrc_hslab,
+                  smfunc_bcd_ksnk_q, solver_bcd_func)
+          else 
+              propgrp_B_bcd, is_new_B_grp = get_propgrp_bcderiv_B(
+                  L, cfg_key, csrcgrp, ama, bsm_tag_skew, bkw_ddlist,
+                  psnk, tsep, t_axis, S2, S1, tpol, tpol_tag, flav_cur, 
+                  propgrp_F_sm_skew,
+                  smfunc_bcd_ksnk_q, solver_bcd_func)
+          end
+          if gg then 
+            propgrp_B_bcd = iter.ordered_tmap_table(
+                function(p) return gg0 * p * gg:adjoin() end, propgrp_B_bcd)
+          end
+          local tt = timer('propgrp_B_chop')
+          local propgrp_B_bcd_chop = iter.ordered_tmap_table(
+              function(p) return tmd_chop_map(p) end, propgrp_B_bcd)            ; tt('done')
+          if is_new_B_grp or tabopt.tmd then -- contract c3pt(t=tcur, tsnk=const, flav=flav_cur)
+            local tt = timer("save_tmd")
+            for bcdp_tag, bcderiv_lpspec in iter.ordered_titems(tagmap_bcderiv_lpspec) do
+              local frw_dd, bkw_dd = unpack(bcderiv_lpspec[1])
+              local lpspec_list_bfirst = bcderiv_lpspec[2] 
+              local tmd_tag_skew = string.format("%s.F%s_B%s", bsm_tag_skew, frw_dd, bkw_dd)
+              local tmd_file = get_tmd_file(cfg_key, csrcgrp, psnk, tsep,
+                  tpol_tag, flav_cur, ama, tmd_tag_skew)
+              printf("[save_tmd] %s\n", tmd_file)
+              os.mkdir_path(dirname(tmd_file))
+              local tmd_aff = qcd.aff.Writer(tmd_file)
+              local tmd_contract_opt = {
+                  result=false,   -- do not export pos.space contractions
+                  backend=contract_backend(),
+                  preserve_basis = true,
+                  save = {
+                    file=tmd_aff, 
+                    kpath=string.format("/tmd/SS/proton_%s/%s/%s/%s_dt%d", 
+                          tpol_tag, flav_cur, csrcgrp_key, psnk_str, tsep),
+                    mkey='q', fkey='g' },
+                  momproj = {
+                    csrc=csrc_chop0, 
+                    mom_list=c3pt_qext_list, 
+                    t_axis=t_axis,
+                    bc_t = 1,   -- sic! qbarq contraction does not change sign on wraparound
+                    tlen=lt_chop,
+                    ft_sign=1 } }
+              local tmd_contract_state = qcd.contract_state(
+                  'tmd_g_F_B', { propgrp_F_bcd_chop[frw_dd], propgrp_B_bcd_chop[bkw_dd], gf_lpath_bc_chop },
+                  tmd_contract_opt)
+              local cnt = 0
+              iter_tmdspec_bfirst(lpspec_list_bfirst, 
+                  function(bv) 
+--                    print(string.format("cnt=%d node=%d\t'%s','%s'", os.node(), cnt, bv[1], bv[2])) ; cnt = cnt + 1
+                    return tmd_contract_state:step(bv[1], bv[2]) 
+                  end)
+              tmd_aff:close()
+              tmd_contract_state = nil ; force_gc() -- to make sure everything is deallocated
+              tt("done")
+            end
+          end
+        end -- flav_cur
+      end -- tpol
+      force_gc("sample_tmd:prop_B")
+
+    end -- psnk
+  end -- tsep
+
+  force_gc("sample_tmd")
+  timer_1srcgrp('done')
+end
+
+

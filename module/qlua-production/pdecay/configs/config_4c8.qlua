@@ -1,0 +1,473 @@
+package.path = 'qlua-production/?.qlua;qlib/?.qlua;qlib-lhpc/?.qlua;' .. package.path
+require 'strict'
+require 'setup_util'
+require 'stdlib'
+require 'hadron/baryon_corr'
+
+-------------------------------------------------------------------------------
+-- general
+-------------------------------------------------------------------------------
+assert(job_key)
+cfg_key = job_key -- job# enumerates config#
+
+latsize = {4,4,4,8}
+t_axis = #latsize - 1
+rnd_seed= 1984
+
+-- for inverter test
+test_src_coord = {0,0,0,0}
+test_src_wup_N = 0
+
+-------------------------------------------------------------------------------
+-- quark action
+-------------------------------------------------------------------------------
+ferm_bc = {1,1,1,-1}
+mdwf_M5 = 1.8
+mdwf_mf_ud = 0.1
+mdwf_mf_s  = 0.2
+mdwf_L5_full = 16
+mdwf_b5_full = 1.
+mdwf_c5_full = 0.
+-- * zMoebius params : etamax=1.45
+--[[
+mdwf_L5  = 10
+mdwf_bmc5 = 1.
+mdwf_bpc5 = {
+  complex(4.953133333527814,  4.636759671022268),
+  complex(5.834549184435342, -0.847375749821817),
+  complex(3.727311567410276, 0),
+  complex(1.614590791824022, 0),
+  complex(0.835373070341761, 0),
+
+  complex(0.7053563878413177, 0),
+  complex(1.120047444033678, 0),
+  complex(2.420780639614394, 0),
+  complex(5.834549184435342,  0.847375749821817),
+  complex(4.953133333527814, -4.636759671022268),
+}
+assert(#mdwf_bpc5 == mdwf_L5)
+mdwf_b5, mdwf_c5 = {}, {}
+for s = 1, mdwf_L5 do 
+  mdwf_b5[s] = .5 * (mdwf_bpc5[s] + mdwf_bmc5)
+  mdwf_c5[s] = .5 * (mdwf_bpc5[s] - mdwf_bmc5)
+end
+--]]
+
+-------------------------------------------------------------------------------
+-- AMA approximations
+-------------------------------------------------------------------------------
+-- * coordinates
+cfg_list = {}
+for s in io.lines('TEST4c8/list.cfg.all') do
+  cfg_list[1+#cfg_list] = s
+end
+cfg_index = table_index(cfg_list, cfg_key)
+printf("cfg_key='%s' index=%d\n", cfg_key, cfg_index)
+
+sloppy_csrc_list = {{1,2,3,5}}
+--[[
+ make_src_grid(
+    {  2,  2,  2,  4 },   -- n_src
+    latsize,
+    {0,0,0,0},            -- x0
+    {7,11,13,23}, cfg_index)   -- displacement by config#
+--]]
+-- * approx modes
+ama_list = {
+--[[  { ['approx']    = 'sloppy',
+    ['csrc_list'] = { sloppy_csrc_list[1] },  -- XXX use only 1 for testing
+    ['ncg']       = 50,                 -- used only for UD
+    ['tol']       = 1e-6,               -- used only for S
+    ['maxiter']   = 10000,              -- used only for S
+    ['prop_prec'] = 'float' },
+--]]
+  { ['approx']    = 'exact',
+    ['csrc_list'] = { sloppy_csrc_list[1] },
+    ['tol']       = 1e-10,              -- used only for S
+    ['maxiter']   = 10000,              -- used only for S
+    ['prop_prec'] = 'double' },
+}
+
+-- * CG restart parameters
+mixcg_maxiter1     = 1000
+mixcg_tol1         = 1e-6
+
+mixcg_maxiter_sloppy = 200
+mixcg_tol_sloppy = 1e-8
+
+mixcg_tol_exact = 1e-10
+mixcg_maxiter_exact = 10000
+
+
+-- * deflated solver 
+function make_solver_UD(mdwf, gauge_u, ferm_bc, ama)
+  local mixcg_maxiter_exact   = 10000
+  --   single prec. restart
+  local mixcg_tol1            = 1e-3
+  local mixcg_maxiter1        = 5000
+  local eps_moeb              = 2e-3
+
+  -- sic! the tolerance must be squared
+  if 'exact' == ama['approx'] then
+    local mdwf_invert = mdwf:mixed_solver(
+                mixcg_tol1^2, mixcg_maxiter1,   
+                eps_moeb^2,   mixcg_maxiter1) 
+    local madwf_solver = make_solver_MADCG_g5herm(
+        gauge_u, ferm_bc, mdwf_mf_ud, mdwf_M5,
+        mdwf_L5_full, mdwf_b5, mdwf_c5,
+        mdwf_L5_full, mdwf_b5_full, mdwf_c5_full,
+        3,
+        { eps2_i    = 5e-6,
+          eps2_f    = 5e-5,
+          solver_moeb = mdwf_invert,
+          eps2_m1   = eps_moeb^2, -- to match short solve prec
+          eps2_1    = eps_moeb^2,
+          })
+    return madwf_solver
+  elseif 'sloppy' == ama['approx'] then
+    local mdwf_invert = mdwf:mixed_solver(
+                mixcg_tol1^2, mixcg_maxiter1,   
+                mixcg_tol1^2, ama['ncg']) 
+    return make_calc_mdwf_prop(mdwf_invert, gauge_u, ferm_bc, 
+                      mdwf_L5, mdwf_M5, mdwf_b5, mdwf_c5)
+  else
+    error(string.format("unknown approx='%s'"), ama['approx'])
+  end
+end
+
+
+-------------------------------------------------------------------------------
+-- source parameters
+-------------------------------------------------------------------------------
+ape_alpha   = 2.5   -- equiv to CPS ape_beta=0.4
+ape_N       = 2
+ape_accu    = 1e-6
+ape_maxiter = 150
+wup_N       = 0
+wup_alpha   = 0
+
+
+------------------------------------------------------------------------------
+-- Lanczos parameters
+------------------------------------------------------------------------------
+l_nev         = 200   -- wanted vectors
+l_ncv         = 250
+l_maxiter     = 50000
+l_tol         = 1e-6
+-- Chebyshev acc parameters
+l_poly_n      = 40
+l_poly_a      = .2 -- adjusted for 1400 based on a 1600 run results; eval[1400=67e-5]
+l_poly_b      = 10  -- actual lambda_max=4.647 from an LR run
+l_poly_x0     = 0.  -- P_n normalization point
+-- eigcg parameters (used only to init space for Lanczos)
+eigcg_nev     = 2
+eigcg_tol     = 1e-6
+eigcg_vmax    = 10
+eigcg_umax    = l_ncv
+
+
+------------------------------------------------------------------------------
+-- correlator parameters
+------------------------------------------------------------------------------
+hadspec_psnk_list = {{-1,0,0},{1,0,0},{0,0,0}}
+hadspec_baryon_list = {
+    "proton_1", "lambda_1", "delta_1", "proton_2",
+    "lambda_2", "delta_2", "proton_3", "lambda_3",
+    "delta_3", "proton_4", "proton_5", "proton_6",
+    "lambda_4", "xi_1", "lambda_5", "xi_2", "proton_negpar_3",
+    "proton_pp", "proton_np", "proton_pp5", "proton_np5"}
+hadspec_meson_list = {
+    "a0_1", "rho_x_1", "rho_y_1", "b1_z_1",
+    "rho_z_1", "b1_y_1", "b1_x_1", "pion_2",
+    "a0_2", "rho_x_2", "rho_y_2", "a1_z_1",
+    "rho_z_2", "a1_y_1", "a1_x_1", "pion_1" }
+
+
+
+
+-- for c2pt_cpbar (final contraction at cedm)
+c2pt_psnk_list = make_mom_list(10)
+c3pt_tsep_list = { 4 }
+
+-- correlator polarizations for pdecay
+proton_Ssrc   = gamma{mu=0} * gamma{mu=2}
+gproj_R = .5*(1 + gamma{n=15})                      -- chiral proj Right
+gproj_L = .5*(1 - gamma{n=15})                      -- chiral proj Left
+tpol_pos= .5*(1 + gamma{mu=3})                      -- parity proj pos
+tpol_neg= .5*(1 - gamma{mu=3})                      -- parity proj neg
+tpol_Sz = -gamma{mu=0}*gamma{mu=1}*complex(0,1)     -- spin proj Sz
+tpol_posSz = tpol_pos * tpol_Sz
+pd_dqC  = gamma{mu=1} * gamma{mu=3} -- = gamma2*gamma4    charge conj. matrix TODO check conventions!
+pd_dqCR  = pd_dqC * gproj_R
+pd_dqCL  = pd_dqC * gproj_L
+
+-- contraction functions
+-- func(u1, u2, d, Ssnk, Ssrc, T) Ssnk? or S_op?
+--S1 CP_Gamm S2 Cgamma5
+function Contract1(u,d,Q,S1,S2,T) --<K+ usd p>
+     local a1 = S1:transpose() * u
+     local a2 = d*(S2:transpose())
+     return -(Q * (qcd.quarkContract23(a1*T, a2))):trace() - (Q * T * (qcd.quarkContract24(a2, a1))):trace()
+--     return −Q*(qcd.quarkContract23(a1*T, a2)) : trace()−Q*T *(qcd.quarkContract24(a2, a1)) : trace()
+end
+function Contract2(u,d,Q,S1,S2,T) --<K+ uds p>
+     local a1 = S1:transpose() * u
+     local a2 = d*(S2:transpose())
+     return ((-T*Q*(qcd.quarkContract13(a2, a1))):trace() - ((Q*T):spintrace()*qcd.quarkContract13(a1, a2):spintrace()):trace())
+--     return -Q*(quarkContract13(a1*T, a2)) :trace() - (Q*T):spintrace()*(quarkContract13(a1, a2):spintrace()):trace()
+end
+ 
+function Contract3(u,d,Q,S1,S2,T) --<pi+ udd p>
+     return (Contract1(u,d,Q,S1,S2,T)+Contract2(u,d,Q,S1,S2,T))
+end
+
+function Contract4(u,d,Q,S1,S2,T) --<K0 usu p>
+  local a1= u*T
+  local a2= Q*S2:transpose()
+  return ((a1 *qcd.quarkContract13(a2,S1:transpose()*u):spintrace()):trace() +(a2*qcd.quarkContract14(u,S1:transpose()*a1)):trace())
+--  return ((a1*:spintrace() *qcd.quarkContract13(a2,S1:transpose()*u):spintrace()):trace()+(a2*qcd.quarkContract14(u,S1:transpose*a1) ):trace())
+end
+
+function Contract5(u,d,Q,S1,S2,T)  --<K+ dsu p>
+  local a1 = S1:transpose() * d
+  return -((u*T)*qcd.quarkContract13(Q,a1*S2:transpose())):trace()-((Q*T*qcd.quarkContract24(u*S2,a1))):trace()
+end
+
+--c1 and c2 are constants of eta state : eta = c1*uu + c2*dd
+function Contract6(u,d,Q,S1,S2,T)--<eta udu p>
+  return -0.707*(Contract2(u,d,Q,S1,S2,T) - Contract5(u,d,Q,S1:transpose(),S2,T)) +0.707*Contract4(u,d,Q,S1,S2,T)
+end
+
+
+----------------------------------------------------------------------------------------
+--type 1-5 diagrams from contractN definition
+----------------------------------------------------------------------------------------
+
+function tp1L(u,d,Q,S1,S2,T)
+  local a1= u*T
+  local a2= Q*S2:transpose()
+  return (a1 *qcd.quarkContract13(a2,S1:transpose()*u):spintrace()):trace() 
+end
+
+function tp2L(u,d,Q,S1,S2,T) 
+  local a1= u*T
+  local a2= Q*S2:transpose()
+  return (a2*qcd.quarkContract14(u,S1:transpose()*a1)):trace()
+end
+
+function tp3L(u,d,Q,S1,S2,T)
+     local a1 = S1:transpose() * u
+     local a2 = d*(S2:transpose())
+     return -((Q*T)*qcd.quarkContract13(a1, a2):spintrace()):trace()
+end
+
+function tp4L(u,d,Q,S1,S2,T) --<K+ uds p>
+     local a1 = S1:transpose() * u
+     local a2 = d*(S2:transpose())
+     return (-T*Q*(qcd.quarkContract13(a2, a1))):trace() 
+end
+
+function tp5L(u,d,Q,S1,S2,T) --<K+ usd p>
+     local a1 = S1:transpose() * u
+     local a2 = d*(S2:transpose())
+     return -(Q * T * (qcd.quarkContract24(a2, a1))):trace()
+end
+
+---------------------------------------------------------------------------------------
+--Eigo Definition of tp1-5
+---------------------------------------------------------------------------------------
+
+function tp1(u,d,Q,S1,S2,T)
+  local a1 = S1:transpose() * u
+  local a2 = Q * S2:transpose()
+  return (-T*u*(qcd.quarkContract13(a1,a2):spintrace())*tpol_pos):trace()
+--  return (a1 *qcd.quarkContract13(a2,S1:transpose()*u):spintrace()):trace()
+end
+
+
+function tp2(u,d,Q,S1,S2,T)
+     local a1 = S1:transpose() * u
+     local a2 = Q* S2:transpose() 
+     return -(T*(d * (qcd.quarkContract13(a2, a1)))*tpol_pos):trace()
+end
+
+function tp3(u,d,Q,S1,S2,T)
+     local a1 = u * S1:transpose()
+     local a2 = S2:transpose() * d
+     return -((T*Q)*qcd.quarkContract13(a1, a2):spintrace()*tpol_pos):trace()
+end
+
+function tp4(u,d,Q,S1,S2,T)
+     local a1 = S1:transpose() * d
+     local a2 = u * S2:transpose()
+     return -(T*Q*(qcd.quarkContract13(a2, a1))*tpol_pos):trace()
+end
+
+function tp5(u,d,Q,S1,S2,T)
+     local a1 = S1:transpose() * Q
+     local a2 = d*(S2:transpose())
+     return - (T *u * qcd.quarkContract13(a2, a1)*tpol_pos):trace()
+end
+--------------------------------------------------------------------------------------------
+
+--function a(x) return 1 end
+--function b(x) return 1 end
+--function sum_a_b(...) return a(...)+b(...) end 
+
+--function func_sum(func_a,func_b)
+--  local func_apb = function(...) 
+--    return a(...) + b(...) 
+--  end
+--  return func_apb
+--end
+--require 'strict'
+
+-- TODO populate the table
+-- TODO give meaningful names to ops
+-- momentum projection
+--    <Pi(psnk)|Op(q)|n(psrc)> = sum_{y,z} <Pi(y) Op(z) n(x)> exp(-i*psnk(y-x) -i*q*(z-x))
+pdecay_contract_list = {
+  { mgamma_tag  = 'Tg15',
+    flav_B      = 'UD',
+    psnk        = {-1,0,0},
+    qext_list   = {{1,0,0} }, -- psrc = psnk+qext= {{0,0,0},{1,0,0}}
+    pd_op_list = {
+      pion_RR = { func=Contract3, T=gproj_R*tpol_pos, S=pd_dqCR },  -- used only as example
+      pion_RL = { func=Contract3, T=gproj_L*tpol_pos, S=pd_dqCR },  
+      pion_LL = { func=Contract3, T=gproj_L*tpol_pos, S=pd_dqCL },  
+      pion_LR = { func=Contract3, T=gproj_R*tpol_pos, S=pd_dqCL }, 
+      eta_RR = { func=Contract6, T=gproj_R*tpol_pos, S=pd_dqCR },
+      eta_RL = { func=Contract6, T=gproj_L*tpol_pos, S=pd_dqCR },
+      eta_LR = { func=Contract6, T=gproj_R*tpol_pos, S=pd_dqCL },
+      eta_LL = { func=Contract6, T=gproj_L*tpol_pos, S=pd_dqCL },
+
+      tp1_L = { func=tp1L, T=tpol_pos*gproj_L, S=pd_dqCL },  
+      tp2_L = { func=tp2L, T=tpol_pos*gproj_L, S=pd_dqCL },  
+      tp3_L = { func=tp3L, T=tpol_pos*gproj_L, S=pd_dqCL },  
+      tp4_L = { func=tp4L, T=tpol_pos*gproj_L, S=pd_dqCL },  
+      tp5_L = { func=tp5L, T=tpol_pos*gproj_L, S=pd_dqCL },  
+      -- add LR,LL combinations
+      -- TODO add other contractions
+    }
+  },
+  { mgamma_tag  = 'Tg15',
+    flav_B      = 'S',
+    psnk        = {0,0,0},
+    qext_list   = {{0,0,0}}, -- psrc = psnk+qext= {{0,0,0},{1,0,0}}
+    pd_op_list = {
+      Kuds_RR = { func=Contract2, T=gproj_R*tpol_pos, S=pd_dqCR },  -- used only as example
+      Kuds_RL = { func=Contract2, T=gproj_L*tpol_pos, S=pd_dqCR }, 
+      Kuds_LR = { func=Contract2, T=gproj_R*tpol_pos, S=pd_dqCL },
+      Kuds_LL = { func=Contract2, T=gproj_L*tpol_pos, S=pd_dqCL },
+      Kdsu_RR = { func=Contract5, T=gproj_R*tpol_pos, S=pd_dqCR },
+      Kdsu_RL = { func=Contract5, T=gproj_L*tpol_pos, S=pd_dqCR },
+      Kdsu_LR = { func=Contract5, T=gproj_R*tpol_pos, S=pd_dqCL },
+      Kdsu_LL = { func=Contract5, T=gproj_L*tpol_pos, S=pd_dqCL },
+      Kusd_RR = { func=Contract1, T=gproj_R*tpol_pos, S=pd_dqCR },
+      Kusd_RL = { func=Contract1, T=gproj_L*tpol_pos, S=pd_dqCR },
+      Kusd_LR = { func=Contract1, T=gproj_R*tpol_pos, S=pd_dqCL },
+      Kusd_LL = { func=Contract1, T=gproj_L*tpol_pos, S=pd_dqCL },
+      Kusu_RR = { func=Contract4, T=gproj_R*tpol_pos, S=pd_dqCR },
+      Kusu_RL = { func=Contract4, T=gproj_L*tpol_pos, S=pd_dqCR },
+      Kusu_LR = { func=Contract4, T=gproj_R*tpol_pos, S=pd_dqCL },
+      Kusu_LL = { func=Contract4, T=gproj_L*tpol_pos, S=pd_dqCL },
+      -- TODO add other contractions
+    }
+  },
+}
+
+
+------------------------------------------------------------------------------
+-- file locations
+------------------------------------------------------------------------------
+ens_top   = 'TEST4c8'
+data_top  = 'TEST4c8/data' 
+data_pdir = 'TEST4c8/data_pdir'
+evec_pdir = 'TEST4c8/evec_rawdump'
+--scratch_dir     = "/scratch/evec_rawdump"
+scratch_dir     = evec_pdir   -- taking chances ...
+evec_rawdump_stride = 4
+
+prop_qio_stride   = 4
+prop_qio_volfmt   = 'part_dir'
+have_frwprop      = true
+
+--evec_volfmt     = 'part_dir'
+--evec_pack_eopc  = true
+--evec_qio_prec   = 'float'
+--evec_qio_stride = 32
+out_tag         = string.format('zm%d', mdwf_L5_full)
+
+
+-- * gauge config file
+function get_gauge_file(key)
+  return string.format("%s/gauge/ckpoint_lat.%s",
+          ens_top, key)
+end
+
+-- * deflation eigenvector location
+function mdwf_evec_file(key, nev)
+  return string.format("%s/mdwf_evec_nev%05d.%s.%s.raw", 
+          evec_pdir, nev, out_tag, key)
+end
+function mdwf_evec_file_scratch(key, nev)
+  return string.format("%s/mdwf_evec_nev%05d.%s.%s.raw", 
+          scratch_dir, nev, out_tag, key)
+end
+
+-- * aux func
+function csrc_str(csrc)
+  return string.format("x%dy%dz%dt%d", csrc[1], csrc[2], csrc[3], csrc[4])
+end
+function snk_str(psnk, tsep)
+  return string.format("PX%dPY%dPZ%d_dt%d", psnk[1], psnk[2], psnk[3], tsep)
+end
+function snk_str_old(psnk, tsnk)
+  return string.format("PX%dPY%dPZ%dT%d", psnk[1], psnk[2], psnk[3], tsnk)
+end
+function ama_str(ama)
+  if 'exact' == ama['approx'] then
+    return string.format("ex")
+  elseif 'sloppy' == ama['approx'] then
+    return string.format("sl")
+  else
+    error(string.format('unknown ama="%s"', ama['approx']))
+  end
+end
+
+-- * propagator file location
+function get_prop_log_file(cfg_key, prop_kind)
+  return string.format("%s/prop_log/%s.%s", 
+          data_pdir, cfg_key, prop_kind)
+end
+function get_frwprop_file(key, csrc, flav_frw, ama)
+  return string.format("%s/frw_prop/frw_prop.%s.%s.%s.%s.lime", 
+          data_pdir, key, ama_str(ama), csrc_str(csrc), flav_frw)
+end
+function get_bkwprop_file(key, csrc, psnk, tsnk, mgamma_tag, flav_bkw, ama)
+  return string.format("%s/bkw_prop/bkw_prop.%s.%s.%s.%s.%s.%s.lime", 
+          data_pdir, key, ama_str(ama), 
+          csrc_str(csrc), snk_str_old(psnk, tsnk), 
+          mgamma_tag, flav_bkw)
+end
+
+-- * output data location
+function get_hadspec_file(key, csrc, ama)
+  return string.format('%s/hadspec/hadspec.%s.%s.%s.aff',
+          data_top, cfg_key, ama_str(ama), csrc_str(csrc))
+end
+function get_c2pt_file(cfg_key, csrc, ama)
+  return string.format('%s/c2pt/c2pt.%s.%s.%s.aff',
+          data_top, cfg_key, ama_str(ama), csrc_str(csrc))
+end
+function get_c3pt_pdecay_file(cfg_key, csrc, psnk, tsep, 
+          mgamma_tag, flav_bkw, ama)
+  return string.format('%s/c3pt_pdecay/c3pt_pdecay.%s.%s.%s.%s.%s.%s.aff',
+          data_top, cfg_key, ama_str(ama), csrc_str(csrc), snk_str(psnk, tsep), mgamma_tag, flav_bkw)
+end
+
+-- * log file for Lanczos jobs
+function arpack_logfile(key)
+  return string.format("%s/arpack.log", logdir, key)
+end
+-- XXX mkdir -p data_pdir/{frw_prop,bkw_prop} data/{hadspec,c2pt,c3pt_pdecay}

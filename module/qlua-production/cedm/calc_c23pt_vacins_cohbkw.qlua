@@ -1,0 +1,758 @@
+-- full nedm calculation:
+--  * propagators :
+--    prop_F prop_B prop_B5 prop_C prop_EpG
+--  * proton correlators (without cedm insertion) with Tpol_list polarisations
+--  ** hadspec : traditional (Chroma HSPECTRUM)
+--  ** c2pt : prop_F^3 
+--  ** bb : prop_B*prop_F
+--  * proton correlators WITH CEDM insertion with Tpol_list polarisations
+--  ** c2pt_cpbar : prop_B5*prop_F
+--  ** c2pt_volcedm: prop_F*prop_F*prop_C
+--  ** bb_volcedm : prop_B5*prop_C + prop_EpG*propF
+
+-- XXX NOTES
+-- XXX propagators are defined and stored according to CEDM writeup conventions
+--    ie the backward propagator prop_B has the last Dslash applied on the right
+
+
+package.path = 'qlua-production/?.qlua;qlib-lhpc/?.qlua;qlib/?.qlua;' .. package.path
+require 'strict'    -- catch all undefined (nil) variables
+require 'stdlib'    -- standard printf, etc
+require 'lhpc-std'  -- make_source, etc
+require 'ape-smear' -- gauge smear
+require 'gauge'
+require 'qdpc_io'
+require 'setup_util'
+require 'latvec'
+
+require 'hadspec'
+require 'hex-smear'
+require 'madwf_sns'
+
+require 'wuppertal-smear'
+require 'cedm/cedm-seq'  -- sequential sources
+require 'hadron/baryon_corr'
+require 'util/file'
+require 'util/geom'
+
+------------------------------------------------------------------------------
+-- INITIALIZATION: 
+--  import config(which reads gauge, evecs, sets up ama, make_solver)
+------------------------------------------------------------------------------
+if true then
+--if false then
+  -- perhaps use a list of keys to check that all names have been defined?
+  -- check `k' ~= nil ! otherwise, _G[k] will be set to nil, avoiding 'strict'
+  for k,v in pairs(job_config) do   
+    assert('string' == type(k))
+    if nil == v then 
+      printf("WARNING: job_config.%s = nil\n", k) 
+    end
+    _G[k] = v
+  end
+end
+-- BENCHMARKS
+------------------------------------------------------------------------------
+  -- la benchmark
+if preptest.bmark_la then
+  for i, la_pp in pairs({
+          { "gemm", "c",   300,    300,    300 },
+          { "gemm", "z",   300,    300,    300 },
+  --        { "gemm", "c",  1000,   1000,   1000 },
+  --        { "gemm", "z",  1000,   1000,   1000 },
+  --        { "gemm", "c",  3000,   3000,   3000 },
+  --        { "gemm", "z",  3000,   3000,   3000 },
+        }) do
+    local bm, pd, m,n,k = unpack(la_pp)
+    local cur_str = string.format("la_benchmark %2s %6s  %6d %6d %6d", bm, pd, m, n, k)
+    printf("%s\n", cur_str)
+    local cur_t = timer(cur_str)
+    qcd.latmat.la_benchmark(bm, pd, m, n, k)
+    cur_t("done")
+  end
+end
+
+------------------------------------------------------------------------------
+-- aux functions
+------------------------------------------------------------------------------
+function have_prop(cfg_key, prop_kind, prop_file)
+  return log_have_tag(get_prop_log_file(cfg_key, prop_kind), basename(prop_file))
+end
+function done_prop(cfg_key, prop_kind, prop_file)
+  return log_done_tag(get_prop_log_file(cfg_key, prop_kind), basename(prop_file))
+end
+function have_sample(cfg_key, sample_tag)
+  return log_have_tag(sample_log_file(cfg_key), sample_tag)
+end
+function done_sample(cfg_key, sample_tag)
+  return log_done_tag(sample_log_file(cfg_key), sample_tag)
+end
+
+function prop_save_func(fname, x, title, prop_prec)
+  -- requires in the scope:
+  --  prop_volfmt       part_dir for fast
+  --  prop_vol_stride   spacing between ranks doing IO (set equal to the number of ranks per 1 IO node)
+  if nil == title then
+    title = tostring(x)
+  end
+  printf("SAVE %s '%s'\n", title, fname)
+  local tt = timer(string.format("SAVE %s", title))
+  os.mkdir_path(dirname(fname))
+  local qio_w = open_qdpc_write(L, fname, "", prop_qio_volfmt, 
+                    {rank_stride=prop_qio_stride})
+  qio_w:DiracPropagator(prop_prec, x, title)
+  qio_w:close()
+  tt("done")
+end
+function prop_load_func(fname, title)
+  -- requires in the scope:
+  --  prop_vol_stride   spacing between ranks doing IO (set equal to the number of ranks per 1 IO node)
+  if nil == title then
+    title = ''
+  end
+  printf("LOAD %s '%s'\n", title, fname)
+  local tt = timer(string.format("LOAD %s", title))
+  local qio_r = open_qdpc_read(L, fname, {rank_stride=prop_qio_stride})
+  local res = qio_r:DiracPropagator()
+  qio_r:close()
+  tt("done")
+  return res
+end
+
+
+------------------------------------------------------------------------------
+-- load or compute propagators
+------------------------------------------------------------------------------
+-- general parameter order :
+--    coord; [polaris/flavor]; [prop(s)]; [gf] ; smear/solve
+-- return (prop_F, is_new)
+function get_prop_F(jcfg, csrc, ama, smear_func, solver_func)
+  local L = jcfg.Lat
+  local cfg_key = jcfg.cfg_key
+  local prop_tag = 'prop_F'
+  local prop_F = nil
+  local prop_file = jcfg.get_frwprop_file(cfg_key, csrc, ama)
+  local is_new = not have_prop(cfg_key, prop_tag, prop_file) 
+  if is_new then
+    local tt = timer("CALC " .. prop_tag)
+    local tsrc = csrc[1+t_axis]
+    local src_F_pt = make_source_point(L, csrc)
+    local src_F = L:DiracPropagator()
+    L:Subset({axis=#L-1, position=tsrc}):where(function() src_F:set(
+          smear_func(src_F_pt)) end)                      ; tt("src")
+    prop_F  = solver_func(src_F)                          ; tt("prop")
+    if do_save_prop.F then
+      prop_save_func(prop_file, prop_F, prop_tag, ama['prop_prec'])
+      done_prop(cfg_key, prop_tag, prop_file)
+    end
+    tt("done")
+  else
+    prop_F = prop_load_func(prop_file, prop_tag)
+  end
+  return prop_F, is_new
+end
+-- return (prop_C, is_new)
+-- jc = {
+--    Lat       = <lattice>,
+--    cfg_key = <cfg_key>,
+--    get_frwprop_file                    -- get_frwprop_file
+--    get_seqprop_nucsink_file            -- get_bkwprop_file
+--    get_seqprop_vacins_file             -- get_cedmseqprop_file
+--    get_seqprop_vacins_nucsink_file     -- get_cedmsinkseqprop_grp_file
+--    get_frwprop_grp_file                -- get_frwprop_grp_file
+--    get_seqprop_grp_nucsink_file        -- get_bkwprop_grp_file
+--    get_seqprop_grp_vacins_file         -- get_cedmseqprop_file
+--    get_seqprop_grp_vacins_nucsink_file -- get_cedmsinkseqprop_grp_file
+--    get_bb_vacins_file                  -- get_bb_volcedm_file
+--    get_c2ptcpbar_vacins_file           -- get_c2pt_cpbar_file
+--    get_bbspace_file                    -- get_bbspace_file
+--    get_bb_file                         -- get_bb_file
+--    get_c2pt_vacins_file                -- get_c2pt_volcedm_file
+--    get_c2pt_file                       -- get_c2pt_file
+--    get_hadspec_file                    -- get_hadspec_file
+
+function get_prop_C(jcfg, csrc, ama, prop_F, vacins, 
+    smear_func, solver_func)
+  local L = jcfg.Lat
+  local cfg_key = jcfg.cfg_key
+  local prop_tag = 'prop_C'
+  local prop_C = nil
+  local prop_file = jcfg.get_seqprop_vacins_file(cfg_key, csrc, vacins, ama)
+  local is_new = not have_prop(cfg_key, prop_tag, prop_file)
+  if is_new then
+    local tt = timer("CALC " .. prop_tag)
+    local src_C = seqsrc_vacins(prop_F, vacins)   ; tt("src")
+    prop_C = solver_func(src_C)                       ; tt("prop")
+    if do_save_prop.C then
+      prop_save_func(prop_file, prop_C, prop_tag, ama['prop_prec'])
+      done_prop(cfg_key, prop_tag, prop_file)
+    end
+    tt("done")
+  else
+    prop_C = prop_load_func(prop_file, prop_tag)
+  end
+  return prop_C, is_new
+end
+-- return (prop_B, is_new)
+function get_prop_B(jcfg, csrc, ama, psnk, tsnk, 
+      S2, S1, Tpol, tpol_tag, flav_bkw, prop_F_sm, 
+      smear_func, solver_func)
+  local L = jcfg.Lat
+  local cfg_key = jcfg.cfg_key
+  local prop_tag = 'prop_B'
+  local prop_B = nil
+  local prop_file = jcfg.get_seqprop_nucsink_file(
+      cfg_key, csrc, psnk, tsnk, tpol_tag, flav_bkw, ama)
+  local is_new = not have_prop(cfg_key, prop_tag, prop_file)
+  if is_new then
+    local tt = timer("CALC " .. prop_tag)
+    local src_B_pt = baryon_sigma_seqsrc_sink(flav_bkw, 
+          prop_F_sm, prop_F_sm, csrc, psnk, tsnk, S2, S1, Tpol)
+    local src_B_adj = L:DiracPropagator()
+    L:Subset({axis=#L-1, position=tsnk}):where(function() src_B_adj:set(
+          gamma{n=15} * smear_func(src_B_pt:adjoin())) end)           ; tt("src")
+    prop_B = solver_func(src_B_adj):adjoin() * gamma{n=15}            ; tt("prop")
+    if do_save_prop.B then
+      prop_save_func(prop_file, prop_B, prop_tag, ama['prop_prec'])
+      done_prop(cfg_key, prop_tag, prop_file)
+    end
+    tt("done")
+  else
+    prop_B = prop_load_func(prop_file, prop_tag)
+  end
+  return prop_B, is_new
+end
+
+-- return (prop_B, is_new)
+function get_propgrp_B(jcfg, csrcgrp, ama, psnk, tsep,
+      S2, S1, Tpol, tpol_tag, flav_bkw, propgrp_F_sm, 
+      smear_func, solver_func)
+  local L = jcfg.Lat
+  local cfg_key = jcfg.cfg_key
+  local prop_B = nil
+  local csrc_coh0 = csrcgrp[1]
+  local prop_file = jcfg.get_seqprop_grp_nucsink_file(
+        cfg_key, csrcgrp, psnk, tsep, tpol_tag, flav_bkw, ama)
+  local is_new = not have_prop(cfg_key, prop_tag, prop_file)
+  if is_new then
+    local tt = timer("CALC " .. prop_tag)
+    local src_B_adj = L:DiracPropagator()  -- zero
+    for i_csrc, csrc in pairs(csrcgrp) do
+      local tsnk = (csrc[1+t_axis] + tsep) % L[t_axis]
+      -- XXX tsnk must be in the correct slab of propgrp_F_sm, propgrp_C_sm
+      -- XXX sic! cedm_seqsrc_sink already uses subsets, no need for further opt
+      local src_B_pt = baryon_sigma_seqsrc_sink(flav_bkw, 
+            propgrp_F_sm, propgrp_F_sm, csrc, psnk, tsnk, S2, S1, Tpol)
+      L:Subset({axis=#L-1, position=tsnk}):where(function() src_B_adj:set(
+            gamma{n=15} * smear_func(src_B_pt:adjoin()))end)
+    end
+    prop_B = solver_func(src_B_adj):adjoin() * gamma{n=15}            ; tt("prop")
+    if do_save_prop.B then
+      prop_save_func(prop_file, prop_B, prop_tag, ama['prop_prec'])
+      done_prop(cfg_key, prop_tag, prop_file)
+    end
+    tt("done")
+  else
+    prop_B = prop_load_func(prop_file, "prop_B")
+  end
+  return prop_B, is_new
+end
+
+-- return (prop_EpG, is_new)
+function get_prop_EpG(jcfg, csrc, ama, psnk, tsnk, 
+    S2, S1, Tpol, tpol_tag, flav_cur, 
+    prop_F_sm, -- frw(F), smeared
+    prop_C_sm, -- frw cedm-seq (C), smeared
+    prop_B5, -- bkw(\tilde B), unsmeared
+    vacins,
+    smear_func, solver_func)
+  local L = jcfg.Lat
+  local cfg_key = jcfg.cfg_key
+  local prop_tag = 'prop_EpG'
+  local prop_EpG = nil
+  local prop_file = jcfg.get_seqprop_vacins_nucsink_file(
+        cfg_key, csrc, psnk, tsnk, tpol_tag, flav_cur, vacins, ama)
+  local is_new = not have_prop(cfg_key, prop_tag, prop_file)
+  if is_new then
+    local tt = timer("CALC " .. prop_tag)
+    -- G source(cEDM-sink-seq), smeared from right
+    local src_EpG_pt = seqsrc_vacins_nucsink(flav_cur, vacins,
+        prop_F_sm, prop_C_sm, csrc, psnk, tsnk, S2, S1, Tpol)
+    local src_EpG_adj = L:DiracPropagator()
+    L:Subset({axis=#L-1, position=tsnk}):where(function() src_EpG_adj:set(
+        gamma{n=15} * smear_func(src_EpG_pt:adjoin())) end)
+    -- E source(sink-cEDM-seq), no smearing
+    if flav_cur == flav_cedm then
+      src_EpG_adj = src_EpG_adj + gamma{n=15} * seqsrc_vacins_bkw(prop_B5, vacins):adjoin()
+    end
+    tt("src")
+    prop_EpG = solver_func(src_EpG_adj):adjoin() * gamma{n=15} ; tt("prop")
+    if do_save_prop.EpG then
+      prop_save_func(prop_file, prop_EpG, prop_tag, ama['prop_prec'])
+      done_prop(cfg_key, prop_tag, prop_file)
+    end
+    tt("done")
+  else
+    prop_EpG = prop_load_func(prop_file, prop_tag)
+  end
+  return prop_EpG, is_new
+end
+-- return (prop_EpG, is_new)
+function get_propgrp_EpG(jcfg, csrcgrp, ama, psnk, tsep, 
+    S2, S1, Tpol, tpol_tag, flav_cur,
+    propgrp_F_sm, -- frw(F), smeared
+    propgrp_C_sm, -- frw cedm-seq (C), smeared
+    propgrp_B5, -- bkw(\tilde B), unsmeared
+    vacins,
+    smear_func, solver_func)
+  -- prop_Bcpb must have the same flav_cur==flav_cedm
+  local L = jcfg.Lat
+  local cfg_key = jcfg.cfg_key
+  local prop_tag = 'prop_EpG'
+  local prop_EpG = nil
+  local csrc_coh0 = csrcgrp[1]
+  local prop_file = jcfg.get_seqprop_grp_vacins_nucsink_file(
+        cfg_key, csrcgrp, psnk, tsep, tpol_tag, flav_cur, vacins, ama)
+  local is_new = not have_prop(cfg_key, prop_tag, prop_file)
+  if is_new then
+    local tt = timer("CALC " .. prop_tag)
+    -- G source(cEDM-sink-seq), smeared from right
+    local src_EpG_adj = L:DiracPropagator() -- zero
+    for i_csrc, csrc in pairs(csrcgrp) do
+      local tsnk = (csrc[1+t_axis] + tsep) % L[t_axis]
+      local src_EpG_pt = vacins_seqsrc_ins_sink(flav_cur, vacins,
+                          propgrp_F_sm, propgrp_C_sm, 
+                          csrc, psnk, tsnk, S2, S1, Tpol)
+      L:Subset({axis=#L-1, position=tsnk}):where(function() src_EpG_adj:set(
+            gamma{n=15} * smear_func(src_EpG_pt:adjoin()))end)
+    end
+    -- E source(sink-cEDM-seq), no smearing
+    if flav_cur == flav_cedm then
+      src_EpG_adj = src_EpG_adj + gamma{n=15} * seqsrc_vacins_bkw(
+                        propgrp_B5, vacins):adjoin()
+    end
+    tt("src")
+    prop_EpG = solver_func(src_EpG_adj):adjoin() * gamma{n=15} ; tt("prop")
+    if do_save_prop.EpG then
+      prop_save_func(prop_file, prop_EpG, prop_tag, ama['prop_prec'])
+      done_prop(cfg_key, prop_tag, prop_file)
+    end
+    tt("done")
+  else
+    prop_EpG = prop_load_func(prop_file, prop_tag)
+  end
+  return prop_EpG, is_new
+end
+
+
+
+------------------------------------------------------------------------------
+-- function to sample one source location
+------------------------------------------------------------------------------
+function sample_c23pt_cpv_vacins(jcfg, csrcgrp, 
+        hslab_len_t, bbspace_len_t, ama,
+        c2pt_psnk_list, c3pt_psnk_list, c3pt_qext_list, tsep_list,
+        S2, S1, 
+        Tpol_list_c3pt, Tpol5_list_c3pt,
+        flav_cur_list, gf_lpath, 
+        vacins_list, tsep_vacins_list,
+        smear_func, solver_func, 
+        t_axis, ferm_bc,
+        redo_contract)
+  -- parameters
+  --  L               lattice object
+  --  cfg_key          gauge cfg "key" : string
+  --  csrcgrp         group of coherent sources for the coh.sample
+  --  ama             AMA parameter for saving files
+  --  c2pt_psnk_list  sink momentum for c2pt, c2pt_volcedm
+  --  c3pt_psnk_list  sink momentum for c3pt, c2pt_cpbar
+  --  c3pt_qext_list  list of momenta for insertions
+  --  tsep_list       source-sink separation list
+  --  S2, S1          sink and source diquark spin structures
+  --  Tpol_list, Tpol5_list 
+  --                  list of nucleon polarization matrices for 0- and 1-st order in CEDM insertions
+  --  flav_list       flavors for cedm and current insertions
+  --  gf_lpath        gauge field for link paths in building blocks
+  --  gf_clov_list    table of (smeared) gauge clover term for the cEDM insertions
+  --  smear_func      source smearing function x_smeared = smear_func(x_point)
+  --  solver_func     fermion solver x = solver_func(y) <-> Dslash.x = y
+  --  redo_contract   { hadspec=false, c2pt=false,
+  --                    c2pt_volcedm=false, c2pt_cpbar=false,
+  --                    bb=true, bb_volcedm=true }
+
+  -- also requires global functions for propagator storage
+  --  get_frwprop_file            F
+  --  get_hadspec_file
+  --  get_c2pt_volcedm_file
+  --  get_cedmseqprop_file
+  -- and variables
+
+  -- XXX envs : 
+  --    latsize
+  --    hadspec_baryon_list, hadspec_meson_list 
+  --    bb_link_min, bb_link_max,
+  --    bb_volcedm_link_min, bb_volcedm_link_max,
+  --    t_axis
+  --    ferm_bc
+  local timer_1srcgrp = timer(string.format('1srcgrp[%d]', #csrcgrp))
+  local csrcgrp_key = csrcgrp_str(csrcgrp)
+  redo_contract = redo_contract or {}
+  local tt    -- timer
+  local bc_quark_t  = ferm_bc[1+t_axis]
+  local bc_baryon_t = bc_quark_t^3
+  local bc_quark_tpos = table_copy(ferm_bc)
+  bc_quark_tpos[1+t_axis] = 1   -- for baryon_save_bb
+  local lt          = L[t_axis]           -- time extent
+
+  assert(0 < #csrcgrp)
+  local csrc_coh0 = csrcgrp[1]
+  local csrc0_str  = string.format("x%d_y%d_z%d_t%d", 
+            csrc_coh0[1],csrc_coh0[2],csrc_coh0[3],csrc_coh0[4])
+  local tsrc_coh0 = csrc_coh0[1+t_axis]
+  local tsnk_full = (lt + tsrc_coh0 - 1) % lt -- full Lt tsnk for saving BB
+  local tsep_full = lt - 1 -- full-Lt tsep for saving BB
+
+  -- build hyperslab subsets for constructing frwprop_grp, bbspace
+  local csrc_hslab = hyperslab_subset_grp(L, csrcgrp, hslab_len_t, t_axis,
+          {verbose=true})
+  local bbspace_hslab_map, bbspace_L = hyperslab_subvol_scatter_grp(L, csrcgrp, 
+          bbspace_len_t, t_axis, {shift_space=true})
+
+  -- XXX F-props are stored separately (need full Lt extent for volume insertions) 
+  local prop_F_list = {}    -- FIXME rearrange to compute F&C together, drop list to save RAM
+  local propgrp_F = L:DiracPropagator()
+  local is_new_F_grp = false
+  for i_csrc, csrc in pairs(csrcgrp) do
+    local prop_F, is_new_F = get_prop_F(jcfg, csrc, ama, smear_func, solver_func)
+    is_new_F_grp = is_new_F_grp or is_new_F
+    prop_F_list[i_csrc]   = prop_F
+    csrc_hslab[i_csrc]:where(function()propgrp_F:set(prop_F)end)
+  end -- csrc
+  if do_save_prop.Fg then
+    local prop_Fg_file = jcfg.get_frwprop_grp_file(cfg_key, csrcgrp, ama)
+    prop_save_func(prop_Fg_file, propgrp_F, 'prop_Fg', ama['prop_prec'])
+  end
+  tt  = timer('smear_prop_F')
+  local propgrp_F_sm  = smear_func(propgrp_F)
+  tt('done')
+  if is_new_F_grp or redo_contract.hadspec then -- contract hadspec, c2pt (CP-even)
+    -- hadspec (all mesons, baryons)
+    tt  = timer("save_hadspec") 
+    local hspec_fname = jcfg.get_hadspec_file(cfg_key, csrc_coh0, ama)
+    printf('[save_hadspec] %s\n', hspec_fname)
+    os.mkdir_path(dirname(hspec_fname))
+    local aff_hadspec = qcd.aff.Writer(hspec_fname)
+    save_hadspec_list_fast(L, aff_hadspec, string.format('/hadspec/SP/%s/', csrcgrp_key),
+                     propgrp_F, propgrp_F, csrc_coh0, c2pt_psnk_list,
+                     t_axis, bc_quark_t, hadspec_baryon_list, hadspec_meson_list)
+    save_hadspec_list_fast(L, aff_hadspec, string.format('/hadspec/SS/%s/', csrcgrp_key),
+                     propgrp_F_sm, propgrp_F_sm, csrc_coh0, c2pt_psnk_list,
+                     t_axis, bc_quark_t, hadspec_baryon_list, hadspec_meson_list)
+    aff_hadspec:close()
+    tt('done')
+  end
+  if is_new_F_grp or redo_contract.c2pt then
+    -- c2pt (protons with all tpol)
+    tt  = timer("save_c2pt") 
+    local c2pt = {} -- [kpath]
+    local c2pt_sm = {} -- [kpath]
+    for tpol_g = 0, 15 do
+      local tpol, tpol_tag = gamma{n=tpol_g}, string.format("Tg%d", tpol_g)
+      local k_cc = string.format('proton_%s', tpol_tag)
+      c2pt[k_cc] = cedm_baryon_sigma(propgrp_F, propgrp_F, S2, S1, tpol)
+      c2pt_sm[k_cc] = cedm_baryon_sigma(propgrp_F_sm, propgrp_F_sm, S2, S1, tpol)
+    end -- tpol
+    local c2pt_fname = jcfg.get_c2pt_file(cfg_key, csrc_coh0, ama)
+    printf("[save_c2pt] %s\n", c2pt_fname)
+    os.mkdir_path(dirname(c2pt_fname))
+    local c2pt_aff  = qcd.aff.Writer(c2pt_fname)
+    save_2pt_list_fast(L, c2pt_aff, string.format('/c2pt/SP/%s/', csrcgrp_key),
+              c2pt, csrc_coh0, c2pt_psnk_list, t_axis, bc_baryon_t)
+    save_2pt_list_fast(L, c2pt_aff, string.format('/c2pt/SS/%s/', csrcgrp_key),
+              c2pt_sm, csrc_coh0, c2pt_psnk_list, t_axis, bc_baryon_t)
+    c2pt_aff:close()
+    tt('done')
+  end -- is_new_F_grp
+  
+  -- compute all seqprop_vacins(C)
+  local propgrp_C = {}    -- [i_vacins]
+  local propgrp_C_sm = {} -- [i_vacins]
+  for i_vacins, vacins in pairs(vacins_list) do
+    local is_new_C_grp = false
+    local propgrp_C_i = L:DiracPropagator()
+    for i_csrc, csrc in pairs(csrcgrp) do
+      -- XXX C-props are stored separately (need full Lt extent for volume insertions)
+      local prop_C, is_new_C = get_prop_C(jcfg, csrc, ama, 
+          prop_F_list[i_csrc], vacins, smear_func, solver_func)
+      is_new_C_grp = is_new_C_grp or is_new_C
+      csrc_hslab[i_csrc]:where(function()propgrp_C_i:set(prop_C)end)
+    end -- csrc
+    tt  = timer('smear_prop_C')
+    if do_save_prop.Cg then
+      local prop_Cg_file = jcfg.get_cedmseqprop_grp_file(cfg_key, csrcgrp, vacins, ama)
+      prop_save_func(prop_Cg_file, propgrp_C_i, 'prop_Cg', ama['prop_prec'])
+    end
+    propgrp_C[i_vacins] = propgrp_C_i
+    propgrp_C_sm[i_vacins] = smear_func(propgrp_C_i)
+    tt('done')
+    if is_new_C_grp or redo_contract.c2pt_volcedm then -- contract c2pt_volcedm (CP-odd, t=tsink)
+      tt = timer("save_c2pt_volcedm")
+      local c2pt_volcedm    = {} -- [kpath]
+      local c2pt_volcedm_sm = {} -- [kpath]
+      for i_flav, flav in pairs(flav_list) do
+        for tpol_g = 0, 15 do
+          local tpol5, tpol5_tag = gamma{n=tpol_g}, string.format("Tg%d", tpol_g)
+          local k_cc = string.format('%s/proton_%s/%s', 
+                                gf_tag, tpol5_tag, flav)
+          c2pt_volcedm[k_cc]    = cedm_baryon_sigma_seqone(
+                                propgrp_F, propgrp_F, propgrp_C[gf_tag],
+                                flav, S2, S1, tpol5)
+          c2pt_volcedm_sm[k_cc] = cedm_baryon_sigma_seqone(
+                                propgrp_F_sm, propgrp_F_sm, propgrp_C_sm[gf_tag],
+                                flav, S2, S1, tpol5)
+        end --tpol5
+      end --flav
+      
+      local c2pt_volcedm_file = get_c2pt_volcedm_file(cfg_key, csrc_coh0, gf_tag, ama)
+      printf("[save_c2pt_volcedm] %s\n", c2pt_volcedm_file)
+      os.mkdir_path(dirname(c2pt_volcedm_file))
+      local c2pt_volcedm_aff  = qcd.aff.Writer(c2pt_volcedm_file)
+      save_2pt_list_fast(L, c2pt_volcedm_aff, string.format('/c2pt_volcedm/SP/%s/', csrcgrp_key),
+                c2pt_volcedm, csrc_coh0, c2pt_psnk_list, t_axis, bc_baryon_t)
+      save_2pt_list_fast(L, c2pt_volcedm_aff, string.format('/c2pt_volcedm/SS/%s/', csrcgrp_key),
+                c2pt_volcedm_sm, csrc_coh0, c2pt_psnk_list, t_axis, bc_baryon_t)
+      c2pt_volcedm_aff:close()
+      tt("done")
+    end -- is_new_C_grp
+  end -- gf_tag
+
+  for i_tsep, tsep in pairs(tsep_list) do
+    for i_psnk, psnk in pairs(c3pt_psnk_list) do
+      local psnk_str = string.format("PX%d_PY%d_PZ%d", psnk[1], psnk[2], psnk[3])
+      -- compute prop_B, save CP-even c3pt
+      for tpol_tag, tpol in pairs(Tpol_list_c3pt) do
+        for i_flav_cur, flav_cur in pairs(flav_list) do
+          local propgrp_B, is_new_B_grp = get_propgrp_B(
+              L, cfg_key, csrcgrp, ama, psnk, tsep, 
+              S2, S1, tpol, tpol_tag, flav_cur, 
+              propgrp_F_sm,
+              smear_func, solver_func)
+          if is_new_B_grp or redo_contract.bb then -- contract c3pt(t=tcur, tsnk=const, flav=flav_cur)
+            tt = timer("save_bb")
+            local bb_file = get_bb_file(cfg_key, csrc_coh0, psnk, tsep,
+                tpol_tag, flav_cur, ama)
+            printf("[save_bb] %s\n", bb_file)
+            os.mkdir_path(dirname(bb_file))
+            local bb_aff = qcd.aff.Writer(bb_file)
+            general_save_bb(bb_aff, 
+                string.format("/bb/SS/proton_%s/%s/%s/%s_dt%d", tpol_tag, flav_cur, 
+                              csrcgrp_key, psnk_str, tsep),
+                { propgrp_F }, { propgrp_B }, gf_lpath, 
+                csrc_coh0, lt - 1, bb_link_min, bb_link_max,
+                c3pt_qext_list, t_axis, ferm_bc)
+            bb_aff:close()
+            tt("done")
+          end
+          if is_new_B_grp or redo_contract.bbspace then -- contract c3pt_space(t=tcur, tsnk=const, flav=flav_cur)
+            tt = timer("save_bbspace")
+            local bbspace_file = get_bbspace_file(cfg_key, csrc_coh0, psnk, tsep,
+                tpol_tag, flav_cur, ama)
+            printf("[save_bbspace] %s\n", bbspace_file)
+            os.mkdir_path(dirname(bbspace_file))
+            local kpath = string.format("/bbspace/SS/proton_%s/%s/%s/%s_dt%d", 
+                tpol_tag, flav_cur, csrcgrp_key, psnk_str, tsep)
+            if 'hdf5' == bbspace_opt.fmt then 
+              os.rm(bbspace_file, {wait=true, nofail=true, verbose=true})
+              local h5_w = qcd.hdf5.Writer(bbspace_file, bbspace_opt.h5param)
+              save_qbarq_space_h5(h5_w, kpath,
+                  bbspace_hslab_map(propgrp_F), bbspace_hslab_map(propgrp_B), 
+                  bbspace_gamma_ins, { precision=bbspace_opt.prec })
+            h5_w:close()
+            elseif 'qio' == bbspace_opt.fmt then
+              local qio_w = open_qdpc_write(bbspace_L, bbspace_file, '', 
+                  bbspace_opt.volfmt, bbspace_opt.qioparam)
+              save_qbarq_space_qio(qio_w, kpath,
+                  bbspace_hslab_map(propgrp_F), bbspace_hslab_map(propgrp_B), 
+                  bbspace_gamma_ins, { precision=bbspace_opt.prec })
+              qio_w:close()
+            else error(string.format("unknown fmt='%s'", bbspace.fmt)) end
+            tt("done")
+          end
+        end -- flav_cur
+      end -- tpol
+      force_gc("sample_cedm_2pt:prop_B")
+
+      -- compute prop_B5, save CP-odd c2pt
+      -- compute prop_EpG, save CP-odd c3pt
+      for tpol5_tag, tpol5 in pairs(Tpol5_list_c3pt) do
+        for i_flav_cur, flav_cur in pairs(flav_list) do
+          local propgrp_B5, is_new_B5_grp = get_propgrp_B(
+              L, cfg_key, csrcgrp, ama, psnk, tsep, 
+              S2, S1, tpol5, tpol5_tag, flav_cur, 
+              propgrp_F_sm, 
+              smear_func, solver_func)
+          
+          if is_new_B5_grp or redo_contract.c2pt_cpbar then -- contract c2pt_cpbar(t=tcedm, tsnk=const, flav_cedm:=flav_cur)
+            tt = timer("save_c2pt_cpbar")
+            local c2pt_cpbar  = {} -- [kpath]
+            for gf_tag, gf_clov in pairs(gf_clov_list) do
+              local cedm_frwprop = cedm_seqsrc_edm(propgrp_F, gf_clov)
+              local cc = (propgrp_B5 * cedm_frwprop):trace()
+              local k_cc = string.format('%s/proton_%s/%s/%s_dt%d', 
+                              gf_tag, tpol5_tag, flav_cur, psnk_str, tsep)
+              -- correct for boundary conditions (maintaining compat with prev calc)
+              for i_csrc, csrc in pairs(csrcgrp) do
+                if lt <= csrc[1+t_axis] + tsep then
+                  csrc_hslab[i_csrc]:where(function()cc:set(bc_baryon_t * cc)end)
+                end -- wrap-around
+              end -- csrc
+              c2pt_cpbar[k_cc] = cc
+            end -- gf
+
+            local c2pt_cpbar_file = get_c2pt_cpbar_file(cfg_key, csrc_coh0, psnk, tsep, 
+                tpol5_tag, flav_cur, ama)
+            printf("[save_c2pt_cpbar] %s\n", c2pt_cpbar_file)
+            os.mkdir_path(dirname(c2pt_cpbar_file))
+            local c2pt_cpbar_aff  = qcd.aff.Writer(c2pt_cpbar_file)
+            save_2pt_list_fast(L, c2pt_cpbar_aff, string.format('/c2pt_cpbar/SS/%s', csrcgrp_key),
+                    c2pt_cpbar, csrc_coh0, c2pt_psnk_list, t_axis, 1)  -- sic! no BC_t when tcedm wraps around Lt
+            c2pt_cpbar_aff:close()
+            tt("done")
+          end -- if is_new_B5_grp
+
+          for gf_tag, gf_clov in pairs(gf_clov_list) do
+            for i_flav_cedm, flav_cedm in pairs(flav_list) do
+              local propgrp_EpG, is_new_EpG_grp = get_propgrp_EpG(
+                  L, cfg_key, csrcgrp, ama, psnk, tsep,
+                  S2, S1, tpol5, tpol5_tag, flav_cur, flav_cedm,
+                  propgrp_F_sm, propgrp_C_sm[gf_tag], propgrp_B5, 
+                  gf_clov, gf_tag,
+                  smear_func, solver_func)
+              if is_new_EpG_grp or redo_contract.bb_volcedm then -- contract c3pt_cpbar
+                tt = timer("save_bb_volcedm")
+                local bb_volcedm_file = get_bb_volcedm_file(cfg_key, csrc_coh0, psnk, tsep,
+                    tpol5_tag, flav_cur, flav_cedm, gf_tag, ama)
+                printf("[save_bb_volcedm] %s\n", bb_volcedm_file)
+                os.mkdir_path(dirname(bb_volcedm_file))
+                local bb_volcedm_aff = qcd.aff.Writer(bb_volcedm_file)
+
+                local p1_list = {}
+                local p2_list = {}
+                if flav_cur == flav_cedm then
+                  p1_list = { propgrp_F,   propgrp_C[gf_tag] }
+                  p2_list = { propgrp_EpG, propgrp_B5        }
+                else
+                  p1_list = { propgrp_F   }
+                  p2_list = { propgrp_EpG }
+                end
+                general_save_bb(bb_volcedm_aff, 
+                    string.format("/bb_volcedm/SS/%s/proton_%s/%s/%s/%s/%s_dt%s", 
+                        gf_tag, tpol5_tag, flav_cur, flav_cedm, csrcgrp_key, psnk_str, tsep),
+                    p1_list, p2_list, gf_lpath, 
+                    csrc_coh0, lt - 1, bb_volcedm_link_min, bb_volcedm_link_max,
+                    c3pt_qext_list, t_axis, ferm_bc)
+                bb_volcedm_aff:close()
+                tt("done")
+              end -- is_new_EpG_grp
+            end -- flav_cedm
+          end -- gf
+        end -- flav_cur
+      end -- tpol5
+      force_gc("sample_cedm_2pt:prop_B5")
+
+    end -- psnk
+  end -- tsep
+
+  force_gc("sample_cedm_2pt")
+  timer_1srcgrp('done')
+end
+
+
+------------------------------------------------------------------------------
+-- MAIN
+------------------------------------------------------------------------------
+
+-- gauge field for source construction
+wup_gauge_u = APE_smear(gauge_u, ape_alpha, ape_N, ape_accu, ape_maxiter, t_axis)
+
+-- calc gauge_clover term
+function gauge_clover_cedm(gauge_u)
+  -- calc clover G_{mu nu} with color trace subtracted
+  local L = latvec.lattice(gauge_u)
+  local cm_1 = L:ColorMatrix(1.)
+  local gauge_gmunu = {}
+  for i = 0, #L-1 do
+    gauge_gmunu[1+i] = {}
+    gauge_gmunu[1+i][1+i] = false
+    for j = 0, i - 1 do
+      local c = gauge_clover(gauge_u, i, j)
+      c = c - (c:trace() / c:colors()) * cm_1
+      gauge_gmunu[1+i][1+j]  =  c
+      gauge_gmunu[1+j][1+i]  = -c
+    end
+  end
+  return gauge_gmunu
+end
+gf_clov_list = {
+  orig  = gauge_clover_cedm(gauge_u)
+}
+
+-------------------------------------------------------------------------------
+-- initialize mdwf object 
+-- LOAD EIGENVECTORS
+-------------------------------------------------------------------------------
+-- XXX init mdwf and load defl.evecs ONLY if (re)computing props
+--     if props are not available on disc, the call to solver will raise error
+
+
+for i_ama, ama in pairs(job_config.ama_list) do
+  printf("INFO: AMA=%s\n", ama_str(ama))
+  local n_sample_tot = #ama['csrcgrp_list']
+  local i_sample_list = range(1, 1 + n_sample_tot)
+  if sample_list then 
+    printf("WARN: request samples {%s}\n", list_tostring(sample_list))
+    for i,s in ipairs(sample_list) do 
+      if (n_sample_tot < s) then printf("WARN: SKIP sample[%d]: out of range\n", s) end
+    end
+    i_sample_list = list_slice(i_sample_list, sample_list)
+  end
+  printf("INFO: select  samples {%s}\n", list_tostring(i_sample_list))
+
+  local function smear_func_wup(x) 
+    -- reqiures global wup_a, wup_n, wup_gauge_u, t_axis
+    return wuppertal_smear(wup_gauge_u, wup_alpha, wup_N, x, t_axis)
+  end
+  local solver_func = make_solver(ama)
+  for ii_s, i_sample in ipairs(i_sample_list) do
+    local csrcgrp = ama['csrcgrp_list'][i_sample]
+    local csrcgrp_tag = csrcgrp_str(csrcgrp)
+    local sample_tag = string.format('%s.%s.%s', job_tag, ama_str(ama), csrcgrp_tag)
+    if (not ama.csrcgrp_skip  or ama.csrcgrp_skip < i_sample) then
+      if have_sample(cfg_key, sample_tag) then 
+        printf("INFO: SKIP sample[%d] '%s': done\n", i_sample, sample_tag)
+      else 
+        sample_c23pt_cpbar_volcedm(L, cfg_key, csrcgrp, hslab_len_t, bbspace_len_t, ama,
+              c2pt_psnk_list, c3pt_psnk_list, c3pt_qext_list, c3pt_tsep_list,
+              cedm_S2, cedm_S1, 
+              cedm_Tpol_c3pt_list, cedm_Tpol5_c3pt_list, 
+              flav_list,
+              gauge_u, gf_clov_list,
+              smear_func_wup, solver_func, 
+              t_axis, ferm_bc,
+              { hadspec=true, c2pt=true, 
+                c2pt_volcedm=true, c2pt_cpbar=true,
+                bb=true, bbspace=true, bb_volcedm=true }    -- redo contractions
+              )
+        done_sample(cfg_key, sample_tag)
+        printf("INFO: DONE sample[%d] '%s'\n", i_sample, sample_tag)
+      end
+    end
+  end
+  solver_func = nil
+  force_gc()
+  print_obj(qcd.memory_usage())
+end
+
+job_config.job_timer("done")
+printf("QLUA_RUN_SUCCESS\n")
+-- vim : syn=lua

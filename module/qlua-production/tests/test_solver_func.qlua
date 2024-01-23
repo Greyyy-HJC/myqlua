@@ -1,0 +1,85 @@
+package.path = 'qlib/?.qlua;qlib-lhpc/?.qlua;qlua-production/?.qlua;' .. package.path
+require 'strict'
+require 'stdlib'
+require 'gauge'
+require 'latvec'
+require 'rcparam'
+require 'hadron/qbarq_wline'
+require 'qdpc_io'
+
+------------------------------------------------------------------------------
+-- INITIALIZATION: 
+--  import config(which reads gauge, evecs, sets up ama, make_solver)
+------------------------------------------------------------------------------
+if true then
+--if false then
+  -- perhaps use a list of keys to check that all names have been defined?
+  -- check `k' ~= nil ! otherwise, _G[k] will be set to nil, avoiding 'strict'
+  for k,v in pairs(job_config) do   
+    assert('string' == type(k))
+    if nil == v then 
+      printf("WARNING: job_config.%s = nil\n", k) 
+    end
+    _G[k] = v
+  end
+end
+
+function debug_mem_print(cfg_key, msg)
+  msg = msg or ""
+  os.mkdir_path('logs')
+  if 0 == os.node() then qcd.log_rusage(string.format("%s/%s.rusage", logdir, cfg_key), msg) end
+  print_obj(qcd.memory_usage(), msg)
+end
+
+------------------------------------------------------------------------------
+-- BENCHMARKS
+------------------------------------------------------------------------------
+-- la benchmark
+--if preptest.bmark_la then
+--  for i, la_pp in pairs({
+--          { "gemm", "c",   300,    300,    300 },
+--          { "gemm", "z",   300,    300,    300 },
+--          { "gemm", "c",  1000,   1000,   1000 },
+--          { "gemm", "z",  1000,   1000,   1000 },
+--  --        { "gemm", "c",  3000,   3000,   3000 },
+--  --        { "gemm", "z",  3000,   3000,   3000 },
+--        }) do
+--    local bm, pd, m,n,k = unpack(la_pp)
+--    local cur_str = string.format("la_benchmark %2s %6s  %6d %6d %6d", bm, pd, m, n, k)
+--    printf("%s\n", cur_str)
+--    local cur_t = timer(cur_str)
+--    qcd.latmat.la_benchmark(bm, pd, m, n, k)
+--    cur_t("done")
+--  end
+--end
+
+
+
+-- iterate over AMA
+for i_ama, ama in ipairs(ama_list) do
+  -- init & check solver (must be mass norm)
+  local cl_obj = qcd.Clover(gauge_u_stout, quark_kappa, quark_csw, quark_bc)
+  local op_dslash = function(x) 
+    local tt  = timer('op_dslash')
+    -- XXX mass norm
+--    local res = latvec.dslash_wilson_clover(x, gauge_u_stout_bc, quark_mass, quark_csw, gauge_stout_clover_g)
+    local res = cl_obj:D(x) / (2. * quark_kappa)
+    tt('done')
+    return res
+  end
+
+  local solver_func = make_solver(ama)
+  for isol = 1, 4 do
+    local dp_rhs = rnd:gaussian_DiracPropagator()
+    local tt_sol = timer(string.format("solver.%s[%d](dp)", ama.approx, isol))
+    local dp_sol = solver_func(dp_rhs)      ; tt_sol('done')
+    local dp_rhs2= op_dslash(dp_sol)        ; tt_sol('+op_dslash')
+    latvec.print_cmp(dp_rhs2, dp_rhs, "x<>Dshash(solve(x))")
+    assert(math.abs(dp_rhs2:norm2() / dp_rhs:norm2() - 1.) < 10 * ama.tol
+        or 'random' == rcparam.get('backend.dslash_solver'))
+  end
+end
+
+qcd.qprof_print()
+job_config.job_timer('done')
+printf("QLUA_RUN_SUCCESS\n")

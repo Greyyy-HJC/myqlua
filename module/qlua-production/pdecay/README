@@ -1,0 +1,3 @@
+2019/03/19 sns: starting from pdecay/calc_c23pt_pdecay_merge_overlap.qlua 
+	-> calc_c23pt_pdecay_coh_multisrc.qlua: 
+	add coherent, multi-prop, fast contractions

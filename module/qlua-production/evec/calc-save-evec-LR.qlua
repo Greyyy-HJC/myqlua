@@ -1,0 +1,69 @@
+-- compute & save evalues 
+-- perform 1 exact, 1 sloppy inversion on a gaussian source and save src/sol pair
+
+require "gauge"
+require "ape-smear"
+require "stdlib"
+require "lhpc-std"
+require "qdpc_io"
+require "latvec"
+require "defl_util"
+require "setup_util"
+
+tot_timer = timer("total")
+
+print_network_settings()
+L = qcd.lattice(latsize, {network=network_geom})
+print_subgrid_settings(L)
+
+if nil == job_key then 
+  error("nil job_key")
+  os.exit(1)
+end
+cfg_key = job_key
+
+rnd = rnd_init(L, rnd_seed)
+
+-- load & smear gauge
+cur_timer = timer("gauge_read")
+gauge_u = qcd.nersc.read_gauge(L, get_gauge_file(cfg_key))
+cur_timer("done")
+cur_timer = timer("gauge_smear")
+gauge_u_ape = APE_smear(gauge_u, ape_alpha, ape_N, ape_accu, ape_maxiter, t_axis)
+cur_timer("done")
+
+-- construct Moebius obj
+mdwf = qcd.MDWF.generic(gauge_u, ferm_bc, mdwf_L5, mdwf_M5, mdwf_mf, mdwf_b5, mdwf_c5)
+
+-- run Lanczos
+l_timer = timer("deflator_lanczos")
+mdwf_eigcg_df, lanczos_nconv, lanczos_niter = mdwf:eig_deflator_lanczos(
+      l_nev_LR, l_ncv_LR, l_maxiter_LR, l_tol_LR,
+      { ["eigcg"] = {eigcg_vmax, eigcg_nev, eigcg_tol, eigcg_umax},
+        ["which"] = "LR", -- need the largest ev of polynomial T_n(A)
+        ["arpack_logfile"] = arpack_logfile(cfg_key),
+        ["inplace"] = true
+        })
+l_timer("done")
+printf("df_lanczos: nconv=%d  n_iter=%d\n", lanczos_nconv, lanczos_niter)
+
+-- print evalues
+evals = mdwf_eigcg_df:eigenvalues()
+for i=0, #evals - 1 do
+  printf("eval[%04d]=%e\n", i, evals[i])
+end
+
+if false then -- to "comment out"
+-- save evectors
+cur_timer = timer("deflator_space_save")
+df_dim = mdwf_eigcg_df:current_dim()
+qdp_w = open_qdpc_write(L, mdwf_evec_file(cfg_key, df_dim), "", evec_volfmt)
+df_save_dim = deflator_save_espace_d5(
+                  mdwf_eigcg_df, mdwf_Ls, qdp_w, 
+                  evec_pack_eopc, evec_qio_prec)
+printf("df_dim=%d  df_save_dim=%d\n", df_dim, df_save_dim)
+qdp_w:close()
+cur_timer("done")
+end
+
+tot_timer("done")

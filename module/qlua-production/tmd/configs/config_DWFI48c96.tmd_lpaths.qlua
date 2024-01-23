@@ -1,0 +1,43 @@
+require 'hadron/qbarq_wline'
+
+do 
+  local s_ = string.rep
+  tmd_lpspec_bfirst_p000 = tmd_lpspec_expand({
+    { rev=true, s_('y',1), s_('z',1), vl={ rev=true, s_('x', 15) } },
+    { rev=true, s_('y',2), s_('z',2), vl={ rev=true, s_('x', 12) } },
+    { rev=true, s_('y',3), s_('z',3), vl={ rev=true, s_('x', 11) } },
+    { rev=true, s_('y',4), s_('z',4), vl={ rev=true, s_('x', 10) } },
+    { rev=true, s_('y',5), s_('z',5), vl={ rev=true, s_('x',  9) } },
+    { rev=true, s_('y',6), s_('z',6), vl={ rev=true, s_('x',  8) } },
+    { rev=true, s_('y',7), s_('z',7), vl={ rev=true, s_('x',  7) } },
+  })
+
+  md_lpspec_bfirst_p001 = tmd_lpspec_expand({
+    -- b||z; v||x, q, r
+    { rev=true, s_('z',1), vl={ rev=true, s_('x',15), s_('q',11), s_('r',11) } },
+    { rev=true, s_('z',2), vl={ rev=true, s_('x',12), s_('q', 9), s_('r', 9) } },
+    { rev=true, s_('z',3), vl={ rev=true, s_('x',11), s_('q', 8), s_('r', 8) } },
+    { rev=true, s_('z',4), vl={ rev=true, s_('x',10), s_('q', 7), s_('r', 7) } },
+    { rev=true, s_('z',5), vl={ rev=true, s_('x', 9), s_('q', 7), s_('r', 7) } },
+    { rev=true, s_('z',6), vl={ rev=true, s_('x', 8), s_('q', 6), s_('r', 6) } },
+    { rev=true, s_('z',7), vl={ rev=true, s_('x', 7), s_('q', 5), s_('r', 5) } },
+    -- b||y; v||x,z,v,w
+    { rev=true, s_('y',1), vl={ rev=true, s_('x',15), s_('z',15), s_('v',11), s_('w',11) } },
+    { rev=true, s_('y',2), vl={ rev=true, s_('x',12), s_('z',12), s_('v', 9), s_('w', 9) } },
+    { rev=true, s_('y',3), vl={ rev=true, s_('x',11), s_('z',11), s_('v', 8), s_('w', 8) } },
+    { rev=true, s_('y',4), vl={ rev=true, s_('x',10), s_('z',10), s_('v', 7), s_('w', 7) } },
+    { rev=true, s_('y',5), vl={ rev=true, s_('x', 9), s_('z', 9), s_('v', 7), s_('w', 7) } },
+    { rev=true, s_('y',6), vl={ rev=true, s_('x', 8), s_('z', 8), s_('v', 6), s_('w', 6) } },
+    { rev=true, s_('y',7), vl={ rev=true, s_('x', 7), s_('z', 7), s_('v', 5), s_('w', 5) } },
+    -- b||s; v||x
+    { rev=true, s_('s',1), vl={ rev=true, s_('x',14) } },
+    { rev=true, s_('s',2), vl={ rev=true, s_('x',11) } },
+    { rev=true, s_('s',3), vl={ rev=true, s_('x',10) } },
+    { rev=true, s_('s',4), vl={ rev=true, s_('x', 9) } },
+    -- b||u; v||x
+    { rev=true, s_('u',1), vl={ rev=true, s_('x',14) } },
+    { rev=true, s_('u',2), vl={ rev=true, s_('x',11) } },
+    { rev=true, s_('u',3), vl={ rev=true, s_('x',10) } },
+    { rev=true, s_('u',4), vl={ rev=true, s_('x', 9) } },
+  })
+end

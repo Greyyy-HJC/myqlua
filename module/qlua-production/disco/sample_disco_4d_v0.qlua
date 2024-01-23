@@ -1,0 +1,171 @@
+--============= v0 contractions(not tested!) ===============
+-- accumulator for contraction results
+local ctrFB_batch_mt_ = {
+  fini    = function(self) self:exec() end,
+  __gc    = function(self) self:fini() end,
+  is_full = function(self) return self.nbatch <= self.batch_j end,
+  reset = function(self)
+    self.ctr_F:set_zero()
+    self.ctr_B:set_zero()
+    self.batch_j = 0 
+  end,
+  add = function(self, f, b)
+    if self:is_full() then
+      sefl:is_exec()
+    end
+    assert(not self:is_full())  -- was reset or not full
+    local ic, is = (self.batch_j / self.ns), (self.batch_j % self.ns)
+    self.ctr_F[{c=ic, d=is}] = f
+    self.ctr_B[{c=ic, d=is}] = b
+    self.batch_j = self.batch_j + 1
+  end,
+  exec = function(self)
+    if 0 < self.batch_j then
+      self.ctrFB_func(ctr_F, ctr_B:adjoin()) -- sic!
+      self:reset() -- to avoid double counting
+    end
+  end,
+}
+ctrFB_batch_mt_.__index = ctrFB_batch_mt_
+function make_ctrFB_batch(L, ctrFB_func, nbatch)
+  nbatch = nbatch or 12
+  local self = {
+    nbatch = nbatch,
+    nc  = 3, 
+    ns  = 4,
+    ctrFB_func = ctrFB_func,
+    ctr_F = L:DiracPropagator(),
+    ctr_B = L:DiracPropagator(),
+  }
+  assert(self.nc * self.ns == self.nbatch) -- only support 12 (vectors in a propagator) now
+  setmetatable(self, ctrFB_batch_mt_)
+  return self
+end
+
+function make_ctrFB_func_v0(L, tabc, gauge_u, lp_len, opt)
+  -- use contract_state, list of lpaths, ..?
+  --  L       lattice
+  --  lp_list list of linkpaths
+  --  gauge_u field for linkpaths
+  --  tabc
+  opt = opt or {}
+  factor = opt.factor or 1
+  assert('table' == type(tabc))
+  -- TODO replace with iteration over qcd.contractState
+  local function do_bb_contraction(f, b, u, lp_len, lp0, res)
+    local lp0 = lp0 or ''
+    res = res or {}
+    local k = string.format("l%d_%s", #lp0, lp0)
+    res[k] = qcd.contract_('qbarq_g_F_B', {f, b}, 
+            {backend=contract_backend(), result=true})
+    -- iterate over shifts: perform U*f on CPU to avoid ambiguity of GPU gauge links
+    if #lp0 < lp_len then
+      local ldir_list = {'x', 'y', 'z', 't', 'X', 'Y', 'Z', 'T'}
+      for i, ldir in pairs(ldir_list) do
+        -- FIXME exclude backtracking links
+        local f1 = lshift_ldir(dshift_q, ldir, f, u)
+        local lp1 = lp0 .. ldir
+        do_bb_contraction(f1, b, u, lp_len, lp1, res)
+      end
+    end
+    return res
+  end
+
+  return function(f, b)
+    -- table[key]->val
+    local res1 = do_bb_contraction(f, b, gauge_u, lp_len, '', {}) -- stub
+    -- increment ctab
+    for k, v in res1.iteritems() do
+      if nil == ctab[k] then ctab[k] = latvec.zero_like(v)
+      else ctab[k] = latvec.axpy(factor, v, ctab[k]) end 
+    end
+  end
+end
+
+
+function disco4d_wilson_init_v0(qlmx, ctrFB_func, epair_iter, op_func,  opt)
+  -- iterate over eigenpairs to populate deflation eigenspace and compute 
+  -- their contributions to the disconnected contractions
+  -- eigenspace V, \Lambda is for operator (A^H . A) = V . \Lambda . V^H 
+  -- that is used to make SVD of the operator in the deflation subspace:
+  --        [A]_d = U . \Sigma . V^H, 
+  -- where U = A . V . \Sigma^{-1}, \Sigma=+\sqrt{\Lambda}
+  -- the contribution
+  --
+  --  qlmx          QLM object to import eigenvectors to
+  --  ctrFB_func(F,B) contract forward and backward "propagators"
+  --                F = (v1,v2,...,v12), B^\dag = (u1,u2,...,u12)
+  --                TODO modify interface to handle eigenvector lists instead of props
+  --  op_func(x)    apply operator
+  --  epair_iter()  call repeatedly to obtain (evec, eval) pairs; 
+  --            nil is returned if no epairs left
+  --
+  -- XXX function does not check limits; 
+  opt = opt or {}
+  local L = qlmx.lattice
+  local ivec = 0
+  local nvec = opt.nvec or 0    -- default : no limit; stop at (nil,nil) epair
+
+  local ctr_batch = make_ctrFB_batch_v0(L, ctrFB_func, opt.ctr_nbatch)
+  while (nvec <= 0 or ivec < nvec) do
+    local evec, eval = epair_iter()         -- V, \Lambda
+    if nil == evec or nil == eval then break end
+    local sigma = math.sqrt(math.abs(eval)) -- \Sigma
+    local uvec = op_func(evec) / sigma      -- U 
+    qlmx:insert(ivec, uvec)                 -- sic! for rhs deflation (1-U.U^H)
+    ctr_batch:add(evec, uvec / sigma)       -- V, U.\Sigma^{-1}
+    if opt.VERBOSE then
+      printf("[%3d] |v|2=%e |u|2=%e Lambda=%e\n", 
+          ivec, evec:norm2(), uvec:norm2(), eval)
+    end
+    ivec = ivec + 1
+  end
+  ctr_batch:fini()
+end
+
+function disco4d_wilson_iterate_v0(qlmx, ctrFB_func, pv_df_iter, solver_func, opt)
+  -- iterate over probing vectors
+  --  qlmx          QLM object with deflation eigenvectors
+  --  ctrFB_func(F,B) contract forward and backward "propagators"
+  --                F = (v1,v2,...,v12), B^\dag = (u1,u2,...,u12)
+  --                TODO modify interface to handle eigenvector lists instead of props
+  --  pv_df_iter    iterator over probing vectors (DiracFermion's)
+  --  solver_func(x)  solve operator
+
+  opt = opt or {}
+  local nvec = opt.nvec or 0
+  local defl_nbatch = opt.defl_nbatch or 12
+  local ctr_Nc  = opt.ctr_Nc or 3
+  local ctr_Ns  = opt.ctr_Ns or 4
+  local ctr_nbatch = ctr_Nc * ctr_Ns
+  assert(0 == defl_nbatch % ctr_nbatch) -- ensure batches are nested (probably will still work if not)
+
+  local ctr_batch = make_ctrFB_batch_v0(L, ctrFB_func, ctr_nbatch)
+  local ivec = 0
+  local have_vec = true
+  while have_nvec and (nvec <= 0 or ivec < nvec) do
+    -- batch-deflate vectors
+    local imax = defl_nbatch
+    if 0 < nvec and nvec - ivec < imax then imax = nvec - ivec end
+    local vlist = {}
+    for i = 1, imax do 
+      local v = pv_df_iter()
+      if v then list_append(vlist, v) 
+      else
+        have_vec = false
+        break
+      end
+    end
+    vlist = qlmx:ortho_veclist(vlist)
+    -- feed them to contraction
+    for i, zd in pairs(vlist) do
+      yd = solver_func(zd)
+      ctr_batch:add(yd, zd)
+    end
+    ivec = ivec + defl_nbatch
+  end
+  ctr_batch:fini()
+end
+
+
+

@@ -1,0 +1,56 @@
+package.path = 'qlib/?.qlua;qlib-lhpc/?.qlua;qlua-production/?.qlua;' .. package.path
+require 'strict'
+require 'qdpc_io'
+require 'disco/qloop_ft'
+
+--cfg_key = assert(os.getenv('cfg_key'))          ; assert('' ~= cfg_key)
+--nhada   = tonumber(assert(os.getenv('nhada')))  ; assert(0 < nhada)
+--ama_str = assert(os.getenv('ama_str'))          ; assert('' ~= ama_str)
+--flav    = assert(os.getenv('flav'))             ; assert('' ~= flav)
+--data_dir = os.getenv('data_dir')                ; if '' == data_dir then data_dir = 'data.disco' end
+--disco_nrec = 9
+
+disco_in_lime_fname = assert(os.getenv('disco_in_lime'))
+disco_out_h5_fname  = assert(os.getenv('disco_out_h5'))
+disco_nrec          = assert(os.getenv('disco_nrec'))
+latsize_str         = assert(os.getenv('latsize'))
+latsize = {}
+for i_l,l in ipairs(string_split(latsize_str, ',')) do 
+  latsize[i_l] = tonumber(l)
+  assert(0 < latsize[i_l])
+end
+assert(4 == #latsize)
+disco_lpath_list    = os.getenv('disco_lpath_list')
+if nil == disco_lpath_list or '' == disco_lpath_list then
+  disco_lpath_list = nil
+else
+  disco_lpath_list = string_split(disco_lpath_list, ",")
+  printf("# lpath_list={%s}\n", list_tostring(disco_lpath_list, "%s", ';'))
+end
+
+printf("# latsize={%s}  nrec=%d  '%s'->'%s'\n", 
+    list_tostring(latsize), disco_nrec, disco_in_lime_fname, disco_out_h5_fname)
+
+job_timer = timer('total')
+
+t_axis = #latsize - 1
+L = qcd.lattice(latsize)
+print_network_settings()
+print_subgrid_settings(L)
+if rawget(_G, 'openmp') then
+  printf("OpenMP:num_threads=%d\n", openmp.num_threads())
+  printf("OpenMP:thread_limits=%d\n", openmp.thread_limit())
+end
+
+os.mkdir_path(dirname(disco_out_h5_fname))
+disco_out_h5 = qcd.hdf5.Writer(disco_out_h5_fname, 
+    { method='phdf5', 
+      chunk="natural", transfer="collective", 
+      alignment=1024 * 512, threshold=1024})
+do_qloop_ft_qlua19(L, disco_out_h5, disco_in_lime_fname, disco_nrec, 
+    { t_axis=t_axis, ft_axes={--[[sic! no FT]]}, lpath_list=disco_lpath_list })
+disco_out_h5:flush()
+disco_out_h5:close()
+
+job_timer('done')
+printf("QLUA_RUN_SUCCESS\n")

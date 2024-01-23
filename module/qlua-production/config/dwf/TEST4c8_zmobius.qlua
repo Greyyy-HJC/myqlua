@@ -1,0 +1,71 @@
+require 'iter'
+
+assert(network_geom)
+assert(jobcfg.cfg_key)
+assert(jobcfg.rnd_seed)
+
+latsize = {4,4,4,8}
+t_axis = #latsize - 1
+
+-------------------------------------------------------------------------------
+-- light quark action
+-------------------------------------------------------------------------------
+ferm_bc = {1,1,1,-1} ; bc = ferm_bc
+mdwf_M5 = 1.8
+mdwf_mf = 0.01
+mdwf_L5_full = 32
+mdwf_b5_full = 1.
+mdwf_c5_full = 0.
+-- zMoebius params : etamax=1.45
+mdwf_L5  = 10
+mdwf_bmc5 = 1.
+mdwf_bpc5 = {
+  complex(4.953133333527814,  4.636759671022268),
+  complex(5.834549184435342, -0.847375749821817),
+  complex(3.727311567410276, 0),
+  complex(1.614590791824022, 0),
+  complex(0.835373070341761, 0),
+  complex(0.7053563878413177, 0),
+  complex(1.120047444033678, 0),
+  complex(2.420780639614394, 0),
+  complex(5.834549184435342,  0.847375749821817),
+  complex(4.953133333527814, -4.636759671022268),
+}
+assert(#mdwf_bpc5 == mdwf_L5)
+mdwf_b5, mdwf_c5 = {}, {}
+for s = 1, mdwf_L5 do 
+  mdwf_b5[s] = .5 * (mdwf_bpc5[s] + mdwf_bmc5)
+  mdwf_c5[s] = .5 * (mdwf_bpc5[s] - mdwf_bmc5)
+end
+
+assert(io.dexists('qlua-production/config/dwf'))
+jobcfg.cfglist_all  = iter.igen_list(io.lines('qlua-production/config/dwf/TEST4c8.cfglist.ALL'))
+jobcfg.cfg_index    = table_index(jobcfg.cfglist_all, jobcfg.cfg_key)
+printf("cfg_key='%s' index=%d\n", jobcfg.cfg_key, jobcfg.cfg_index)
+
+-------------------------------------------------------------------------------
+-- SETUP: lattice, gauge, rnd
+-------------------------------------------------------------------------------
+
+function get_gauge_file(cfg_key)
+  return string.format("%s/gauge/ckpoint_lat.%s",
+          jobcfg.ens_top, cfg_key)
+end
+
+jobcfg.job_timer = timer("total")
+L = qcd.lattice(latsize, {network=network_geom})
+lat = L     -- alias
+S = rnd_init(L, rnd_seed)
+rnd = S     -- alias
+print_network_settings()
+print_subgrid_settings(L)
+if rawget(_G, openmp) then 
+  printf("num_threads=%d\n", openmp.num_threads())
+  printf("thread_limits=%d\n", openmp.thread_limit())
+end
+
+tt = timer("gauge_read")
+printf("read gauge '%s'\n", get_gauge_file(jobcfg.cfg_key))
+gauge_u = qcd.nersc.read_gauge(L, get_gauge_file(jobcfg.cfg_key))
+tt("done")
+

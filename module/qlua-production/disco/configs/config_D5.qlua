@@ -1,0 +1,310 @@
+-- XXX this new-style config does NOT use "relative" momenta: all momenta
+-- XXX are defined as absolute
+package.path = 'qlib/?.qlua;qlib-lhpc/?.qlua;qlua-production/?.qlua;' .. package.path
+require 'strict'
+require 'setup_util'
+require 'latvec'
+require 'stdlib'
+require 'util/strkey'
+require 'lhpc-std'
+require 'qdpc_io'
+require 'ape-smear'
+require 'stout-smear'
+require 'hex-smear'
+require 'hadron/qbarq_wline'
+require 'smear/field_smear'
+
+require 'rcparam'
+
+-- use GPU mg solver
+rcparam.set('backend.dslash_solver', 'gpu-quda-mg')
+-- perform deflation on GPU using cublas(Xt)
+rcparam.set('backend.la', 'gpu-cublas')
+rcparam.set('backend.gpu_blockdim', 512)        
+-- perform contractions on GPU
+rcparam.set('backend.qbarq', 'gpu-quda')
+
+print_obj(rcparams, 'rcparams')
+
+contract_only = false -- stub
+if contract_only then printf("*** CONTRACT_ONLY ***\n") end
+
+job_config = _G
+
+
+-------------------------------------------------------------------------------
+-- general
+-------------------------------------------------------------------------------
+assert(job_key)
+assert(task_key)  -- for keeping track of samples in task 
+
+cfg_key = job_key
+
+latsize   = {32,32,32,64}
+t_axis    = #latsize - 1
+assert(0 < tonumber(cfg_key))
+rnd_seed  = tonumber(cfg_key) + 984
+printf("RNDSEED=%d\n", rnd_seed)
+
+-------------------------------------------------------------------------------
+-- coord sampling & AMA
+-------------------------------------------------------------------------------
+
+do 
+  -- * approx modes
+  ama_list = {
+    { ['approx']    = 'sloppy',
+      ['tol']       = 1e-4,       -- relax somewhat
+      ['hp_stops']  = { 32, 512 },
+    },           
+    { ['approx']    = 'exact',
+      ['tol']       = 1e-10,      -- tighten somewhat
+      ['hp_stops']  = { 32 },
+    },
+  }
+end
+
+-------------------------------------------------------------------------------
+-- data file param and locations
+-------------------------------------------------------------------------------
+ens_top   = '..'
+evec_pdir = 'data.evec/batch1'
+data_top  = 'data.disco' 
+gauge_fmt = 'lime'
+defl_nvec_saved = 500
+defl_nvec = defl_nvec_saved
+defl_prec = 'single'
+defl_nbatch = 192
+disco_save_prec   = 'double'
+disco_qio_volfmt  = 'single'
+--disco_qio_volfmt  = 'part_dir'
+disco_qio_stride  = 1
+
+-- gauge config
+function get_gauge_file(key)
+  return string.format("%s/gauge/cl21_32_64_b6p3_m0p2390_m0p2050_cfg_%s.lime", 
+        ens_top, key)
+end
+function get_gauge_stout_file(cfg_key)
+  return string.format("../gauge_stout/gauge_stout.%s.lime", cfg_key)
+end
+function get_evec_file(cfg_key)
+  if defl_nvec < defl_nvec_saved then 
+    printf("WARN: reading only %d/%d evecs\n", defl_nvec, defl_nvec_saved) 
+  end
+  if false then -- better version
+    return string.format("%s/evec.%d.i%dn%d.lime_%d_%d", 
+            evec_pdir, cfg_key, 0, defl_nvec_saved, 0, defl_nvec_saved-1)
+  else 
+    local s4_cfg_key = string.format("%04d", tonumber(cfg_key))
+    return string.format("%s/%s/lime.%s.eigenvectors_%d_%d",
+            evec_pdir, s4_cfg_key, s4_cfg_key, 0, defl_nvec_saved-1)
+  end
+end
+function get_eval_file(cfg_key)
+  if defl_nvec < defl_nvec_saved then 
+    printf("WARN: reading only %d/%d evecs\n", defl_nvec, defl_nvec_saved) 
+  end
+  if false then
+    return string.format("%s/eval.%s.i%dn%d.txt",
+            evec_pdir, cfg_key, 0, defl_nvec_saved)
+  else
+    local s4_cfg_key = string.format("%04d", tonumber(cfg_key))
+    return string.format("%s/%s/eigenvalues.%s.%d_%d.txt",
+            evec_pdir, s4_cfg_key, s4_cfg_key, 0, defl_nvec_saved-1)
+  end
+end
+
+function get_disco_file(cfg_key, flav, tag)
+  return string.format("%s/qloop.%s.%s.%s.lime",
+      data_top, cfg_key, flav, tag)
+end
+function get_disco_momproj_file(cfg_key, nvec_start, nvec_tot, tag)
+  return string.format("%s/qloop.momproj.%s.%s.i%d_n%d.aff",
+      data_top, cfg_key, tag, nvec_start, nvec_tot)
+end
+function sample_log_file(cfg_key)
+  return string.format("%s/sample_log/%s.%s", data_top, job_key, task_key)
+end
+
+-------------------------------------------------------------------------------
+-- qbarq insertion params
+-------------------------------------------------------------------------------
+bb_lpath_min, bb_lpath_max = 0, 1   -- max 1 link
+bb_lpath_list = qbarq_make_linkpath_list_bb(
+    {'x','y','z','t','X','Y','Z','T'},
+    bb_lpath_min, bb_lpath_max)
+
+-------------------------------------------------------------------------------
+-- setup lattice etc
+-------------------------------------------------------------------------------
+job_timer = timer("total")
+L = qcd.lattice(latsize, {network=network_geom})
+S = rnd_init(L, rnd_seed) ; rnd = S
+print_network_settings()
+print_subgrid_settings(L)
+if rawget(_G, 'openmp') then
+  printf("OpenMP:num_threads=%d\n", openmp.num_threads())
+  printf("OpenMP:thread_limits=%d\n", openmp.thread_limit())
+end
+
+-------------------------------------------------------------------------------
+-- gauge
+-------------------------------------------------------------------------------
+gauge_file = get_gauge_file(cfg_key)    
+printf("read gauge '%s' [%s]\n", gauge_file, gauge_fmt)
+tt = timer('read_gauge')
+if     'nersc' == gauge_fmt then 
+  gauge_u = qcd.nersc.read_gauge(L, gauge_file)
+elseif 'milc'  == gauge_fmt then
+  gauge_u = qcd.milc.read_gauge(L, gauge_file)
+elseif 'lime' == gauge_fmt then
+  gauge_u = load_qdpc_gauge(L, gauge_file)
+elseif 'random' == gauge_fmt then
+  printf("********* BOGUS random gauge field **********\n")
+  gauge_u = latvec.fromfunction({4}, function()return toSUn(S:gaussian_ColorMatrix()) end)
+else error(string.format("unknown gauge_fmt='%s'", gauge_fmt)) end
+tt('done')
+
+
+-------------------------------------------------------------------------------
+-- quark action
+-------------------------------------------------------------------------------
+require 'config/econfig'
+ekey  = 'JLab_isoClover_D5'
+etab  = econfig.ensemble_param[ekey]
+
+-- * fermion params
+quark_flav  = 'UD'
+quark_bc    = assert(etab.quark_bc)
+quark_mass  = assert(etab.quark_mass[quark_flav])
+quark_kappa = 1. / (8. + 2. * quark_mass)
+quark_csw   = assert(etab.quark_csw)
+
+-- * gauge smearing
+tt = timer('smear_gauge_stout')
+assert('stout' == etab.gauge_smear.type)
+stout_rho   = assert(etab.gauge_smear.stout_rho)
+stout_n     = assert(etab.gauge_smear.stout_nstep)
+gauge_u_stout = stout_smear_full(gauge_u, stout_rho, stout_n)   ; tt('done')
+
+if (   'gpu-quda' == rcparam.get('backend.dslash_solver')
+    or 'gpu-quda' == rcparam.get('backend.qbarq')) then
+  require 'quda'
+  tt = timer('init_quda')
+  qcd.quda.init(L)                                          ; tt('done')
+  quda_verbosity = "SUMMARIZE"
+  _quda.setVerbosityQuda(quda_verbosity)
+end
+
+if 'random' == rcparams.backend.dslash_solver then
+  printf("********* BOGUS random Dslash solver **********\n")
+  function make_solver(ama)
+    return function(x)
+      if     ('lattice.dirac.fermion' == type(x)) then return S:gaussian_DiracFermion() 
+      elseif ('lattice.dirac.propagator' == type(x)) then return S:gaussian_DiracPropagator() end
+    end
+  end
+elseif 'cpu' == rcparams.backend.dslash_solver then
+--if false then
+  -- * QOP-MG parameters
+  require 'mg_param'
+  mg_tol_approx = 1e-4
+  mg_maxiter  = 200
+  mg_param_null = {    
+      blocking      = { {3,3,3,2}, {2,2,2,2} },
+      verbose       = {        0,         0  }, 
+      null_vecs     = {       24,        24  },
+      null_vecs_extra={        0,         0  },
+      prehits       = {        0,         0  },
+      posthits      = {        4,         4  },
+      underrelax    = {       1.,        1.  },
+      null_maxiter  = {       20,        20  },
+      null_res      = {      0.4,       0.4  },
+      null_conv     = {      0.8,       0.8  },
+                                             
+      coarse_res    = {      0.1,       0.1  },
+      coarse_maxiter= {       12,        12  },
+      coarse_ngcr   = {        8,         8  },
+  }
+
+  tt = timer('inig_mg')
+  local mg_param = make_mg_params(
+      quark_kappa, quark_csw, quark_bc,
+      mg_tol_approx, mg_maxiter, latsize,
+      mg_param_null, { name = "mg", verbose = 0 })
+  print_obj(mg_param, "mg_param")
+  local mg = qcd.qop.WilsonMG(gauge_u_stout, mg_param)      ; tt('done')
+
+  function make_solver(ama)
+    local scale = 2 * quark_kappa
+    if contract_only then return function()end end
+    if ama['approx'] == 'exact' or ama['approx'] == 'sloppy' then
+      return make_solver_general(function(x)
+        return (scale * mg:solve(x, {residual = {rsqmin = ama['tol']^2}}))
+      end)
+    else error(string.format("unknown ama='%s'", ama['approx'])) end
+  end
+elseif 'gpu-quda' == rcparams.backend.dslash_solver then
+  -- * QUDA(-MG) parameters
+  local t_boundary
+  if      1 == quark_bc[1+t_axis] then t_boundary = "PERIODIC"
+  elseif -1 == quark_bc[1+t_axis] then t_boundary = "ANTI_PERIODIC"
+  else error(string.format("bad ferm_bc_t = '%s'", tostring(quark_bc[1+t_axis]))) end
+  local QS = nil
+  function make_solver(ama)
+    if contract_only then return function()end end
+    if nil ~= QS then 
+      QS:close()
+      QS = nil
+    end
+    QS = qcd.quda.inverter.simple(
+        -- TODO set sloppy prec->HALF, reliable_delta->0.1
+        gauge_u_stout,
+        { t_boundary          = t_boundary },
+        { clover_coeff        = quark_csw * quark_kappa,
+          dslash_type         = "CLOVER_WILSON",
+          kappa               = quark_kappa,
+          mass_normalization  = "MASS",
+          tol                 = ama['tol'],
+          maxiter             = 10000,
+          verbosity           = quda_verbosity,
+          tune                = 'YES',
+        })
+    print_obj(QS, "make_solver")
+    return make_solver_general(function(x) return QS:solve(x) end)
+  end
+
+elseif 'gpu-quda-mg' == rcparams.backend.dslash_solver then
+  require 'config/quda_mg_clover_2019spring'
+
+  local QS = nil
+
+  function make_solver(ama)
+    if contract_only then return function()end end
+    if nil ~= QS then 
+      QS:close()
+      QS = nil
+      force_gc()
+    end
+
+    local mgp = table_deepupdate(
+        econfig.quda_clover_mg(ekey,
+          { verbosity = "SUMMARIZE",
+            flav = quark_flav,
+            tol  = ama.tol }),
+        -- modify dslash normalization to MASS
+        { invert_params = { mass_normalization = "MASS" }, 
+          inner_params  = { mass_normalization = "MASS" } })
+    print_obj(mgp, 'make_solver:gpu-quda-mg:param')
+
+    QS = qcd.quda.inverter.multigrid(
+        gauge_u_stout, mgp.gauge_params, mgp.invert_params,
+        mgp.multrigrid_params, mgp.inner_params)
+    
+    print_obj(QS, "make_solver")
+    return make_solver_general(function(x) return QS:solve(x) end)
+  end
+ 
+else error(string.format("bad dslash_solver='%s'", rcparams.backend.dslash_solver)) end
+

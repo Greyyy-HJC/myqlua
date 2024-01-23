@@ -1,0 +1,135 @@
+require 'strict'
+require 'stdlib'
+require 'lhpc-std'
+require 'latvec'
+
+
+function do_qloop_ft(L, h5_out, file_lime_in, n_rec, opt)
+  -- conversion of Arjun's DISCO data'16 to HDF
+  opt = opt or {}
+  local lpath_list = opt.lpath_list
+  local ft_axes = opt.ft_axes
+  local t_axis  = opt.t_axis
+  if nil == ft_axes then
+    ft_axes = {}
+    for mu = 0, #L-1 do 
+      if mu ~= t_axis then list_append(ft_axes, mu) end
+    end
+  end
+  local ft_axes_str = string.format("ft[%s]", list_tostring(ft_axes, "%d", ','))
+
+  local function R2C(r) 
+    local lenR = #r
+    assert(0 == lenR % 2)
+    local resC = {}
+    for i = 0, lenR/2-1 do
+      resC[1+i] = r[1+2*i] + complex(0,1)*r[1+2*i+1]
+    end
+    return resC 
+  end
+  local function lpath_xml2key(lpath_xml_str)
+    local res = ""
+    for s in string.gmatch(lpath_xml_str, "[-0-4]+") do
+      local mu = tonumber(s)
+      if 0 == mu then break
+      elseif 0 < mu then res = res .. ({'X', 'Y', 'Z', 'T'})[mu]
+      elseif mu < 0 then res = res .. ({'x', 'y', 'z', 't'})[-mu] end
+    end
+    return string.format("l%d_%s", #res, res)
+  end
+
+  local tt
+  local qio_r, file_xml = qcd.qdpc.Reader(L, file_lime_in)
+  for i_rec = 0, n_rec-1 do
+    tt = timer('read qio')
+    local latcR, rec_xml = qio_r:generic_Real()         ; tt('done')    -- all Gamma-matrices
+    tt = timer('conv r2c')
+    local latc = R2C(latcR)                             ; tt('done')
+
+    local rec_tab = xml.parse(rec_xml)
+    assert('linkpath' == rec_tab['$tag'])
+    local lpath_str = lpath_xml2key(rec_tab[1])
+    local do_save = (nil == lpath_list or nil ~= list_index(lpath_list, lpath_str))
+    if do_save then printf("CONV lpath_str='%s'\n", lpath_str)
+    else            printf("SKIP lpath_str='%s'\n", lpath_str) end
+
+    for g = 0, 15 do
+      tt = timer(string.format("%s[g=%02d]", ft_axes_str, g))
+      local c = latc[1+g]
+      local c_str = string.format("%s/g%s", lpath_str, g)
+      if not latvec.print_fpclassify(latvec.locnorm2(c):sqrt(), 
+          {tit=c_str, verbose=true, min_abs=1e-50, max_abs=1e+50}) then
+        printf("%s[%s]: Fail normal-number check\n", file_lime_in, c_str)
+      end
+      if do_save then
+        for i_mu, mu in ipairs(ft_axes) do
+          c = qcd.fourier_transf(c, 1, mu) 
+        end
+        tt('done')
+        tt = timer(string.format("write[g=%02d]", g))
+        local kpath = string.format('%s/g%d', lpath_str, g)
+        h5_out:remove(kpath)
+        h5_out:write(kpath, c, {lattice=L, sha256="ignore", precision="double"})
+        tt('done')
+      end -- if do_save
+    end -- g
+  end -- i_rec
+  qio_r:close()
+end
+
+function do_qloop_ft_qlua19(L, h5_out, file_lime_in, n_rec, opt)
+  -- disco data saved by Qlua scripts'19
+  opt = opt or {}
+  local lpath_list = opt.lpath_list
+  local ft_axes = opt.ft_axes
+  local t_axis  = opt.t_axis
+  if nil == ft_axes then
+    ft_axes = {}
+    for mu = 0, #L-1 do 
+      if mu ~= t_axis then list_append(ft_axes, mu) end
+    end
+  end
+  local ft_axes_str = string.format("ft[%s]", list_tostring(ft_axes, "%d", ','))
+
+  local tt
+  local qio_r, file_xml = qcd.qdpc.Reader(L, file_lime_in)
+  for i_rec = 0, n_rec-1 do
+    tt = timer('read qio')
+    local latc, rec_info = qio_r:Complex(16)             ; tt('done')    -- all Gamma-matrices
+
+    local lpath_str = rec_info
+    local do_save = (nil == lpath_list or nil ~= list_index(lpath_list, lpath_str))
+    if do_save then printf("CONV lpath_str='%s'\n", lpath_str)
+    else            printf("SKIP lpath_str='%s'\n", lpath_str) end
+
+    for g = 0, 15 do
+      tt = timer(string.format("%s[g=%02d]", ft_axes_str, g))
+      local c = latc[1+g]
+      local c_str = string.format("%s/g%s", lpath_str, g)
+      if not latvec.print_fpclassify(latvec.locnorm2(c):sqrt(), 
+          {tit=c_str, verbose=true, min_abs=1e-50, max_abs=1e+50}) then
+        printf("%s[%s]: Fail normal-number check\n", file_lime_in, c_str)
+      end
+      if do_save then 
+        for i_mu, mu in ipairs(ft_axes) do
+          c = qcd.fourier_transf(c, 1, mu) 
+        end
+        tt('done')
+        tt = timer(string.format("write[g=%02d]", g))
+        local kpath = string.format('%s/g%d', lpath_str, g)
+        h5_out:remove(kpath)
+        h5_out:write(kpath, c, {lattice=L, sha256="ignore", precision="double"})
+        tt('done')
+      end -- if do_save
+    end -- g
+  end -- i_rec
+  qio_r:close()
+end
+
+--XXX test
+--latsize = {4,4,4,8}
+--L = qcd.lattice(latsize)
+--file_lime_in = 'disco_newcontractions_latc.lime'
+--h5_out = qcd.hdf5.Writer('tmp.disco_newcontractions_latc.h5', {method="phdf5"})
+--do_qloop_ft(L, h5_out, file_lime_in, 65, #L-1)
+--h5_out:close()

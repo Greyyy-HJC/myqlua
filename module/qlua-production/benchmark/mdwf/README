@@ -1,0 +1,14 @@
+1. link qlua script directories
+ln -s QLUA_DIR/qlib qlib
+ln -s QLUA_DIR/lhpc qlib-lhpc
+(verified to run with scripts in qlua[git:ee3d935])
+
+2. run as (2 ranks example)
+export OMP_NUM_THREADS=1
+mpirun -np 2 qlua-bkend ./job.1x1x1x2.qlua ./config.4c8.qlua ./benchmark-solver-mdwf-defl.qlua
+mpirun -np 2 qlua-bkend ./job.1x1x1x2.qlua ./config.4c8.qlua ./benchmark-lanczos-mdwf.qlua
+
+
+1-node benchmarks: on e.g. 12^4 lattice run
+OMP_NUM_THREADS=64 mpirun -np 1 qlua-bkend 1node/job.12_12_12_12.n1_omp.qlua 1node/config.1node.qlua ./benchmark-solver-mdwf-defl.qlua
+OMP_NUM_THREADS=1 mpirun -np 64 qlua-bkend 1node/job.12_12_12_12.n64.qlua 1node/config.1node.qlua ./benchmark-solver-mdwf-defl.qlua

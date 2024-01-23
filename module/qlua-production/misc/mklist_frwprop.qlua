@@ -1,0 +1,20 @@
+require 'stdlib'
+cfg_key = assert(job_key)
+
+for i_ama_mode, ama_mode in pairs(ama_mode_list) do
+  for i_csrc, csrc in pairs(ama_mode['csrc_list']) do
+    printf('%s\n', get_frwprop_file(cfg_key, csrc, ama_mode))
+    
+--    for i_src_snk_dt, src_snk_dt in pairs(src_snk_dt_list) do
+--      for ib, baryon in pairs(bb_baryon_list) do
+--        for ip, psnk in pairs(bb_psnk_list) do
+--          for iflav, flav in pairs(bb_flav_list) do
+--            printf('%s\n', get_bkwprop_file(cfg_key, csrc, tsnk, psnk,
+--                   baryon, flav, ama_mode))
+--          end
+--        end
+--      end
+--    end
+  end
+end
+

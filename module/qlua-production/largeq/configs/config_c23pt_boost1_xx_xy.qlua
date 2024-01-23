@@ -1,0 +1,229 @@
+package.path = 'qlib/?.qlua;qlib-lhpc/?.qlua;qlua-production/?.qlua;' .. package.path
+require 'strict'
+require 'stdlib'
+require 'setup_util'
+require 'latvec'
+
+
+-------------------------------------------------------------------------------
+-- general
+-------------------------------------------------------------------------------
+assert(job_key)
+cfg_key = job_key -- job# enumerates config#
+
+latsize   = {32,32,32,64}
+t_axis    = #latsize - 1
+rnd_seed  = 1984
+
+
+-------------------------------------------------------------------------------
+-- source parameters
+-------------------------------------------------------------------------------
+ape_alpha   = 2.5
+ape_N       = 25
+ape_accu    = 1e-12
+ape_maxiter = 150
+
+wup_alpha   = 2.0
+wup_N       = 50
+wup_smear_tag ='GN2x50'
+
+
+-------------------------------------------------------------------------------
+-- correlator parameters
+-------------------------------------------------------------------------------
+pm1     = {-1, 0, 1}        -- [-1;1]
+pm2     = {-2,-1, 0, 1, 2}  -- [-2;2]
+pm6     = range(-6, 1+6)    -- [-6;6]
+
+-- sic! 4d
+kbxp10  = {  1,  0,  0,  0}
+kbxm10  = { -1,  0,  0,  0}
+kbym10  = {  0, -1,  0,  0}
+kbzm10  = {  0,  0, -1,  0}
+--kbym05  = {  0,-.5,  0}
+
+-- relative momenta are defined with respect to boosted sources and sinks:
+--    p = 3*ksrc + psrc_rel, 
+--    p'= 3*ksnk + psnk_rel,   
+--    q = p' - p = 3*(ksnk - ksrc) + qext_rel
+
+-- source boost
+c3pt_ksrc_tag, c3pt_ksrc_q  = 'bxp10', kbxp10
+
+-- to keep residual rot.symm., 
+--    ksnk || p'= (psnk_rel+3*ksnk) 
+--    ksrc || p = (psnk_rel - qext_rel - 3*(ksnk-ksrc))
+-- * p' is fixed, hence can vary only qext_rel_x || ksrc={1,0,0}
+-- * add [-1;1] variation for further study where makes sense
+
+-- list of momenta for c2pt with symm.boost ksnk==ksrc
+-- (to determine energies and overlaps for matrix element analysis)
+-- must include all p that are generated in c3pt 
+-- p = ( 3, 0, 0) + ([-6;6], [-1;1], [-1;1]) = ([-3;9], [-1;1], [-1;1])
+c2pt_symmboost_psnkrel_list = range_prod({ pm6, pm1, pm1 })    -- 117 total
+-- fix p' at optimal for the boost
+c3pt_psnkrel = {  0,  0,  0, 0} -- sic! 4d
+-- vary qrel_x wide; add [-1;1] for qext_rel_y,z
+c3pt_qextrel_list = range_prod({pm6, pm1, pm1, {0}})    -- 117 total; sic! 4d
+-- c2pt functions for the disco
+c2pt_skewboost_psnkrel_list = range_prod({pm1, pm1, pm1})    -- 27 total
+
+-- list of combinations of sink-boost/sink-momentum/current-momenta
+-- ksnk_tag, ksnk_q, c2pt_skew_psnkrel_list, c3pt_psnk_rel, c3pt_qextrel_list
+c3pt_snk_desc_list = {
+     -- p'= (-3, 0, 0)
+     -- p = ( 3, 0, 0) + ([-6;6], [-1;1], [-1;1]) = ([ -3;9], [-1;1], [-1;1])
+     -- q = (-6, 0, 0) + ([-6;6], [-1;1], [-1;1]) = ([-12;0], [-1;1], [-1;1])
+     { 'bxm10', kbxm10, c2pt_skewboost_psnkrel_list, c3pt_psnkrel, c3pt_qextrel_list },
+     -- p'= ( 0,-3, 0)
+     -- p = ( 3, 0, 0) + ([-6;6], [-1;1], [-1;1]) = ([-3;9], [-1; 1], [-1;1])
+     -- q = (-3,-3, 0) + ([-6;6], [-1;1], [-1;1]) = ([-9;3], [-4;-2], [-1;1])
+     { 'bym10', kbym10, c2pt_skewboost_psnkrel_list, c3pt_psnkrel, c3pt_qextrel_list },
+}
+
+c3pt_tsep_list = { 8, 10, 12}
+c3pt_flav_list = {'U', 'D'}
+
+c3pt_src_S  = gamma{mu=0} * gamma{mu=2}
+c3pt_snk_S  = c3pt_src_S    -- symmetric to src
+c3pt_Tpol   = (1. + gamma{mu=3}) / 2. * (1. - gamma{mu=0}*gamma{mu=1} * complex(0,1))
+c3pt_Tpol_tag = 'AApSzplus'
+
+
+-------------------------------------------------------------------------------
+-- quark action
+-------------------------------------------------------------------------------
+-- * gauge smearing
+stout_rho = 0.125
+stout_n   = 1
+-- * fermion params
+ferm_bc0= {1,1,1,-1}    -- untwisted
+m_l     = -0.2390
+m_s     = -0.2050
+kappa_l = 1. / (8 + 2 * m_l)
+c_sw    = 1.20536588031793
+
+boost_p = c3pt_ksrc_q
+-- * boosted fermion params
+ferm_bc = {}
+for mu = 1, #ferm_bc0 do
+  local ph = 2 * math.pi * boost_p[mu]
+  ferm_bc[mu] = ferm_bc0[mu] * complex(math.cos(ph), math.sin(ph))
+end
+
+-- * QOP-MG parameters
+require 'mg_param'
+mg_tol_approx = 1e-4
+mg_maxiter  = 200
+mg_param = make_mg_params(
+      kappa_l, c_sw, ferm_bc, 
+      mg_tol_approx, mg_maxiter, latsize, 
+      {    
+        blocking      = { {4,4,4,4}, {2,2,2,2} },
+        verbose       = {        0,         0  }, 
+        null_vecs     = {       24,        24  },
+        null_vecs_extra={        0,         0  },
+        prehits       = {        0,         0  },
+        posthits      = {        4,         4  },
+        underrelax    = {       1.,        1.  },
+        null_maxiter  = {       20,        20  },
+        null_res      = {      0.4,       0.4  },
+        null_conv     = {      0.8,       0.8  },
+                                               
+        coarse_res    = {      0.1,       0.1  },
+        coarse_maxiter= {       12,        12  },
+        coarse_ngcr   = {        8,         8  },
+      },
+      { name = "mg-d5",
+        verbose = 0 })
+
+
+-------------------------------------------------------------------------------
+-- AMA approximations
+-------------------------------------------------------------------------------
+-- * coordinates
+require 'cfg_list'
+do 
+  csrcgrid  = {2,2,2,4}
+  sloppy_csrc_list = make_src_grid(
+      csrcgrid,
+      latsize,  
+      {0,0,0,0},            -- x0
+      {7,11,13,23}, table_index(cfg_list, cfg_key))   -- displacement by config#
+  
+  sloppy_csrcgrp_list = {}
+  csrcgrid_nt = csrcgrid[1+t_axis]
+  hslab_len_t = math.floor(latsize[1+t_axis] / csrcgrid_nt)
+  local n_csrcgrp = math.floor(#sloppy_csrc_list / csrcgrid_nt)
+  -- select sequence of csrcgrid_nt csrc's as a csrcgrp : t changes the fastest
+  for i = 0, n_csrcgrp - 1 do
+    sloppy_csrcgrp_list[1+i] = {}
+    for j = 0, csrcgrid_nt - 1 do
+      sloppy_csrcgrp_list[1+i][1+j] = sloppy_csrc_list[1 + csrcgrid_nt*i + j]
+    end
+  end
+  -- * approx modes
+  ama_list = {
+    { ['approx']    = 'exact',
+      ['csrcgrp_list'] = { sloppy_csrcgrp_list[1] }, 
+      ['tol']       = 1e-10 },          -- tighten somewhat
+    { ['approx']    = 'sloppy',
+      ['csrcgrp_list'] = sloppy_csrcgrp_list,
+      ['tol']       = 3e-4 }            -- relax somewhat
+  }
+end
+
+function make_mg_solver(mg, ama, scale)
+  scale = scale or 1.
+  if ama['approx'] == 'exact' or ama['approx'] == 'sloppy' then
+    return make_solver_general(function(x)
+      return (scale * mg:solve(x, {residual = {rsqmin = ama['tol']^2}}))
+    end)
+  else
+    error(string.format("unknown ama='%s'", ama['approx']))
+  end
+end
+
+
+-------------------------------------------------------------------------------
+-- data file param and locations
+-------------------------------------------------------------------------------
+ens_top   = '/lfs/lhpc/isoClover/D5'
+data_top  = 'data.c23pt' 
+prop_volfmt     = 'single'
+
+-- gauge config
+function get_gauge_file(key)
+  return string.format("%s/gauge/cl21_32_64_b6p3_m0p2390_m0p2050_cfg_%s.lime", ens_top, key)
+end
+
+-- AMA-dependent output file names
+function csrc_str(csrc)
+  return string.format("x%dy%dz%dt%d", csrc[1], csrc[2], csrc[3], csrc[4])
+end
+function psnk_str(psnk)
+  return string.format("PX%dPY%dPZ%d", psnk[1], psnk[2], psnk[3])
+end
+function ama_str(ama)
+  if 'exact' == ama['approx'] then
+    return string.format("ex")
+  elseif 'sloppy' == ama['approx'] then
+    return string.format("sl")
+  else
+    error(string.format('unknown ama="%s"', ama['approx']))
+  end
+end
+
+-- hadspec
+function get_hadspec_file_tag(cfg_key, csrc, ama, tag)
+  return string.format('%s/hadspec/hadspec.%s.%s.%s.%s.aff',
+        data_top, cfg_key, ama_str(ama), csrc_str(csrc), tag)
+end
+
+-- building blocks
+function get_bb_file_tag(cfg_key, csrc, ama, psnk, tsep, tpol_tag, flav, tag)
+  return string.format('%s/bb/bb.%s.%s.%s.%sdt%d.%s.%s.%s.aff',
+        data_top, cfg_key, ama_str(ama), csrc_str(csrc), psnk_str(psnk), tsep, 
+        tpol_tag, flav, tag)
+end

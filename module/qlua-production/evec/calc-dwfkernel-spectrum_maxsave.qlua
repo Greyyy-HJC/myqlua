@@ -1,0 +1,134 @@
+-- compute maximal and then minimal eigenvalue of the hermitian DWF kernel 
+-- operator squared, H_W^\dag.H_W, H_W = \gamma_5 D_W / (2 + (b-c)*D_W),
+-- using CG-Ritz algoritm [Geradin'71, "The computational efficiency ..."]
+
+package.path = './?.qlua;qlib/?.qlua;qlib-lhpc/?.qlua;' .. package.path
+
+require "gauge"
+require "ape-smear"
+require "stdlib"
+require "lhpc-std"
+require "qdpc_io"
+require "latvec"
+require "defl_util"
+require "cg-ritz"
+require "arnoldi"
+
+tot_timer = timer("total")
+
+print_network_settings()
+L = qcd.lattice(latsize)
+print_subgrid_settings(L)
+
+if nil == job_key then 
+  error("nil job_key")
+  os.exit(1)
+end
+cfg_key = job_key
+
+rnd = rnd_init(L, 1984)
+
+-- load & smear gauge
+cur_timer = timer("gauge_read")
+gauge_u = qcd.nersc.read_gauge(L, get_gauge_file(cfg_key))
+cur_timer("done")
+cur_timer = timer("gauge_smear")
+--gauge_u_ape = APE_smear(gauge_u, ape_alpha, ape_N, ape_accu, ape_maxiter, t_axis)
+cur_timer("done")
+
+gauge_u_bc = {}
+for mu=0, #L-1 do gauge_u_bc[1+mu] = L:ColorMatrix(gauge_u[1+mu]) end
+gauge_set_bc(gauge_u_bc, ferm_bc)
+
+-- define Clover object and solver for the (2 + D_W) operator
+mdwf_denom_CL = qcd.Clover(gauge_u, .5 / (4. + 2./mdwf_bmc5 - mdwf_M5), 0.0, {1, 1, 1, -1})
+mdwf_denom_solver = mdwf_denom_CL:mixed_solver(3e-8^2, 1000, 1e-12^2, 10000)
+
+-- to check identities : op_dwf_kernel(op_dwf_kernel_denom(x)) =?= op_dwf_kernel_numer(x)
+function op_dwf_kernel_denom(x)
+  local M5, bmc5 = mdwf_M5, mdwf_bmc5
+  return latvec.dslash_wilson(x, gauge_u_bc, 2./bmc5 - M5) * bmc5
+end
+function op_dwf_kernel_numer(x)
+  local M5, bmc5 = mdwf_M5, mdwf_bmc5
+  return gamma{n=15} * latvec.dslash_wilson(x, gauge_u_bc, -M5)
+end
+
+-- DWF kernel gamma5.Dw.(2+Dw)^{-1}, Dw = 4-M5-Xw
+function op_dwf_kernel(x)
+  local M5, bmc5 = mdwf_M5, mdwf_bmc5
+  return (gamma{n=15} / (2. + bmc5 * (4. - M5))
+          * mdwf_denom_solver(latvec.dslash_wilson(x, gauge_u_bc, -M5)))
+end
+-- check that eigenvector from (Dw^H.Dw).x = \lambda^2.(2+Dw)^H.(2+Dw).x 
+-- is (a linear combination of) (2+Dw)^{-1}.z_{\lambda}  (and (2+Dw)^{-1}.z_{-\lambda}
+function make_op_dwdag_dw(u, Mw)  
+  -- Dw.Dw^H.x
+  -- Mw is wilson mass, negative (~1.5..1.8) for DWF by convention
+  return function(x)
+    return latvec.dslash_wilson(latvec.dslash_wilson(x, u, Mw, false), u, Mw, true)
+  end
+end
+function make_op_2pdwdag_2pdw(u, Mw, bmc)
+  -- (2+Dw).(2+Dw)^H.x
+  -- Mw is wilson mass, negative (~1.5..1.8) for DWF by convention
+  -- bmc=b-c=const
+  return function(x)
+    local dw_x = latvec.dslash_wilson(x, u, Mw, false)
+    return latvec.scalsum_left(
+              4.,     x,
+              2.*bmc, dw_x,
+              bmc,    latvec.dslash_wilson(latvec.scalsum_left(
+                          2.,   x,
+                          bmc,  dw_x), u, Mw, true))
+  end
+end
+
+
+if true then
+  x0 = rnd:gaussian_DiracFermion()
+  printf("### |x0|=%e\n", math.sqrt(latvec.norm2(x0)))
+  cg_ritz_eps = 1e-7
+
+  cur_timer = timer("calc max.eval")
+  a, x = cg_ritz(
+          make_op_dwdag_dw(gauge_u_bc, -mdwf_M5),
+          make_op_2pdwdag_2pdw(gauge_u_bc, -mdwf_M5, mdwf_bmc5),
+          x0, cg_ritz_eps,
+          true --max eval
+          )
+  printf("max.eval = %e\n", a)
+  cur_timer("done")
+  -- save max evec
+  qdp_w = open_qdpc_write(L, get_file_evec_kernel(cfg_key, "kernmax"), "", "single", {})
+  qdp_w:DiracFermion(x, "")
+  qdp_w:close()
+else
+  local qdp_r = open_qdpc_read(L, get_file_evec_kernel(cfg_key, "kernmax"), {})
+  x = qdp_r:DiracFermion()
+  qdp_r:close()
+end
+-- this check will not work if lmax is sign-degenerate and, hence
+--    x = (2+Dw)^{-1}.(a*z(lmax) + b*z(-lmax))
+
+xnew    = x
+z_rhs   = op_dwf_kernel_denom(xnew)
+z_lhs   = op_dwf_kernel_numer(xnew)
+latvec.print_cmp(z_lhs, z_rhs, "g5.Dw.x<->(2+Dw).x")
+
+z2_rhs  = gamma{n=15} * op_dwf_kernel_denom(gamma{n=15} * z_rhs)
+z2_lhs  = op_dwf_kernel_numer(z_lhs)
+latvec.print_cmp(z2_lhs, z2_rhs, "Dw^H.Dw<->(2+Dw)^H.(2+Dw).x")
+
+hh,vv = latvec_arnoldi(op_dwf_kernel, z_rhs, 4)
+print_obj(vv, "vv")
+print_obj(hh, "hh")
+eval2 = hh[1][1]:real()^2 + hh[1][2]^2
+printf("eval2 = %s\n", tostring(eval2))
+
+-- check directly
+
+
+
+--check max evec
+

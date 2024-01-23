@@ -1,0 +1,154 @@
+package.path = 'qlib/?.qlua;qlib-lhpc/?.qlua;qlua-production/?.qlua;' .. package.path
+require 'strict'
+require 'stdlib'
+require 'lhpc-std'  -- make_source, etc
+require 'setup_util'
+
+require 'qdpc_io'
+require 'ape-smear'
+require 'wilson-flow'
+require 'gauge/topo'
+require 'gauge/loops'
+require 'util/strkey'
+
+
+cfg_key = job_key
+--for c = 620, 2160, 10 do 
+--  list_append(cfg_key_list, string.format('%d', c))
+--end
+--sample_list = parse_int_range(assert(subjob_key))
+--printf("sample_list = {%s}\n", list_tostring(sample_list))
+
+sm_imp5li_c5    = 0.05  -- std choice
+--if false then
+--  sm_method       = 'ape'
+--  sm_alpha        = 2.85    -- sming
+--  sm_N_stops      = range(0, 501, 5)
+--  sm_sunproj_accu = 1e-12
+--  sm_sunproj_iter = 150
+--  sm_N_stop_save  = {}
+--elseif true then
+--  sm_method       = 'wf'
+--  wf_eps          = 0.05    -- sming
+--  sm_alpha        = wf_eps
+--  wf_tmax         = 20.
+--  wf_dt           = 1.
+--  wf_N_max        = math.floor(wf_tmax/wf_eps+.5)
+--  sm_N_stops      = range(0, wf_N_max, math.floor(wf_dt/wf_eps +.5))
+--  wf_dt_savegauge = 5.
+--  sm_N_stops_savegauge  = range(0, wf_N_max, math.floor(wf_dt_savegauge/wf_eps +.5))
+--end
+
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+tot_timer = timer('total')
+tt = nil
+
+L = qcd.lattice(latsize, {network=network_geom})
+print_network_settings()
+print_subgrid_settings(L)
+if rawget(_G, 'openmp') then
+  printf("OpenMP:num_threads=%d\n", openmp.num_threads())
+  printf("OpenMP:thread_limits=%d\n", openmp.thread_limit())
+end
+
+--for i, i_samp in ipairs(sample_list) do
+--  if #cfg_key_list < i_samp then 
+--    printf("INFO: SKIP sample[%d]: out of range\n", i_samp)
+--  else
+--    local cfg_key = cfg_key_list[i_samp]
+    local gauge_qio_file
+    local sm_N_cur = sm_N_stops[1]
+    local gauge_u
+    if 0 == sm_N_cur then -- initial gauge 
+      if 'lime' == gauge_file_fmt then
+        local gauge_qio_file = get_gauge_qio_file(cfg_key)
+        printf("read gauge '%s'\n", gauge_qio_file)
+        local tt = timer('read_gauge')
+        gauge_u = load_qdpc_gauge(L, gauge_qio_file)          ; tt('done')
+      elseif 'nersc' == gauge_file_fmt then
+        local gauge_nersc_file = get_gauge_file(cfg_key)
+        printf("read gauge '%s'\n", gauge_nersc_file)
+        local tt = timer('read_gauge')
+        gauge_u = qcd.nersc.read_gauge(L, gauge_nersc_file)   ; tt('done')
+      else error(string.format("bad gauge file fmt='%s'", gauge_file_fmt)) end
+    else  -- pre-smeared gauge
+      local sm_tag_cur = string.format("%s%.2fx%d", sm_method, sm_alpha, sm_N_cur)
+      local gauge_qio_file = get_gauge_qio_file_tag(cfg_key, sm_tag_cur)
+      printf("read gauge '%s'\n", gauge_qio_file)
+      local tt = timer('read_gauge')
+      gauge_u = load_qdpc_gauge(L, gauge_qio_file)          ; tt('done')
+    end
+
+    local gauge_u_sm = gauge_u
+    for i_sm, sm_N in ipairs(sm_N_stops) do
+      assert(sm_N_cur <= sm_N)
+      local sm_N_inc = sm_N - sm_N_cur
+      local sm_tag_cur = string.format("%s%.2fx%d", sm_method, sm_alpha, sm_N)
+      tt = timer(string.format('smear_gauge[%s]', sm_tag_cur))
+      if 'cool5li' == sm_method then
+        gauge_u_sm = gauge_smear_imp5li(gauge_u_sm, sm_alpha, sm_N_inc, 
+            { t_axis=-1, sunproj='proj', imp5li_c5=sm_imp5li_c5,
+              sunproj_accu=sm_sunproj_accu, sunproj_iter=sm_sunproj_iter})  
+      elseif 'ape' == sm_method then
+        gauge_u_sm = APE_smear(gauge_u_sm, sm_alpha, sm_N_inc, 
+            sm_sunproj_accu, sm_sunproj_iter, -1)
+      elseif 'wf' == sm_method then
+        gauge_u_sm = gradflow_rkint_gauge(wf_eps, sm_N_inc, gauge_u_sm) 
+      else error(string.format("bad sm_method='%s'", sm_method)) end
+      tt('done')
+
+      sm_N_cur = sm_N
+      if list_index(sm_N_stops_savegauge, sm_N_cur) then
+        local tt = timer('save_gauge')
+        local gauge_qio_file = get_gauge_qio_file_tag(cfg_key, sm_tag_cur)
+        os.mkdir_path(dirname(gauge_qio_file))
+        save_qdpc_gauge(L, gauge_u_sm, gauge_qio_file, '', '', gauge_qio_fmt)     ; tt('done')
+      end
+
+      tt = timer('calc_density')
+      local data = {}
+      data.act_plaq      = gauge_actdensity_plaq_symm(gauge_u_sm)                 ; tt('act_plaq')
+      data.qtopo_plaq    = gauge_topdensity_plaq(gauge_u_sm)                      ; tt('qtopo_plaq')
+      data.qtopo_imptree = gauge_topdensity_imptree(gauge_u_sm)                   ; tt('qtopo_imptree')
+--      data.act_imp5li    = gauge_actdensity_imp5li_symm(gauge_u_sm, sm_imp5li_c5) ; tt('act_imp5li')
+      data.qtopo_imp5li  = gauge_topdensity_imp5li(gauge_u_sm, sm_imp5li_c5)      ; tt('qtopo_imp5li')
+      tt('done')
+
+      tt = timer('save_density')
+      if 'hdf5' == qtopo_file_fmt then   -- use hdf5
+        local qtopo_h5_file = get_qtopo_h5_file(cfg_key, sm_tag_cur)
+        printf("save topo[%s] to '%s'\n", sm_tag_cur, qtopo_h5_file)
+        os.mkdir_path(dirname(qtopo_h5_file))
+        local qtopo_h5f = qcd.hdf5.Writer(qtopo_h5_file, h5opt)
+        local kpath = string.format("/cfg%s/%s", cfg_key, sm_tag_cur)
+        qtopo_h5f:remove(kpath)
+        for k,v in pairs(data) do
+          local k1 = string.format("%s/%s", kpath, k)
+          qtopo_h5f:write(k1, v, {precision='double'})
+          printf("DENSITY.%s\t%d\t%e\n", k, sm_N_cur, v:sum())
+          tt(k)
+        end
+        qtopo_h5f:flush()
+        qtopo_h5f:close()
+      elseif 'qio' == qtopo_file_fmt then -- use qio
+        local qtopo_qio_file = get_qtopo_qio_file(cfg_key, sm_tag_cur)
+        printf("save topo[%s] to '%s'\n", sm_tag_cur, qtopo_qio_file)
+        os.mkdir_path(dirname(qtopo_qio_file))
+        local qtopo_qio = open_qdpc_write(L, qtopo_qio_file, sm_tag_cur, qtopo_qio_fmt)
+        for k,v in pairs(data) do
+          qtopo_qio:Real('double', v, k)
+          printf("DENSITY.%s\t%d\t%e\n", k, sm_N_cur, v:sum())
+          tt(k)
+        end
+        qtopo_qio:close()
+      else error(string.format("bad qio fmt='%s'", qtopo_file_fmt)) end
+      tt('done')
+    end
+--    printf("INFO: DONE sample[%d]\n", i_samp)
+--  end
+--end
+
+qcd.qprof_print()
+tot_timer('done')
+printf('QLUA_RUN_SUCCESS\n')

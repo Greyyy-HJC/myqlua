@@ -1,0 +1,100 @@
+package.path = 'qlua-production/?.qlua;qlib-lhpc/?.qlua;qlib/?.qlua;' .. package.path
+require 'strict'    -- catch all undefined (nil) variables
+require 'stdlib'    -- standard printf, etc
+require 'lhpc-std'  -- make_source, etc
+require 'ape-smear' -- gauge smear
+require 'hex-smear'
+require 'gauge'
+require 'qdpc_io'
+require 'setup_util'
+require 'debug_util'
+require 'latvec'
+
+require 'hadspec'
+
+require 'smear/field_smear'
+require 'hadron/baryon_corr'
+require 'hadron/qbarq_wline'
+
+require 'util/file'
+require 'util/geom'
+require 'util/strkey'
+
+
+------------------------------------------------------------------------------
+-- INITIALIZATION
+------------------------------------------------------------------------------
+job_timer = rawget(_G, 'job_timer') or timer('total')
+
+S = rnd_init(L, rnd_seed)
+
+function have_sample(cfg_key, sample_tag)
+  return log_have_tag(sample_log_file(cfg_key), sample_tag)
+end
+function done_sample(cfg_key, sample_tag)
+  return log_done_tag(sample_log_file(cfg_key), sample_tag)
+end
+
+
+------------------------------------------------------------------------------
+-- MAIN
+------------------------------------------------------------------------------
+
+require 'largeq/sample_c23pt_bb_proton_cohbkw'
+
+--print_gauge_norm_det(gauge_u, "gauge_u")
+--print_gauge_plaquette(gauge_u, "gauge_u")
+
+do  -- main part
+
+  -- ama loop
+  for i_ama, ama in pairs(ama_list) do
+    -- list of sample indices
+    printf("INFO: AMA=%s\n", strkey.ama_str(ama))
+    print_obj(ama, 'ama')
+
+    -- solver func for given AMA mode (note the normalization)
+    local calc_prop = function()end
+    if not contract_only then calc_prop = make_solver(ama) end
+
+    local n_sample_tot = #ama['csrcgrp_list']
+    local i_sample_list = range(1, 1 + n_sample_tot)
+
+    local tt = timer(string.format('AMA=%s, #srcgrp=%d', ama['approx'], #(ama['csrcgrp_list'])))
+    -- iterate over (coherent grouped) samples
+    for ii_s, i_sample in ipairs(i_sample_list) do
+      local csrcgrp = ama['csrcgrp_list'][i_sample]
+      local csrcgrp_tag = strkey.csrcgrp_str(csrcgrp)
+      local sample_tag = string.format('%s.%s.%s', strkey.ama_str(ama), csrcgrp_tag, task_key)
+      printf("sample_tag='%s'\n", sample_tag)
+      if have_sample(cfg_key, sample_tag) then  
+--      if false then      -- XXX disabled for now
+        printf("INFO: SKIP sample[%d] '%s': done\n", i_sample, sample_tag)
+      else
+        for i_sspair_desc, sspair_desc in ipairs(c3pt_src_sink_pair_list) do
+          gg_r = nil
+--          gg_r = toSUn(S:gaussian_ColorMatrix())
+          local src_smear_opt, c3pt_snk_spec_list, c3pt_tsep_list = unpack(sspair_desc)
+          print_obj(src_smear_opt, 'src_smear_opt')
+          sample_c23pt_bb_proton_cohbkw(
+            L, cfg_key, csrcgrp, ama,                       -- [1-4]
+            hslab_len_t, c3pt_tlen,                         -- [5-6]
+            src_smear_opt,                                  -- [7]
+            c2pt_symm_psnk_list,                            -- [8]
+            c3pt_snk_spec_list, c3pt_tsep_list, c3pt_bbspec,-- [9-11]
+            proton_snk_S, proton_src_S, cedm_Tpol_c3pt_list,-- [12-14]
+            c3pt_flav_list, gauge_u_lpath,                  -- [15-16]
+            calc_prop,                                      -- [17]
+            t_axis, ferm_bc,                     
+            {c2pt=true, c3pt_bb=true}, gg_r  -- [17-21]
+            )
+        end
+        done_sample(cfg_key, sample_tag)
+        printf("INFO: DONE sample[%d] '%s'\n", i_sample, sample_tag)
+      end
+    end
+    tt('done')
+  end
+end
+job_timer('done')
+printf("QLUA_RUN_SUCCESS\n")

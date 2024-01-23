@@ -1,0 +1,30 @@
+-- save mom.projection of the prop to aff: aff_w:write(aff_kpath, save_prop_momproj(qprop, mom, {0,0,0,0})
+function save_prop_momproj(p, mom, csrc0)
+  local L       = p.lattice
+  local pw_conj = L:planewave(csrc0, mom):conj()
+  local nc      = p:colors()
+  local ns      = 4
+  local v       = vector.complex(144)
+  for jc = 0, nc-1 do for js = 0, ns-1 do
+    local df_j = p[{c=jc, d=js}]
+    for ic = 0, nc-1 do for is = 0, ns-1 do 
+      local c = df_j[{c=ic, d=is}]
+      v[is + ns * (ic + nc * (js + ns *jc))] = (c * pw_conj):sum()   -- determines order
+    end end
+  end end
+  return v
+end
+
+-- create point source
+function make_mom_source_dp(L, mom, csrc0)
+  local dp  = L:DiracPropagator()
+  local nc  = 3
+  local ns  = 4
+  local pw = L:planewave(csrc0, mom)
+  for jc = 0, nc-1 do for js = 0, ns-1 do
+    local df_j = L:DiracFermion()
+    df_j[{c=jc, d=js}] = pw
+    dp[{c=jc, d=js}] = df_j
+  end
+  return dp
+end

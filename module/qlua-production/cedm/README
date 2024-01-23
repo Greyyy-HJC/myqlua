@@ -1,0 +1,5 @@
+added features:
+* smearing determined by rcparams, uses pos=tsnk_list
+	
+TODOs
+* use qcd.contract_ in sample_*.qlua (non-coherent)

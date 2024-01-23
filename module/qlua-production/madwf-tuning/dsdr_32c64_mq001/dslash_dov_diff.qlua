@@ -1,0 +1,104 @@
+package.path = 'qlib/?.qlua;qlib-lhpc/?.qlua;' .. package.path
+
+-- compute & save eigenvectors
+-- 1. Run poly-accelerated Lanczos to convergence
+-- 2. Save eigenvectors
+-- 3. Compute & save 1 exact, 1 sloppy inversion on a gaussian source
+require 'strict'
+require "stdlib"
+require "lhpc-std"
+require "qdpc_io"
+require "latvec"
+require "setup_util"
+
+network_geom = {4, 8, 4, 8}
+job_key = '1380'
+
+latsize = {32,32,32,64}
+t_axis = #latsize - 1
+rnd_seed= 1984
+ferm_bc = {1,1,1,-1}
+data_pdir = 'data_pdir'
+
+tot_timer = timer("total")
+-------------------------------------------------------------------------------
+-- SETUP
+-------------------------------------------------------------------------------
+L = qcd.lattice(latsize, {network=network_geom})
+print_network_settings()
+print_subgrid_settings(L)
+
+if nil == job_key then 
+  error("nil job_key")
+  os.exit(1)
+end
+cfg_key = job_key
+
+rnd = rnd_init(L, rnd_seed)
+
+
+function soldf_file_gen(key, out_tag, tag, eps)
+  -- tag will discriminate between dslash and dov
+  return string.format('%s/soldf_%s_eps%.1e_%s.lime', 
+          data_pdir, out_tag, eps, tag)
+end
+function load_soldf(fname)
+  printf("load_soldf: %s\n", fname)
+  local qio_r = open_qdpc_read(L, fname)
+  local df = qio_r:DiracFermion()
+  qio_r:close()
+  return df
+end
+
+otag_eps_list  = { 
+  mo12      = { 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10 },
+  zm10      = { 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9 },
+  deflzm10  = { 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9 },
+  dw32      = { 1e-4, 1e-5, 1e-6, 1e-8, 1e-10 }
+}
+function do_diff(tag)
+  local xtags = {}
+  local files = {}
+  local dfs   = {}
+  for otag, eps_list in pairs(otag_eps_list) do
+    local cur_timer = timer(string.format('load props %s : %d', tag, #eps_list))
+    xtags[otag] = {}
+    files[otag] = {}
+    dfs[otag]   = {}
+    local i_df  = 0
+    for i_eps, eps in pairs(eps_list) do
+      i_df = i_df + 1
+      xtags[otag][i_df] = string.format('%s_eps%.1e', otag, eps)
+      files[otag][i_df] = soldf_file_gen(cfg_key, otag, tag, eps)
+      dfs[otag][i_df]   = load_soldf(files[otag][i_df])
+      printf('|%s(%s)|2=%e\n', tag, xtags[otag][i_df], dfs[otag][i_df]:norm2())
+    end
+    -- compare all to the most precise with this otag
+    local n_df = i_df
+    for i_df = 1, n_df - 1 do
+      local cmp_str = string.format('%s(%s<->%s)', tag, xtags[otag][i_df], xtags[otag][n_df])
+      latvec.print_cmp(dfs[otag][i_df], dfs[otag][n_df], cmp_str)
+      printf('%s rdiff = %e\n', cmp_str, latvec.rdiff(dfs[otag][i_df], dfs[otag][n_df]))
+    end
+    cur_timer('done')
+  end
+
+  local n_dw32  = #(xtags['dw32'])
+  local df_dw32   = dfs['dw32'][n_dw32]
+  local xtag_dw32 = xtags['dw32'][n_dw32]
+  for otag, eps_list in pairs(otag_eps_list) do
+    local n_df = #(xtags[otag])    
+    for i_df = 1, n_df do 
+      local cmp_str = string.format('%s(%s<->%s)', tag, xtags[otag][i_df], xtag_dw32)
+      latvec.print_cmp(dfs[otag][i_df], df_dw32, cmp_str)
+      printf('%s rdiff = %e\n', cmp_str, latvec.rdiff(dfs[otag][i_df], df_dw32))
+    end
+  end
+end
+
+
+do_diff('dov')
+do_diff('dslash')
+
+tot_timer("done")
+printf("QLUA_RUN_SUCCESS\n")

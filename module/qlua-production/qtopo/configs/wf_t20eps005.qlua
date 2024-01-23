@@ -1,0 +1,15 @@
+package.path = 'qlib/?.qlua;qlib-lhpc/?.qlua;qlua-production/?.qlua;' .. package.path
+require 'strict'
+require 'stdlib'
+
+sm_method       = 'wf'
+wf_eps          = 0.05    -- sming
+sm_alpha        = wf_eps
+wf_tmax         = 20.
+wf_dt           = 1.
+wf_N_max        = math.floor(wf_tmax/wf_eps+.5)
+wf_dN           = math.floor(wf_dt/wf_eps +.5)
+sm_N_stops      = range(0, wf_N_max, wf_dN)
+wf_dt_savegauge = 5.
+wf_dN_savegauge = math.floor(wf_dt_savegauge/wf_eps +.5)
+sm_N_stops_savegauge  = range(wf_dN_savegauge, wf_N_max, wf_dN_savegauge)

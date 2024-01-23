@@ -1,0 +1,219 @@
+require "stdlib"
+require "gauge"
+require "latvec"
+require "lhpc-std"
+require "hadspec"
+require "qdpc_io"
+
+require "ape-smear"
+require "stout-smear"
+require "wuppertal-smear"
+
+total_timer = timer("total")
+
+function baryon_sigma_2pt_general(Fd, Fu, S2, S1, T)
+  --  S2, S1      diquark spin structure in the nucleon operators 
+  --              at the sink and the source, respectively
+  --  Tpol        nucleon polarization matrix
+  local ut      = Fu * T
+  local S1bar   = gamma{mu=3} * S1:adjoin() * gamma{mu=3}
+  local us2ds1b = qcd.quarkContract24(Fu, S2 * Fd * S1bar)
+  return (   (ut:spintrace() * us2ds1b:spintrace()):trace() 
+           + (ut * us2ds1b):trace() )
+end
+
+function proton_allparity_c2pt(Fd, Fu)
+  -- create pos/neg parity, pol/unpol Sz nucleon correlators with wavefunctions
+  -- A = u [d Cg5 u]
+  -- B = g5 u [d Cg5 u]
+  -- {A,B}p = (1 + g4)/2 * {A,B}  : positive parity
+  -- {A,B}n = (1 - g4)/2 * {A,B}  : negative parity
+  -- 1 / (-I)*g1*g2     : Sz-even (Sz=+1 + Sz=-1)/ Sz-odd (Sz=+1 - Sz=-1)
+  -- gamma-polarization building blocks
+  local nucl_SA = gamma{mu=0} * gamma{mu=2}   -- C\gamma_5
+  local nucl_SB = gamma{mu=1} * gamma{mu=3}   -- C
+  local G15 = gamma{n=15}
+  local nucl_T_AAp  = (1. + gamma{mu=3}) / 2.
+  local nucl_T_AAn  = (1. - gamma{mu=3}) / 2.
+  local nucl_SigmaZ = gamma{mu=0}*gamma{mu=1} * complex(0,-1)
+  -- lists to iterate over
+  local all_Tpol  = { p = nucl_T_AAp, n = nucl_T_AAn }
+  local all_Spol  = { A = nucl_SA, B = nucl_SB }
+  local all_Tfact = { A = 1, B = G15 }
+  local all_Sz    = { [''] = 1, Sz = nucl_SigmaZ }
+  local res = {}
+  for i2, S2 in pairs(all_Spol) do
+  for i1, S1 in pairs(all_Spol) do 
+  for par, Tpar in pairs(all_Tpol) do 
+  for sz, Tpol in pairs(all_Sz) do
+    -- encode as 'proton_<snkS><srcS><par><spinZ>
+    res[string.format('proton_%s%s%s%s', i2, i1, par, sz)] = baryon_sigma_2pt_general(
+                          Fd, Fu, S2, S1, all_Tfact[i1] * Tpar * Tpol * all_Tfact[i2])
+  end end end end
+  return res
+end
+
+function wuppertal_smear_twisted(U, alpha, N, G, axis, tw_mom)
+  --
+  --  U is not twisted
+  --  tw: 4-dimensional mom, may be fractional (for BC twisting)
+  local L = latvec.lattice(G)
+  latvec.lattice(U)
+  local c_tw = L:planewave({0,0,0,0}, tw_mom)
+  return latvec.scal_left(c_tw,
+              latvec.apply(function(x) return wuppertal_smear(U, alpha, N, x, axis) end, 
+              latvec.scal_left(c_tw:conj(), G)))
+end
+function make_source_twisted(Z, csrc, wup_a, wup_n, t_axis, tw_mom)
+  local L = latvec.lattice(Z)
+  local cm = L:ColorMatrix()
+  for a = 0, cm:colors() - 1 do
+    cm[{csrc[1], csrc[2], csrc[3], csrc[4],a=a,b=a}] = complex(1,0)
+  end
+  L:Subset{axis=t_axis, position=csrc[1+t_axis]}:where(
+     function()
+       cm:set(wuppertal_smear_twisted(Z, wup_a, wup_n, cm, t_axis, tw_mom))
+     end)
+  return L:DiracPropagator(cm)
+end
+
+-------------------------------------------------------------------------------
+-- init
+-------------------------------------------------------------------------------
+L = qcd.lattice(latsize, {network=network_geom})
+print_network_settings()
+print_subgrid_settings(L)
+
+
+function do_sources_hspec(cfg_key, ama, calc_prop, gauge_u_ape, wup_alpha, wup_n)
+  local cur_timer
+  local smear_wup_tag = string.format('GN%sx%d', tostring(wup_alpha), wup_n)
+  local boost_tag     = string.format('bx%sby%sbz%s', 
+      tostring(boost_p[1]), tostring(boost_p[2]), tostring(boost_p[3]))
+  printf("cfg_key='%s'  smear='%s'  boost='%s'\n", cfg_key, smear_wup_tag, boost_tag)
+  local bc_quark_t  = ferm_bc[1+t_axis]
+  local bc_baryon_t = bc_quark_t * bc_quark_t * bc_quark_t
+  
+  -- cycle over sources
+  for i_src, csrc in pairs(ama['csrc_list']) do
+    local timer_1src = timer(string.format('src #%03d csrc={%d,%d,%d,%d}', 
+                            i_src, csrc[1], csrc[2], csrc[3], csrc[4]))
+    printf('csrc={%d,%d,%d,%d}\n', csrc[1], csrc[2], csrc[3], csrc[4])
+    local tsrc = csrc[1+t_axis]
+
+    -- calc fwprop
+    cur_timer = timer('frw_prop_source')
+    local frw_src = make_source_twisted(gauge_u_ape, csrc, wup_alpha, wup_n, t_axis, boost_p)
+    cur_timer('done')
+
+    cur_timer = timer('frw_prop_inv')
+    local frw_prop = calc_prop(frw_src)
+    cur_timer('done')
+
+    -- calc & save hadspec
+    cur_timer = timer('frw_prop_smear')
+    local frw_prop_smear = wuppertal_smear_twisted(gauge_u_ape, wup_alpha, wup_n, 
+                              frw_prop, t_axis, boost_p)
+    cur_timer('done')
+
+    local hadspec_file = get_hadspec_file_tag(cfg_key, csrc, ama, 
+                              string.format('%s_%s', boost_tag, smear_wup_tag))
+    local aff_hadspec = qcd.aff.Writer(hadspec_file)
+    printf('write[hadspec]: %s\n', hadspec_file)
+  
+    cur_timer = timer('hadspec')
+    local quark_ph = L:planewave({0,0,0,0}, boost_p)
+--    local baryon_bh = quark_ph*quark_ph*quark_ph
+    do 
+      local x_timer = timer('calc_proton_corr_sp')
+      local corr = proton_allparity_c2pt(
+                        frw_prop * quark_ph:conj(), 
+                        frw_prop * quark_ph:conj())
+      x_timer("done")
+      x_timer = timer('save_proton_corr_sp')
+      save_2pt_list(L, aff_hadspec, 
+                    string.format('/cfg%s/hspectrum/%s-P',    -- smear-point
+                                  cfg_key, smear_wup_tag),
+                    corr, csrc, hadspec_psnk_list, t_axis, bc_baryon_t)
+      x_timer("done")
+    end
+    do
+      local x_timer = timer('calc_proton_corr_ss')
+      local corr = proton_allparity_c2pt(
+                        frw_prop_smear * quark_ph:conj(), 
+                        frw_prop_smear * quark_ph:conj()), 
+      x_timer("done")
+      x_timer = timer('save_proton_corr_ss')
+      save_2pt_list(L, aff_hadspec, 
+                    string.format('/cfg%s/hspectrum/%s-%s',   -- smear-smear
+                                 cfg_key, smear_wup_tag, smear_wup_tag),
+                    corr, csrc, hadspec_psnk_list, t_axis, bc_baryon_t)
+      x_timer("done")
+    end
+    cur_timer('done')
+    force_gc('do_sources_cycle|')
+    timer_1src('done')
+    
+    aff_hadspec:close()
+  end
+end
+
+
+-------------------------------------------------------------------------------
+-- main
+-------------------------------------------------------------------------------
+do
+  -- read gauge field 
+  local cur_timer
+  local gf_file = get_gauge_file(cfg_key)
+  cur_timer = timer('gauge_load')
+  printf('read[gauge]: "%s"\n', gf_file)
+  local qio_r   = open_qdpc_read(L, gf_file)
+  local gauge_u = qio_r:ColorMatrix(4)
+  qio_r:close()
+  cur_timer('done')
+
+  -- smear gauge field
+  cur_timer = timer('gauge_smear')
+  local gauge_u_ape = APE_smear(gauge_u, ape_alpha, ape_N, ape_accu, ape_maxiter, t_axis)
+  cur_timer('done')
+
+  -- solver with smeared field
+  cur_timer = timer("stout_smear")
+  local gauge_u_stout  = stout_smear_full(gauge_u, stout_rho, stout_n)
+  cur_timer("done")
+
+  -- init QOP-MG
+  cur_timer = timer("init_mg")
+  check_mg_param(mg_param, {network=network_geom})
+  print_obj(mg_param, "mg_param")
+  -- self-check : ferm bc correspond to boost_p in spatial dir
+  for mu=1,3 do     
+    local ph = 2. * math.pi * boost_p[mu]
+    local exp_ph = complex(math.cos(ph), math.sin(ph))
+    if 1e-8 < (ferm_bc[mu] - exp_ph):abs() then
+      error(string.format("mu=%d : mismatch ferm_bc=%s, exp_ph=%s", 
+                          tostring(ferm_bc[mu]), tostring(exp_ph)))
+    end
+  end
+  local mg = qcd.qop.WilsonMG(gauge_u_stout, mg_param)
+  cur_timer("done")
+  
+  -- ama loop
+  for i_ama, ama in pairs(ama_list) do
+    -- init solver for given AMA mode
+    local mg_prec = { residual = { rsqmin = ama['tol']^2, relmin = 0 } }
+    print_obj(mg_prec, "mg_prec")
+    local calc_prop  = make_mg_solver(mg, ama, 2 * kappa_l)
+    cur_timer = timer(string.format('AMA="%s", #src=%d', ama['approx'], #(ama['csrc_list'])))
+    -- wup scan loop
+    for i_wup_n = 1, #scan_wup_list do
+      do_sources_hspec(cfg_key, ama, calc_prop, gauge_u_ape,
+                       wup_alpha, scan_wup_list[i_wup_n])
+    end
+    cur_timer("done")
+  end
+end
+
+total_timer("done")
+printf("QLUA_RUN_SUCCESS\n")

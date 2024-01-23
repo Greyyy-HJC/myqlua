@@ -1,0 +1,127 @@
+package.path = 'qlua-production/?.qlua;qlib-lhpc/?.qlua;qlib/?.qlua;' .. package.path
+require 'strict'    -- catch all undefined (nil) variables
+require 'stdlib'    -- standard printf, etc
+require 'lhpc-std'  -- make_source, etc
+require 'ape-smear' -- gauge smear
+require 'hex-smear'
+require 'gauge'
+require 'qdpc_io'
+require 'setup_util'
+require 'debug_util'
+require 'latvec'
+
+require 'hadspec'
+
+require 'smear/field_smear'
+require 'hadron/baryon_corr'
+require 'hadron/qbarq_wline'
+
+require 'util/file'
+require 'util/geom'
+require 'util/strkey'
+
+
+------------------------------------------------------------------------------
+-- INITIALIZATION
+------------------------------------------------------------------------------
+tot_timer = timer("total")
+
+S = rnd_init(L, rnd_seed)
+
+
+contract_only = false -- stub
+if contract_only then printf("*** CONTRACT_ONLY ***\n") end
+
+require 'qpdf/sample_c23pt_boostsm_qbarq_posneg'
+
+function have_sample(cfg_key, sample_tag)
+  return log_have_tag(sample_log_file(cfg_key), sample_tag)
+end
+function done_sample(cfg_key, sample_tag)
+  return log_done_tag(sample_log_file(cfg_key), sample_tag)
+end
+
+
+------------------------------------------------------------------------------
+-- MAIN
+------------------------------------------------------------------------------
+
+print_gauge_norm_det(gauge_u, "gauge_u")
+print_gauge_plaquette(gauge_u, "gauge_u")
+
+
+cur_timer("done")
+
+-- gauge field for solver
+gauge_u_hyp = gauge_hyp_smear_std(gauge_u, 1)
+print_gauge_norm_det(gauge_u_hyp, "gauge_u_hyp")
+print_gauge_plaquette(gauge_u_hyp, "gauge_u_hyp")
+
+  
+do  -- main part
+  -- init QOP-MG
+  cur_timer = timer("init_mg")
+  local kappa_l = 1./2./(4. + mq_l)
+  local mg_param = make_mg_params(
+      kappa_l, c_sw, ferm_bc, 
+      mg_tol_approx, mg_maxiter, latsize, 
+      mg_param_null,
+      { name = "mg", verbose = 0 })
+  print_obj(mg_param, "mg_param")
+  local mg = nil
+  if not contract_only then mg = qcd.qop.WilsonMG(gauge_u_hyp, mg_param) end
+  cur_timer("done")
+--  local cg_w = smear_cgaussW
+--  local smear_func = make_smear_func(L, 'coulgauss', 
+--      { t_axis=t_axis, coulomb_G=colmat_gfix, gauss_W=smear_cgaussW })
+
+  -- ama loop
+  for i_ama, ama in pairs(ama_list) do
+    -- list of sample indices
+    printf("INFO: AMA=%s\n", strkey.ama_str(ama))
+    local n_sample_tot = #ama['csrcgrp_list']
+    local i_sample_list = range(1, 1 + n_sample_tot)
+
+    -- solver func for given AMA mode (note the normalization)
+    local calc_prop = function()end
+    if not contract_only then calc_prop = make_mg_solver(mg, ama, 2 * kappa_l) end
+    cur_timer = timer(string.format('AMA="%s", #srcgrp=%d', ama['approx'], #(ama['csrcgrp_list'])))
+    -- iterate over (coherent grouped) samples
+    for ii_s, i_sample in ipairs(i_sample_list) do
+      local csrcgrp = ama['csrcgrp_list'][i_sample]
+      local csrcgrp_tag = strkey.csrcgrp_str(csrcgrp)
+      local sample_tag = string.format('%s.%s.qbarq', strkey.ama_str(ama), csrcgrp_tag)
+      if have_sample(cfg_key, sample_tag) then  -- XXX disabled for now
+--      if false then
+        printf("INFO: SKIP sample[%d] '%s': done\n", i_sample, sample_tag)
+      else
+        for i_sspair_desc, sspair_desc in ipairs(c3pt_src_sink_pair_list) do
+          gg_r = nil
+--          gg_r = toSUn(S:gaussian_ColorMatrix())
+          local src_smear_opt, c3pt_snk_spec_list, c3pt_tsep_list = unpack(sspair_desc)
+          sample_c23pt_boostsm_cohbkw(
+            L, cfg_key, csrcgrp, ama,                             -- [1-4]
+            hslab_len_t, c3pt_qpdf_len_t,    -- [5-6]
+            src_smear_opt,                                       -- [7]
+            c2pt_symm_psnk_list,                                  -- [8]
+            c3pt_snk_spec_list, c3pt_tsep_list, c3pt_pdf_spec_list,  -- [9-11]
+            meson_snk_G, meson_src_G,                             -- [12-13]
+            proton_snk_S, proton_src_S,                           -- [14-15]
+            {[''] = gauge_u, hyp = gauge_u_hyp, },                -- [16]
+            calc_prop,                                            -- [17]
+            t_axis, ferm_bc,                                      -- [18-20]
+            { c2pt=true, c2pt_proton=true, 
+              qpdf=true, qpdf_neg=true}, 
+            gg_r)
+        end
+        done_sample(cfg_key, sample_tag)
+        printf("INFO: DONE sample[%d] '%s'\n", i_sample, sample_tag)
+      end
+    end
+  end
+  if not contract_only then mg:close() end
+  mg = nil
+end
+
+tot_timer("done")
+printf("QLUA_RUN_SUCCESS\n")

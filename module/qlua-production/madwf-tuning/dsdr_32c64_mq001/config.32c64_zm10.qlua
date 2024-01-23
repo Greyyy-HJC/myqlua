@@ -1,0 +1,149 @@
+package.path = 'qlib/?.qlua;qlib-lhpc/?.qlua;' .. package.path
+require 'strict'
+require 'setup_util'
+
+latsize = {32,32,32,64}
+t_axis = #latsize - 1
+rnd_seed= 1984
+ferm_bc = {1,1,1,-1}
+
+-- for inverter test
+test_src_coord = {0,0,0,0}
+test_src_wup_N = 0
+
+-- max evalues of kernel
+cg_ritz_eps = 1e-10
+cg_ritz_maxiter = 20000
+
+mdwf_M5 = 1.8
+mdwf_mf = 0.001
+mdwf_L5_full = 32
+mdwf_b5_full = 1.
+mdwf_c5_full = 0.
+
+-- zMoebius params : etamax=1.45
+mdwf_L5  = 10
+mdwf_bmc5 = 1.
+mdwf_bpc5 = {
+  complex(4.953133333527814,  4.636759671022268),
+  complex(5.834549184435342, -0.847375749821817),
+  complex(3.727311567410276, 0),
+  complex(1.614590791824022, 0),
+  complex(0.835373070341761, 0),
+
+  complex(0.7053563878413177, 0),
+  complex(1.120047444033678, 0),
+  complex(2.420780639614394, 0),
+  complex(5.834549184435342,  0.847375749821817),
+  complex(4.953133333527814, -4.636759671022268),
+}
+assert(#mdwf_bpc5 == mdwf_L5)
+mdwf_b5, mdwf_c5 = {}, {}
+for s = 1, mdwf_L5 do 
+  mdwf_b5[s] = .5 * (mdwf_bpc5[s] + mdwf_bmc5)
+  mdwf_c5[s] = .5 * (mdwf_bpc5[s] - mdwf_bmc5)
+end
+
+-- src parameters
+ape_alpha   = 2.5   -- equiv to CPS ape_beta=0.4
+ape_N       = 25
+ape_accu    = 1e-6
+ape_maxiter = 150
+-- XXX correct these!
+wup_N       = 70
+wup_alpha   = 0.5625
+
+-- inverter parameters:
+--   exact
+mixcg_tol_exact       = 1e-10
+mixcg_maxiter_exact   = 50000
+--   sloppy
+mixcg_tol_sloppy      = 1e-8
+mixcg_maxiter_sloppy  = 200
+--   single prec. restart
+mixcg_tol1            = 1e-6
+mixcg_maxiter1        = 10000
+
+-- Lanczos parameters for LR eigenvalue (spectrum upper bound)
+l_nev_LR      = 50   -- wanted vectors
+l_ncv_LR      = 60   -- +25% unwanted vectors
+l_maxiter_LR  = 5000
+l_tol_LR      = 1e-6
+-- Lanczos parameters
+l_nev         = 1400   -- wanted vectors
+l_ncv         = 1550   -- +xx% unwanted vectors
+l_maxiter     = 50000
+l_tol         = 1e-6
+-- Chebyshev acc parameters
+l_poly_n      = 200
+l_poly_a      = 75.0e-5 -- adjusted for 1400 based on a 1600 run results; eval[1400=67e-5]
+l_poly_b      = 5.4  -- actual lambda_max=4.647 from an LR run
+l_poly_x0     = 0.  -- P_n normalization point
+-- eigcg parameters (used only to init space for Lanczos)
+eigcg_nev     = 2
+eigcg_tol     = 1e-6
+eigcg_vmax    = 10
+eigcg_umax    = l_ncv
+
+
+-- XXX for testing sloppy performance and precision
+sloppy_eps_list = { 1e-4, 1e-6, 1e-8, 1e-14 }
+
+ens_top   = '/lqcdproj/nucstrucdwf/mdwf_32c64_ml0.001'
+data_top  = 'data' --string.format("%s/%s/data", ens_top, "testrun1-ds")
+data_pdir = 'data_pdir'
+
+evec_volfmt     = 'part_dir'
+evec_pack_eopc  = true
+evec_qio_prec   = 'float'
+evec_qio_stride = 32
+evec_rawdump_stride = 32
+prop_volfmt     = 'part_dir'
+
+evec_pdir   = 'evec_rawdump'
+--scratch_dir = "/scratch/evec_rawdump"
+scratch_dir = evec_pdir   -- read directly from Lustre
+--evec_pdir   = scratch_dir -- vectors already on Lustre
+
+sol_eps_list          = { 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10 }
+out_tag         = string.format('zm%d', mdwf_L5)
+function soldf_file(key, tag, eps)
+  -- tag will discriminate between dslash and dov
+  return string.format('%s/soldf_%s_eps%.1e_%s.lime', 
+          data_pdir, out_tag, eps, tag)
+end
+
+function get_file_gauge(key)
+  return string.format("%s/gauge/ckpoint_lat.%s",
+          ens_top, key)
+end
+
+function get_file_evec_kernel(key, what)
+  return string.format("%s/kern_evec.%s.%s.%s.lime",
+          data_top, out_tag, key, what)
+end
+function mdwf_evec_file(key, nev)
+  return string.format("%s/mdwf_evec_nev%05d.%s.%s.raw", 
+          evec_pdir, nev, out_tag, key)
+end
+function mdwf_evec_file_scratch(key, nev)
+  return string.format("%s/mdwf_evec_nev%05d.%s.%s.raw", 
+          scratch_dir, nev, out_tag, key)
+end
+function frw_prop_file_sloppy(key, csrc)
+  return string.format("%s/frw_prop_sloppy.%s.%s.x%dy%dz%dt%d.ddpairs", 
+          data_pdir, out_tag, key, csrc[1], csrc[2], csrc[3], csrc[4])
+end
+function frw_prop_file_exact(key, csrc)
+  return string.format("%s/frw_prop_exact.%s.%s.x%dy%dz%dt%d.ddpairs",
+          data_pdir, out_tag, key, csrc[1], csrc[2], csrc[3], csrc[4])
+end
+function frw_prop_file_eps(key, csrc, eps)
+  return string.format("%s/frw_prop_sloppy.%s.%s.x%dy%dz%dt%d.eps%.2e.ddpairs", 
+          data_pdir, out_tag, key, csrc[1], csrc[2], csrc[3], csrc[4], eps)
+end
+
+function arpack_logfile(key)
+  -- FIXME log directory is not necessarily 'logs/<key>'
+  return string.format("%s/arpack.log", logdir, key)
+end

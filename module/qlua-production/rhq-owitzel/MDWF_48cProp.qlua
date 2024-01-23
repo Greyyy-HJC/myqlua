@@ -1,0 +1,62 @@
+require "stdlib"
+require "MDWFutils"
+require "WriteMDWFpropagator"
+
+-- Variables set by bash script
+SrcVec = {:SOURCE:}
+ConfigName = ":CONFIG_NAME:"
+PropName = ":PROP_NAME:"
+mval = :MVAL:
+Ls = :LS:
+bc = {1,1,1,:BC:}
+rsd_cg = 1e-18
+max_cg = 8000
+M5 = 1.8
+b5 = 1.5
+c5 = 0.5
+precision = "float"
+
+-- moments = {{0,0,0}, {1,0,0}, {0,1,0}, {1,0,1}}
+moments = {{0,0,0}}
+
+printf("Begin QLUA.\n")
+
+L, volume, S = InitLattice(48,48,48,96)
+U, GaugeInfo = LoadGaugefield(ConfigName, L, volume)
+
+
+--  mdwf 
+b5_vector = {}
+c5_vector = {}
+for i = 1, Ls do
+   b5_vector[i] = b5
+   c5_vector[i] = c5
+end
+
+DW = qcd.MDWF.generic(U, bc, Ls, M5, mval, b5_vector, c5_vector)
+mx_solver = DW:mixed_solver(rsd_cg, max_cg, rsd_cg, max_cg)
+
+src = MakePointSource(SrcVec)
+-- Find the quark propagator for this source and compute the mesonic 2pt function
+q_prop = calc_mdwf_prop(mx_solver, U, Ls, M5, b5, c5, src)
+
+ComputeMeson2pt(q_prop, q_prop, moments, SrcVec[4])
+
+
+
+-- Write QIO propagator
+P={}
+P["ACTION"] = 'NEF'
+P["OVERMASS"] = M5
+P["MASS"] = mval
+P["LS"] = Ls
+P["B5"] = b5
+P["C5"] = c5
+P["RSDCG"] = rsd_cg
+P["MAXCG"] = max_cg
+P["SRCVEC"] = Table2String(SrcVec)
+P["TIMESLICE"] = SrcVec[4]
+P["FERMION_BC"] = Table2String(bc)
+
+QIOwrite_MDWF_point_source_propagator(PropName, q_prop, P, GaugeInfo, precision)
+printf("Done QLUA.\n")

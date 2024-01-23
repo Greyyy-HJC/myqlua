@@ -1,0 +1,140 @@
+-- full TMD calculation:
+--  * propagators :
+--    prop_F prop_B 
+--  * proton correlators (without cedm insertion) with Tpol_list polarisations
+--  ** hadspec : traditional (Chroma HSPECTRUM)
+--  ** c2pt : prop_F^3 
+--  ** tmd : prop_B*W*prop_F
+
+
+package.path = 'qlua-production/?.qlua;qlib-lhpc/?.qlua;qlib/?.qlua;' .. package.path
+require 'strict'    -- catch all undefined (nil) variables
+require 'stdlib'    -- standard printf, etc
+require 'lhpc-std'  -- make_source, etc
+require 'ape-smear' -- gauge smear
+require 'gauge'
+require 'qdpc_io'
+require 'setup_util'
+require 'latvec'
+
+require 'hadspec'
+require 'hex-smear'
+require 'dwf'
+
+require 'hadron/baryon_corr'
+require 'hadron/qbarq_wline'
+require 'util/file'
+require 'util/geom'
+require 'util/strkey'
+
+------------------------------------------------------------------------------
+-- INITIALIZATION: 
+--  import config(which reads gauge, evecs, sets up ama, make_solver)
+------------------------------------------------------------------------------
+if true then
+--if false then
+  -- perhaps use a list of keys to check that all names have been defined?
+  -- check `k' ~= nil ! otherwise, _G[k] will be set to nil, avoiding 'strict'
+  for k,v in pairs(job_config) do   
+    assert('string' == type(k))
+    if nil == v then 
+      printf("WARNING: job_config.%s = nil\n", k) 
+    end
+    _G[k] = v
+  end
+end
+
+------------------------------------------------------------------------------
+-- BENCHMARKS
+------------------------------------------------------------------------------
+-- la benchmark
+if preptest.bmark_la then
+  for i, la_pp in pairs({
+          { "gemm", "c",   300,    300,    300 },
+          { "gemm", "z",   300,    300,    300 },
+--          { "gemm", "c",  1000,   1000,   1000 },
+--          { "gemm", "z",  1000,   1000,   1000 },
+  --        { "gemm", "c",  3000,   3000,   3000 },
+  --        { "gemm", "z",  3000,   3000,   3000 },
+        }) do
+    local bm, pd, m,n,k = unpack(la_pp)
+    local cur_str = string.format("la_benchmark %2s %6s  %6d %6d %6d", bm, pd, m, n, k)
+    printf("%s\n", cur_str)
+    local cur_t = timer(cur_str)
+    qcd.latmat.la_benchmark(bm, pd, m, n, k)
+    cur_t("done")
+  end
+end
+
+------------------------------------------------------------------------------
+-- MAIN
+------------------------------------------------------------------------------
+require 'tmd/sample_tmd_cohbkw_boost'
+
+function have_sample(cfg_key, sample_tag)
+  return log_have_tag(sample_log_file(cfg_key), sample_tag)
+end
+function done_sample(cfg_key, sample_tag)
+  return log_done_tag(sample_log_file(cfg_key), sample_tag)
+end
+
+-- gauge field for source construction
+hyp_gauge_u = gauge_hyp_smear_std(gauge_u, 1)
+
+-- main loop
+for i_ama, ama in pairs(job_config.ama_list) do
+  printf("INFO: AMA=%s\n", strkey.ama_str(ama))
+  local n_sample_tot = #ama['csrcgrp_list']
+  local i_sample_list = range(1, 1 + n_sample_tot)
+  if sample_list then 
+    printf("WARN: request samples {%s}\n", list_tostring(sample_list))
+    for i,s in ipairs(sample_list) do 
+      if (n_sample_tot < s) then printf("WARN: SKIP sample[%d]: out of range\n", s) end
+    end
+    i_sample_list = list_slice(i_sample_list, sample_list)
+  end
+  printf("INFO: select  samples {%s}\n", list_tostring(i_sample_list))
+
+  local function smear_func_wup(x) 
+    -- reqiures global wup_a, wup_n, wup_gauge_u, t_axis
+    return wuppertal_smear(wup_gauge_u, wup_alpha, wup_N, x, t_axis)
+  end
+  local solver_func = make_solver(ama)
+  for ii_s, i_sample in ipairs(i_sample_list) do
+    local csrcgrp = ama['csrcgrp_list'][i_sample]
+    local csrcgrp_tag = strkey.csrcgrp_str(csrcgrp)
+    local sample_tag = string.format('%s.%s.%s', strkey.ama_str(ama), csrcgrp_tag, task_key)
+    printf("sample_tag='%s'\n", sample_tag)
+    if (not ama.csrcgrp_skip  or ama.csrcgrp_skip < i_sample) then
+      gg_r = nil
+--      gg_r = toSUn(rnd:gaussian_ColorMatrix())
+      if have_sample(cfg_key, sample_tag) then 
+        printf("INFO: SKIP sample[%d] '%s': done\n", i_sample, sample_tag)
+      else
+        for i_sspair_desc, sspair_desc in ipairs(c3pt_src_sink_pair_list) do
+          local src_smear_opt, c3pt_snk_spec_list, c3pt_tsep_list = unpack(sspair_desc)
+          sample_tmd_cohbkw_boost(L, cfg_key, csrcgrp, ama,
+                hslab_len_t, tmd_len_t, 
+                src_smear_opt, c2pt_symm_psnk_list, 
+                c3pt_snk_spec_list, c3pt_tsep_list, tmd_lpspec_list_bfirst,
+                tmd_S2, tmd_S1, tmd_Tpol_c3pt_list,
+                flav_list, gauge_u_lpath,
+                solver_func, 
+                t_axis, ferm_bc,
+                { c2pt=true, tmd=false },    -- do contractions
+                gg_r)
+        end
+        done_sample(cfg_key, sample_tag)
+        printf("INFO: DONE sample[%d] '%s'\n", i_sample, sample_tag)
+      end
+    end
+  end
+  solver_func = nil
+  force_gc()
+  print_obj(qcd.memory_usage())
+end
+
+job_config.job_timer("done")
+printf("QLUA_RUN_SUCCESS\n")
+-- vim : syn=lua
+

@@ -1,0 +1,401 @@
+---------------------------------------------------------------------------------------------------
+-- 2019/12/05 syritsyn
+--  script for 48I dwf tmd production on KNL with deflation
+--  should be run as
+--  $ mpirun  qlua  <job.qlua>  <this-config.qlua>  <main-tmd-script.qlua>
+--  <main-tmd-script.qlua> may be omitted to perform gauge read, eigenvector read & test.
+--
+--  This script includes:
+--  * lattice and dw action parameters
+--  * boosted smearing params
+--  * gauge file read & APE smear 
+--  * using Grid DWF inverters opt. for KNL
+--  * computing exact samples with zMobius-accel. DWF (Grid for zmobius and PV inverters)
+--  * regular or split solver
+--  * testing of the lowest dwf eigenvector(s)
+--
+--  This script sources params from
+--  * config/dwf/DWFI48c96_zmobius.qlua
+--  * config/dwf/DWFI48c96_zmobius_grid_split.qlua
+--
+---------------------------------------------------------------------------------------------------
+
+
+package.path = 'qlib/?.qlua;qlib-lhpc/?.qlua;qlua-production/?.qlua;' .. package.path
+require 'strict'
+require 'setup_util'
+require 'stdlib'
+require 'dwf_bcderiv_split'
+require 'mdwf_eopc'   -- MDWF ref.impl to check evecs
+require 'ape-smear'
+require 'hex-smear'
+require 'hadron/qbarq_wline'
+require 'smear/field_smear'
+require 'iter'
+
+function debug_mem_print(cfg_key, msg)
+  msg = msg or ""
+  if 0 == os.node() then qcd.log_rusage(string.format("%s.rusage", cfg_key), msg) end
+  print_obj(qcd.memory_usage(), msg)
+end
+
+-------------------------------------------------------------------------------
+-- general
+-------------------------------------------------------------------------------
+--local _P = {}
+--jobcfg = _P
+--setmetatable(_P, {__index = _G})
+--setfenv(1, _P)
+jobcfg = _G
+job_config = jobcfg
+
+require 'rcparams'
+rcparams.backend.laplacian = 'cpu'
+rcparams.backend.qbarq = 'cpu'
+rcparams.backend.dslash_solver = 'cpu-grid-lib'
+
+sample_tabopt = {
+  backend_smear         = 'cpu',
+  backend_smear_bcderiv = 'cpu',
+}
+
+preptest = {
+  bmark_la            = true,
+  test_read_gauge     = true,
+  test_save_hadspec   = true,
+  test_save_bb        = true,
+  test_save_bb_gen    = true,
+  test_ape            = true,
+  test_wup            = true,
+  test_prop           = true,
+  test_evec           = true,
+  test_g5herm         = true,
+}
+if preptest.bmark_la then
+  for i, la_pp in ipairs({
+          { "gemm", "c",   300,    300,    300 },        -- float complex  ( 300, 300)x( 300, 300)
+          { "gemm", "z",   300,    300,    300 },        -- double complex ( 300, 300)x( 300, 300)
+          { "gemm", "c",  1000,   1000,   1000 },    -- float complex  (1000,1000)x(1000,1000)
+          { "gemm", "z",  1000,   1000,   1000 },    -- double complex(1000,1000)x(1000,1000)
+          { "gemm", "c",  3000,   3000,   3000 },    -- float complex  (3000,3000)x(3000,3000)
+          { "gemm", "z",  3000,   3000,   3000 },    -- double complex(3000,3000)x(3000,3000)
+        }) do
+    local bm, pd, m,n,k = unpack(la_pp)
+    local cur_str = string.format("la_benchmark %2s %6s %6d %6d %6d", bm, pd, m, n, k)
+    printf("%s\n", cur_str)
+    local cur_t = timer(cur_str)
+    qcd.latmat.la_benchmark(bm, pd, m, n, k)
+    cur_t("done")
+  end 
+end
+
+task_key    = rawget(_G, 'task_key') or 'tmd_bcd'
+subjob_key  = rawget(_G, 'subjob_key') or ''
+
+assert(job_key)
+assert(task_key)  -- for keeping track of samples in task 
+assert(subjob_key)
+if "" == subjob_key then sample_list = false
+else sample_list = parse_int_range(subjob_key) end
+
+jobcfg.cfg_key = job_key -- job# enumerates config#
+jobcfg.rnd_seed= 1984
+jobcfg.ens_top   = '/p/fastdata/slnpp/DWFI_48c96_m0007'
+
+require 'config/dwf/DWFI48c96_zmobius'
+
+
+-------------------------------------------------------------------------------
+-- solver & props
+-------------------------------------------------------------------------------
+jobcfg.do_contract_only = false
+--jobcfg.do_bogus_prop = true
+jobcfg.do_bogus_prop = false
+require 'config/dwf/DWFI48c96_zmobius_grid_split'
+
+-- if all propagators have been computed & stored, do not init solvers
+jobcfg.do_save_prop = { 
+  F   = true,     -- frw
+  Fg  = false,    -- frw grp
+  B   = false,    -- bkw
+  Bg  = true,     -- bkw grp
+}
+
+
+-------------------------------------------------------------------------------
+-- AMA approximations: FIXME parameters and lists of samples
+-------------------------------------------------------------------------------
+--if true then
+if false then
+  sloppy_csrc_list = make_src_grid(
+      {  4,  4,  2,  2 },   -- n_src
+      latsize,
+      {0,0,0,0},            -- x0
+      {7,11,13,23}, jobcfg.cfg_index)   -- displacement by config#
+  -- * approx modes
+  ama_sl = { ['approx']    = 'sloppy',
+      ['csrc_list'] = sloppy_csrc_list,
+      ['ncg']       = 200,
+      ['prop_prec'] = 'float' }
+  ama_ex = { ['approx']    = 'exact',
+      ['csrc_list'] = { sloppy_csrc_list[1] },
+      ['prop_prec'] = 'double' }
+  ama_list = { 
+    ama_sl, 
+--    ama_ex,
+  }
+else 
+  csrcgrid  = { 4, 4, 2, 4 }
+  local x0_1= { 0, 0, 0, 0 }
+  local dx_g= { 7,11,13,23 }
+  local dx_it={ latsize[1]/2, latsize[2]/2, latsize[3]/2, 0 } -- max displacement
+  csrcgrid_nt = csrcgrid[1+t_axis]
+  hslab_len_t = math.floor(latsize[1+t_axis] / csrcgrid_nt)
+
+  local l1 = make_srcgrp_grid(csrcgrid, latsize, x0_1, dx_g, jobcfg.cfg_index, dx_it)
+  local csrcgrp_list_sl = l1
+  local csrcgrp_list_ex = { l1[1] }
+  ama_ex = { ['approx']    = 'exact',
+        ['csrcgrp_list'] = csrcgrp_list_ex,
+        -- XXX exact samples are computed with Mobius-acc DWF, so tol is irrelevant but required for compat.
+        ['tol']       = 1e-9,
+        ['prop_prec'] = 'double' }
+  ama_sl = { ['approx']    = 'sloppy',
+        ['csrcgrp_list'] = csrcgrp_list_sl,
+        ['ncg']       = 200,
+        ['prop_prec'] = 'float' }
+  -- XXX comment out / reorder to select sample production strategy
+  ama_list = { 
+    ama_sl, 
+    ama_ex,
+  }
+end
+
+
+------------------------------------------------------------------------------
+-- file locations
+------------------------------------------------------------------------------
+jobcfg.data_top  = 'data'       -- FIXME to change output location
+jobcfg.data_pdir = 'data_pdir'  -- FIXME to change output location
+
+prop_qio_stride   = 1
+prop_qio_volfmt   = 'part_dir'
+
+require 'tmd/configs/config_filenames'
+
+-- logging propagators and samples
+function get_prop_log_file(cfg_key, prop_kind)
+  return string.format("%s/prop_log/%s.%s", 
+      jobcfg.data_pdir, cfg_key, prop_kind)
+end
+
+function sample_log_file(cfg_key)
+  return string.format("%s/sample_log/%s.%s", 
+      jobcfg.data_top, cfg_key, task_key)
+end
+
+
+------------------------------------------------------------------------------
+-- correlator parameters
+------------------------------------------------------------------------------
+-- source parameters FIXME adjust
+ape_alpha   = 2.85   -- equiv to CPS ape_beta=0.4
+ape_N       = 25
+ape_accu    = 1e-12
+ape_maxiter = 150
+-- match G0.5625x100 from 2013 runs@Ds
+wup_N       = 82
+wup_alpha   = 2.5
+
+tt = timer("gauge_smear[ape]")
+wup_gauge_u = APE_smear(gauge_u, ape_alpha, ape_N, ape_accu, ape_maxiter, t_axis) ; tt("done")
+-- smearing opts
+smear_shape1 = {type='wuppertal', t_axis=t_axis,
+    wup_U=wup_gauge_u, wup_N=wup_N, wup_alpha=wup_alpha }
+--smear_opt_b0  = table_join(smear_shape1, {tag='GN2p5x5bxp0' }) -- no boost
+smear_opt_b05 = table_join(smear_shape1,
+        {tag='GN2p5x82bzp05', boost={   0,   0, 0.5,   0} })
+smear_opt_b10 = table_join(smear_shape1,
+        {tag='GN2p5x82bzp10', boost={   0,   0, 1.0,   0} })
+smear_opt_b15 = table_join(smear_shape1,
+        {tag='GN2p5x82bzp15', boost={   0,   0, 1.5,   0} })
+
+pm1     = {-1, 0, 1}        -- [-1;1] 
+
+-- momenta for c2pt, insertion
+c2pt_psnk_list = make_mom_list(12)
+c2pt_symm_psnk_list = c2pt_psnk_list
+c2pt_skew_psnk_list = c2pt_psnk_list
+c3pt_qext_list_xy1 = range_prod({ pm1, pm1, {0} })
+-- source-sink separation, length for chopping
+c3pt_tsep_list = { 8, }
+tmd_len_t = 8
+
+-- { { frw_dd1, bkw_dd1 }, ... }
+tmd_bcderiv_pair_list = { {'', ''}, {'x', ''}, {'', 'x'} }
+
+-- tmd linkpath specs -- from engel on 2019/11/27
+tmd_lpspec_list_bfirst = tmd_lpspec_expand({
+  { rev=true, 'y'       , vl={ rev=true, string.rep('x',15), string.rep('z',15), string.rep('v',11), string.rep('w',11) } },
+  { rev=true, 'yy'      , vl={ rev=true, string.rep('x',12), string.rep('z',12), string.rep('v', 9), string.rep('w', 9) } },
+  { rev=true, 'yyy'     , vl={ rev=true, string.rep('x',11), string.rep('z',11), string.rep('v', 8), string.rep('w', 8) } },
+  { rev=true, 'yyyy'    , vl={ rev=true, string.rep('x',10), string.rep('z',10), string.rep('v', 7), string.rep('w', 7) } },
+  { rev=true, 'yyyyy'   , vl={ rev=true, string.rep('x', 9), string.rep('z', 9), string.rep('v', 7), string.rep('w', 7) } },
+  { rev=true, 'yyyyyy'  , vl={ rev=true, string.rep('x', 8), string.rep('z', 8), string.rep('v', 6), string.rep('w', 6) } },
+  { rev=true, 'yyyyyyy' , vl={ rev=true, string.rep('x', 7), string.rep('z', 7), string.rep('v', 5), string.rep('w', 5) } },
+  { rev=true, 'zzzzzzzzzzzz' , vl={ } },
+  { rev=true, 'yyyyyyyyyyyy' , vl={ } },
+  { rev=true, 'sssssssss' , vl={ } },
+  { rev=true, 'uuuuuuuuu' , vl={ } }
+})
+
+-- now diversified according to whether propagators contain derivatives or not (engel 2020/01/13)
+tmd_lpspec_list_bfirst_for_noderiv = tmd_lpspec_expand({
+  { rev=true, 'y'       , vl={ rev=true, string.rep('x',15), string.rep('z',15), string.rep('v',11), string.rep('w',11) } },
+  { rev=true, 'yy'      , vl={ rev=true, string.rep('x',12), string.rep('z',12), string.rep('v', 9), string.rep('w', 9) } },
+  { rev=true, 'yyy'     , vl={ rev=true, string.rep('x',11), string.rep('z',11), string.rep('v', 8), string.rep('w', 8) } },
+  { rev=true, 'yyyy'    , vl={ rev=true, string.rep('x',10), string.rep('z',10), string.rep('v', 7), string.rep('w', 7) } },
+  { rev=true, 'yyyyy'   , vl={ rev=true, string.rep('x', 9), string.rep('z', 9), string.rep('v', 7), string.rep('w', 7) } },
+  { rev=true, 'yyyyyy'  , vl={ rev=true, string.rep('x', 8), string.rep('z', 8), string.rep('v', 6), string.rep('w', 6) } },
+  { rev=true, 'yyyyyyy' , vl={ rev=true, string.rep('x', 7), string.rep('z', 7), string.rep('v', 5), string.rep('w', 5) } },
+  { rev=true, 'zzzzzzzzzzzz' , vl={ } },
+  { rev=true, 'yyyyyyyyyyyy' , vl={ } },
+  { rev=true, 'sssssssss' , vl={ } },
+  { rev=true, 'uuuuuuuuu' , vl={ } }
+})
+
+tmd_lpspec_list_bfirst_for_deriv = tmd_lpspec_expand({
+  { rev=true, 'y'       , vl={ rev=true, string.rep('z',15) } },
+  { rev=true, 'yy'      , vl={ rev=true, string.rep('z',12) } },
+  { rev=true, 'yyy'     , vl={ rev=true, string.rep('z',11) } },
+  { rev=true, 'yyyy'    , vl={ rev=true, string.rep('z',10) } },
+  { rev=true, 'yyyyy'   , vl={ rev=true, string.rep('z', 9) } },
+  { rev=true, 'yyyyyy'  , vl={ rev=true, string.rep('z', 8) } },
+  { rev=true, 'yyyyyyy' , vl={ rev=true, string.rep('z', 7) } },
+  { rev=true, 'zzzzzzzzzzzz' , vl={ } },
+  { rev=true, 'yyyyyyyyyyyy' , vl={ } },
+  { rev=true, 'sssssssss' , vl={ } },
+  { rev=true, 'uuuuuuuuu' , vl={ } }
+})
+
+tmd_table_bcderiv_lpspec = {
+  [{'' , '' }]  = tmd_lpspec_list_bfirst_for_noderiv, 
+  [{'x', '' }]  = tmd_lpspec_list_bfirst_for_deriv,
+  [{'' , 'x'}]  = tmd_lpspec_list_bfirst_for_deriv,
+}
+-- source-sink spec list for correlators - modified for calc_tmdState_bcderiv_cohbkw_boost_v2
+c3pt_src_sink_pair_list_v1 = {
+  --   elem  = { smear_src_opt
+  --            { { smear_snk_opt, c2pt_skew_psnk_list, c3pt_psnk, c3pt_qext_list}, ... }
+  --            tsep_list, 
+  --            bcderiv_list
+  --            lpspec_list_bfirst }
+-- TODO add zero momentum?
+--  { smear_opt_b0,
+--    { { smear_opt_b0, c2pt_skew_psnk_list, { 1, 0, 0 }, { {0,0,0} },  } },
+--    c3pt_tsep_list,
+--    tmd_bcderiv_pair_list,
+--    tmd_lpspec_list_bfirst,
+--  },
+  { smear_opt_b05,
+    { { smear_opt_b05, c2pt_skew_psnk_list, { 0, 0, 1 }, { {0,0,0} },  } },
+    c3pt_tsep_list, 
+    tmd_bcderiv_pair_list,
+    tmd_lpspec_list_bfirst,
+  },
+--  { smear_opt_b10,
+--    { { smear_opt_b10, c2pt_skew_psnk_list, { 0, 0, 2 }, { {0,0,0} },  } },
+--    c3pt_tsep_list, 
+--    tmd_bcderiv_pair_list,
+--    tmd_lpspec_list_bfirst,
+--  },
+--  { smear_opt_b15,
+--    { { smear_opt_b15, c2pt_skew_psnk_list, { 0, 0, 3 }, { {0,0,0} },  } },
+--    c3pt_tsep_list, 
+--    tmd_bcderiv_pair_list,
+--    tmd_lpspec_list_bfirst,
+--  },
+}
+c3pt_src_sink_pair_list_v2 = {
+  --   elem  = { smear_src_opt
+  --             { { smear_snk_opt, c2pt_skew_psnk_list, c3pt_psnk, c3pt_qext_list}, ... }
+  --             tsep_list, 
+  --              table_bcderiv_lpspec }
+-- TODO add zero momentum?
+--  { smear_opt_b0,
+--    { { smear_opt_b0, c2pt_skew_psnk_list, { 1, 0, 0 }, { {0,0,0} },  } },
+--    c3pt_tsep_list,
+--    tmd_table_bcderiv_lpspec,
+--  },
+  { smear_opt_b05,
+    { { smear_opt_b05, c2pt_skew_psnk_list, { 0, 0, 1 }, { {0,0,0} },  } },
+    c3pt_tsep_list, 
+    tmd_table_bcderiv_lpspec,
+  },
+--  { smear_opt_b10,
+--    { { smear_opt_b10, c2pt_skew_psnk_list, { 0, 0, 2 }, { {0,0,0} },  } },
+--    c3pt_tsep_list, 
+--    tmd_table_bcderiv_lpspec,
+--  },
+--  { smear_opt_b15,
+--    { { smear_opt_b15, c2pt_skew_psnk_list, { 0, 0, 3 }, { {0,0,0} },  } },
+--    c3pt_tsep_list, 
+--    tmd_table_bcderiv_lpspec,
+--  },
+}
+
+-- polarization matrices for nucleon ops
+tmd_S1   = gamma{mu=0} * gamma{mu=2}
+tmd_S2   = tmd_S1
+-- tpol is used in CP-even, tpol5 in CP-odd correlators
+tpol_posSzplus  = (1. + gamma{mu=3})/2 *(1. - gamma{mu=0}*gamma{mu=1}*complex(0,1))
+tpol_posSzminus = (1. + gamma{mu=3})/2 *(1. + gamma{mu=0}*gamma{mu=1}*complex(0,1))
+tpol_posSzplus5 = (1. + gamma{mu=3})/2 *(1. - gamma{mu=0}*gamma{mu=1}*complex(0,1)) *gamma{n=15}
+tpol_posSzminus5= (1. + gamma{mu=3})/2 *(1. + gamma{mu=0}*gamma{mu=1}*complex(0,1)) *gamma{n=15}
+
+-- include both spin polarizations for c2pt, one for c3pt
+tmd_Tpol_c3pt_list = { 
+  posSzplus   = tpol_posSzplus, }
+
+-- flavor components (assuming proton in&out)
+flav_list = { 'U', 'D' }
+
+
+gauge_u_lpath = gauge_hyp_smear_std(gauge_u, 1)
+tmd_bkw_indep = false
+
+
+-------------------------------------------------------------------------------
+-- prop test TODO uncomment for prop test
+-------------------------------------------------------------------------------
+--if true then 
+if false then 
+  local rhs1 = S:gaussian_DiracPropagator()
+  for i_ama, ama in ipairs(ama_list) do
+    printf("TEST ama='%s'\n", ama.approx)
+    local tt
+
+    tt = timer(string.format("solver_test.%s", ama.approx))
+    printf("make_solver\n")     ; solver  = make_solver(ama)    ; tt('make_solver')
+    printf("solve_dirprop\n")   ; local sol1 = solver(rhs1)     ; tt('solve_dirprop')
+
+    tt = timer(string.format("split_solver_test.%s", ama.approx))
+    printf("make_solver\n")     ; spsolver  = make_split_solver(ama)  ; tt('make_solver')
+    printf("solve_dirprop\n")   ; local sol2 = spsolver(rhs1)   ; tt('solve_dirprop')
+
+    latvec.print_cmp(sol1, sol2, 'CG<>splitCG')
+  end
+end
+
+
+--if true then 
+if false then
+  for ama in iter.litems({ama_sl, ama_ex}) do
+    printf("\n\n*** AMA approx='%s'\n", ama.approx)
+    solver_bcd = make_solver_bcderiv(ama_ex)
+    src_bcd = iter.ordered_tmap_pair_table(function(i, dd) return dd, S:gaussian_DiracPropagator() end, {'', 'x'})
+    print_obj(src_bcd, 'src_bcd')
+    sol_bcd = solver_bcd(src_bcd)
+    print_obj(sol_bcd, 'sol_bcd')
+  end
+end

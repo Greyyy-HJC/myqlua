@@ -1,0 +1,94 @@
+package.path = package.path .. ';qlib/?.qlua;qlib-lhpc/?.qlua'
+require "setup_util"
+
+
+cfg_key_list = {
+       640, 720,  800,  880,  960,
+      1040, 1080, 1160, 1200, 1240,
+      1280, 1320, 1400, 1440, 1480,
+      1520, 1560, 1600, 1640, 1680,
+      1720, 1760, 1800, 1840, 1880,
+      1920, 1960, 2000, 2040, 2080,
+      2120, 2160
+}
+latsize={48,48,48,96}
+latsize_out={24,24,24,48}
+
+gauge_bc    = { 1, 1, 1,  1 } -- pbc for gauge
+gauge_twist = { 0, 0, 0, .5 }
+gauge_ft_csrc = { 0, 0, 0, 0 }
+
+ft_twist = { 0, 0, 0, .5} -- quark_bc = exp{i*2*pi/latsize * ft_twist)
+quark_bc = { 1, 1, 1, -1}
+lat_aniso= { 1, 1, 1,  1} -- no anisotropy
+
+gfix_landau_accu    = 1e-16
+tol_switch_fletcher = 1e-12
+--gfix_landau_maxiter = 3 -- testing only
+gfix_landau_maxiter = 6000
+gfix_landau_or      = 1.5
+
+-- source locations & ama modes
+assert(job_key)
+do
+  local csrc0 = {0,0,0,0}
+  local csrc_list = {}
+  local n_s = 3
+  local n_t = 3
+  local cnt = 0
+  for i_x = 0, n_s - 1 do
+  for i_y = 0, n_s - 1 do
+  for i_z = 0, n_s - 1 do
+  for i_t = 0, n_t - 1 do
+    cnt = cnt + 1
+    csrc_list[cnt] = { 
+          csrc0[1] + latsize[1] * i_x / n_s,
+          csrc0[2] + latsize[2] * i_y / n_s,
+          csrc0[3] + latsize[3] * i_z / n_s,
+          csrc0[4] + latsize[4] * i_t / n_t,
+      }
+  end end end end
+  ama_mode_list = {
+    { ['approx']    = 'exact',
+      ['csrc_list'] = { csrc_list[1] },
+      ['tol']       = nil },  -- don't know
+    { ['approx']    = 'sloppy',
+      ['csrc_list'] = csrc_list,
+      ['nev']       = nil,    -- don't know
+      ['ncg']       = nil }   -- don't know
+  }
+end
+
+
+-- file locations
+ens_top = "/g/g92/syritsyn/lscratch-data/mdwf_48c96_ml0.00078"
+data_top= "data"
+
+function get_gauge_file(cfg_key)
+  return string.format("%s/gauge/ckpoint_lat.%s", 
+        ens_top, cfg_key)
+end
+
+function get_gauge_ft_file(cfg_key)
+  return string.format("%s/gauge_ft/ckpoint_lat.%s.h5", 
+        data_top, cfg_key)
+end
+-- gauge rotation latcolmat g(x) : Ugfix_{x,mu} = g_x U_"x,mu} g_{x+\mu}^\dag
+function get_colmat_landaufix_file(cfg_key)
+  return string.format("%s/colmat_landaufix/colmat_landaufix.%s.qdpc", 
+        data_top, cfg_key)
+end
+
+function get_gauge_landaufix_file(cfg_key)
+  return string.format("%s/gauge_landaufix/ckpoint_lat_landaufix.%s.qdpc",
+        data_top, cfg_key)
+end
+function get_frwprop_ft_file(cfg_key, csrc, ama_mode)
+  return string.format("%s/frw_prop_pp_ft/prop_FT_m0.00078_%s_x%d_y%d_z%d_t%d_%s.h5",
+        data_top, cfg_key, csrc[1], csrc[2], csrc[3], csrc[4], ama_mode['approx'])
+end
+function get_frwprop_file(cfg_key, csrc, ama_mode)
+  return string.format("%s/frw_prop_pp/config_%s/m0.00078/prop_POINT_abc_m0.00078_LS24_%s_x%d_y%d_z%d_t%d_%s.qio",
+        ens_top, cfg_key, cfg_key, csrc[1], csrc[2], csrc[3], csrc[4], ama_mode['approx'])
+end
+

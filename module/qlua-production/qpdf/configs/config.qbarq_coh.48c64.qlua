@@ -1,0 +1,253 @@
+package.path = 'qlib/?.qlua;qlib-lhpc/?.qlua;qlua-production/?.qlua;' .. package.path
+require 'strict'
+require 'setup_util'
+require 'latvec'
+require 'stdlib'
+require 'util/strkey'
+require 'lhpc-std'
+require 'qdpc_io'
+
+-- XXX NOTES
+-- * compute pion 2pt functions for the entire time extent (without the coherent trick)
+-- * before running, make sure that directories and links are set
+--   $ mkdir data/hadspec data_pdir/{frw_prop,prop_log}
+--   qlib -> $QLUADIR/qlib 
+--   qlib-lhpc -> $QLUADIR/lhpc
+--   file 'cfg.list.all' : permanent list of configurations (all, not only the ones analyzed) 
+--     : it is used to compute the source grid displacements on every lattice
+
+-------------------------------------------------------------------------------
+-- general
+-------------------------------------------------------------------------------
+cfg_key = assert(job_key)
+task_key='qbarq'
+--task_key = assert(task_key)  -- for keeping track of samples in task 
+--assert(subjob_key)
+--if "" == subjob_key then sample_list = false
+--else sample_list = parse_int_range(subjob_key) end
+
+latsize   = {48,48,48,64}
+t_axis    = #latsize - 1
+rnd_seed  = 1984
+
+
+-------------------------------------------------------------------------------
+-- quark action
+-------------------------------------------------------------------------------
+-- TODO add gauge smearing params
+-- * fermion params
+ferm_bc = {1,1,1,-1}
+c_sw    = 1.0336  -- tadpole 1./u_0^3 ; using uplaq=0.95689
+mq_tag, mq_l = "m300mev", -0.038888 -- Luchang's temp choice
+
+-- * QOP-MG parameters
+require 'mg_param'
+mg_tol_approx = 1e-4
+mg_maxiter  = 200
+mg_param_null = {    
+    blocking      = { {3,3,3,2}, {2,2,2,2} },
+    verbose       = {        0,         0  }, 
+    null_vecs     = {       24,        24  },
+    null_vecs_extra={        0,         0  },
+    prehits       = {        0,         0  },
+    posthits      = {        4,         4  },
+    underrelax    = {       1.,        1.  },
+    null_maxiter  = {       20,        20  },
+    null_res      = {      0.4,       0.4  },
+    null_conv     = {      0.8,       0.8  },
+                                           
+    coarse_res    = {      0.1,       0.1  },
+    coarse_maxiter= {       12,        12  },
+    coarse_ngcr   = {        8,         8  },
+}
+
+function make_mg_solver(mg, ama, scale)
+  scale = scale or 1.
+  if ama['approx'] == 'exact' or ama['approx'] == 'sloppy' then
+    return make_solver_general(function(x)
+      return (scale * mg:solve(x, {residual = {rsqmin = ama['tol']^2}}))
+    end)
+  else
+    error(string.format("unknown ama='%s'", ama['approx']))
+  end
+end
+
+
+
+------------------------------------------------------------------------------
+-- file locations
+------------------------------------------------------------------------------
+ens_top   = '.'
+data_top  = 'data' 
+data_pdir = 'data_pdir'
+
+prop_qio_stride   = 1
+prop_qio_volfmt   = 'part_dir'
+
+-- gauge file(s)
+gauge_fmt = 'milc'
+function get_gauge_file(key)
+  return string.format("%s/gauge/l4864f21b7373m00125m0250a.%s",
+          ens_top, key)
+end
+function get_gauge_gfix_file(key, gfix_type)
+  return string.format("%s/gauge_gfix/ckpoint_lat.%s.%s",
+          data_top, gfix_type, key)
+end
+function get_colmat_gfix_file(key, gfix_type)
+  return string.format("%s/colmat_gfix/colmat_gfix.%s.%s",
+          data_top, gfix_type, key)
+end
+
+-- propagators
+function get_prop_log_file(cfg_key, prop_kind) 
+  return string.format("%s/prop_log/%s.%s",  
+          data_pdir, cfg_key, prop_kind) 
+end
+function get_frwprop_file_tag(key, csrc, ama, tag)
+  return string.format("%s/frw_prop/frw_prop.%s.%s.%s.%s.lime", 
+          data_pdir, key, strkey.ama_str(ama), tag, strkey.csrc_str(csrc))
+end
+
+-- data output
+function get_c2pt_file_tag(key, csrcgrp, ama, tag)
+  return string.format('%s/c2pt/c2pt.%s.%s.%s.%s.aff',
+          data_top, cfg_key, strkey.ama_str(ama), tag, strkey.csrcgrp_str(csrcgrp))
+end
+function get_qpdf_meson_file_tag(cfg_key, csrcgrp, psnk, tsep, tag, ama)
+  return  string.format("%s/qpdf/qpdf.%s.%s.%s.%s.%s.aff",
+              data_top, cfg_key, strkey.ama_str(ama), 
+              strkey.csrcgrp_str(csrcgrp), strkey.snk_str(psnk, tsep), tag) 
+end
+function sample_log_file(cfg_key)
+  return string.format("%s/sample_log/%s.%s", data_top, job_key, task_key)
+end
+
+
+-------------------------------------------------------------------------------
+-- setup lattice etc
+-------------------------------------------------------------------------------
+L = qcd.lattice(latsize, {network=network_geom})
+print_network_settings()
+print_subgrid_settings(L)
+--printf("num_threads=%d\n", openmp.num_threads())
+--printf("thread_limits=%d\n", openmp.thread_limit())
+
+cur_timer = timer("gauge_read")
+gauge_file = get_gauge_file(cfg_key)
+printf("read gauge '%s'\n", gauge_file)
+if     'nersc' == gauge_fmt then 
+  gauge_u = qcd.nersc.read_gauge(L, gauge_file)
+elseif 'milc'  == gauge_fmt then
+  gauge_u = qcd.milc.read_gauge(L, gauge_file)
+else error(string.format("unknown gauge_fmt='%s'", gauge_fmt)) end
+
+gfix_type = "coulomb"
+colmat_gfix_file = get_colmat_gfix_file(cfg_key, gfix_type)
+printf("read colmat '%s'\n", colmat_gfix_file)
+colmat_gfix = load_qdpc_colmat(L, colmat_gfix_file)
+
+
+-------------------------------------------------------------------------------
+-- source smearing, correlator parameters
+-------------------------------------------------------------------------------
+-- sic! 4d
+kbxp10  = {  1,  0,  0,  0}
+kbxm10  = { -1,  0,  0,  0}
+kbym10  = {  0, -1,  0,  0}
+kbzm10  = {  0,  0, -1,  0}
+
+smear_shape1 = {type='coulgauss', t_axis=t_axis, 
+  coulomb_G=colmat_gfix, gauss_W=5.2 }
+smear_opt_b20 = table_join(smear_shape1,
+    {tag='CG52bxp20', boost=list_scal(2, kbxp10)})
+smear_opt_b30 = table_join(smear_shape1,
+    {tag='CG52bxp30', boost=list_scal(3, kbxp10)})
+
+-- momenta
+pm1     = {-1, 0, 1}        -- [-1;1]
+pm2     = {-2,-1, 0, 1, 2}  -- [-2;2]
+c2pt_symm_psnk_list = range_prod({range(-10,11), pm1, pm1}) -- 20*9
+
+qext_list_maxsq3 = make_mom_list(3) -- up to (1,1,1)+rotations
+c3pt_tsep_list = { 8, 10, 12 }
+c3pt_src_sink_pair_list = {
+  -- TODO add zero momentum?
+  --   smear_src_opt, tsep_list, 
+  --   {smear_snk_opt, c2pt_skew_psnk_list, c3pt_psnk, c3pt_qext_list}
+  { smear_opt_b20,
+    { 
+      { smear_opt_b20, {}, { 2, 0, 0 }, qext_list_maxsq3 },
+      { smear_opt_b20, {}, { 3, 0, 0 }, qext_list_maxsq3 }, 
+    },
+    c3pt_tsep_list,
+  },
+  { smear_opt_b30, 
+    { 
+      { smear_opt_b30, {}, { 4, 0, 0 }, qext_list_maxsq3, },
+      { smear_opt_b30, {}, { 5, 0, 0 }, qext_list_maxsq3, },
+    }, 
+    c3pt_tsep_list,
+  },
+}
+
+-- size of time slab to cut out for saving
+c3pt_qpdf_len_t = 16
+-- specification of Wilson line insertions
+c3pt_pdf_spec_list = {
+  -- l=0 is not saved twice
+  { 'x',  0, 8 },
+  { 'X',  0, 8 }, 
+}
+
+meson_src_G    = gamma{n=15}
+meson_snk_G    = meson_src_G
+
+proton_src_S   = gamma{mu=0} * gamma{mu=2}
+proton_snk_S   = proton_src_S
+
+
+
+-------------------------------------------------------------------------------
+-- source positions and sampling
+-------------------------------------------------------------------------------
+do  -- coherent sources 
+  local cfg_list = {}
+  for s in io.lines('list.cfg.all.48c64') do
+    cfg_list[1+#cfg_list] = s
+  end
+  local cfg_index = table_index(cfg_list, cfg_key)
+  printf("cfg_key='%s' index=%d\n", cfg_key, cfg_index)
+
+--  csrcgrid  = { 1, 1, 2, 1 }    -- for testing bkwprop against c2pt
+  csrcgrid  = { 2, 2, 2, 1 }
+  local x0_0= { 0, 0, 0, 0*latsize[4]/4 }
+  local x0_1= { 0, 0, 0, 1*latsize[4]/4 }
+  local x0_2= { 0, 0, 0, 2*latsize[4]/4 }
+  local x0_3= { 0, 0, 0, 3*latsize[4]/4 }
+  local dx_g= { 7,11,13,23 }
+--  local dx_it={ 0,0,0, 0 } -- no displacement
+  local dx_it={ latsize[1]/2, latsize[2]/2, latsize[3]/2, 0 } -- max displacement in coh.sources ('X' placement)
+  csrcgrid_nt = csrcgrid[1+t_axis]
+  hslab_len_t = math.floor(latsize[1+t_axis] / csrcgrid_nt)
+  local l1 = list_join(
+      make_srcgrp_grid(csrcgrid, latsize, x0_0, dx_g, cfg_index, dx_it),
+      make_srcgrp_grid(csrcgrid, latsize, x0_1, dx_g, cfg_index, dx_it),
+      make_srcgrp_grid(csrcgrid, latsize, x0_2, dx_g, cfg_index, dx_it),
+      make_srcgrp_grid(csrcgrid, latsize, x0_3, dx_g, cfg_index, dx_it))
+  local csrcgrp_list_sl = l1
+  local csrcgrp_list_ex = { l1[1] }
+  ama_list = {
+    { 
+      ['approx']    = 'exact',
+      ['csrcgrp_list'] = csrcgrp_list_ex,
+      tol       = 1e-9,
+      prop_prec = 'double' },
+    { 
+      ['approx']    = 'sloppy',
+      ['csrcgrp_list'] = csrcgrp_list_sl,
+      tol       = 1e-4,
+      prop_prec = 'float' }
+  }
+end
+

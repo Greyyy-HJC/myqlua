@@ -1,0 +1,63 @@
+--package.path = 'qlib/?.qlua;qlib-lhpc/?.qlua;lhpc/?.qlua;qlua-production/?.qlua;' ..  package.path
+package.path = 'qlib/?.qlua;qlib-lhpc/?.qlua;lhpc/?.qlua;' ..  package.path
+
+require 'strict'
+require 'stdlib'
+require 'lhpc-std'
+
+L1    = qcd.lattice{3,4,20}
+L2    = qcd.lattice{3,4,12}
+axis  = #L1-1
+t0    = 5
+t1    = 7
+
+V1    = L1:volume()
+V1perp= V1 / L1[axis]
+V2    = L2:volume()
+V2perp= V2 / L2[axis]
+L1axis_sum = (L1[axis] * (L1[axis]-1))/2
+L2axis_sum = (L2[axis] * (L2[axis]-1))/2
+
+-- create example subsets
+ss_a  = L1:Subset({axis=axis, position=t0})     -- works for all ops
+ss_b  = L1:Subset(qcd.eq(L1:pcoord(axis), t0))   -- works for set, sum only
+
+-- scatter L2[t1]->L1[all], gather L1[all]->L2[t1] 
+L1x = {} ; for mu = 0, #L1-1 do L1x[1+mu] = L1:pcoord(mu) end
+L1x[1+axis] = L1:Int(t1)
+
+scatter_L2_to_L1  = qcd.scatter(L1, L2, L1x)
+gather_L1_to_L2   = qcd.gather(L2, L1, L1x)
+
+tL1   = L1:pcoord(axis)
+tL2   = L2:pcoord(axis)
+
+printf("Pass: |ss|=%6d  |tL1@ss|=%6d  |scatter(L1@ss)|=%6d  |gather(L2)@ss|=%6d\n",
+          V1perp, t0*V1perp, t1 * V1perp, t0 * V2perp)
+printf("Fail: |ss|=%6d  |tL1@ss|=%6d  |scatter(L1@ss)|=%6d  |gather(L2)@ss|=%6d\n",
+          V1, L1axis_sum*V1perp, t1 * V1, L1axis_sum * V2perp)
+
+for i_ss, ss in ipairs({ss_a, ss_b}) do
+  -- count sites @ss
+  n_ss    = ss:where(function()return L1:Int(1):sum()end)
+  
+  -- select timeslice @ss and sum
+  tL1_set = L1:Int(0)
+  ss:where(function()tL1_set:set(tL1)end)
+  sum_tL1_set = tL1_set:sum()
+  
+  -- "scatter" L2[t1]->L1[ss] and sum
+  -- correct    = t1 * V1perp (only one timeslice[t0] in dest)
+  -- incorrect  = t1 * V1
+  tL1_sc  = ss:where(scatter_L2_to_L1, tL2)
+  sum_tL1_sc = tL1_sc:sum()
+
+  -- "gather"(sum) L1[ss]->L2[t1] and sum
+  -- correct    = t0 * V2perp (only one timeslice[t0] in source)
+  -- incorrect  = L1axis_sum * V2perp
+  tL2_gt  = ss:where(function(x)return gather_L1_to_L2:add(x)end, tL1)
+  sum_tL2_gt = tL2_gt:sum()
+
+  printf("[%2d]  |ss|=%6d  |tL1@ss|=%6d  |scatter(L1@ss)|=%6d  |gather(L2)@ss|=%6d\n", 
+      i_ss, n_ss, sum_tL1_set, sum_tL1_sc, sum_tL2_gt)
+end

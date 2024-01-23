@@ -1,0 +1,77 @@
+-- mdwf solver benchmarks
+package.path = 'qlua-production/?.qlua;qlib-lhpc/?.qlua;qlib/?.qlua;' .. package.path
+require 'strict' 
+require 'stdlib'    -- standard printf, etc
+require 'lhpc-std'  -- make_source, etc
+require 'gauge'
+require 'qdpc_io'
+require 'setup_util'
+require 'latvec'
+
+
+------------------------------------------------------------------------------
+-- INITIALIZATION
+------------------------------------------------------------------------------
+tot_timer = timer("total")
+L = qcd.lattice(latsize, {network=network_geom})
+print_network_settings()
+print_subgrid_settings(L)
+S = rnd_init(L, rnd_seed)
+
+-- random gauge field
+cur_timer = timer("gauge_random")
+gauge_u = latvec.fromfunction({#L}, 
+    function()return toSUn(S:gaussian_ColorMatrix())end)
+cur_timer("done")
+
+-- initialize mdwf object, deflator
+if 0 == mdwf_opt.parity then 
+  sset_x = L:Subset('even')
+  sset_y = L:Subset('odd')
+elseif 1 == mdwf_opt.parity then
+  sset_x = L:Subset('odd')
+  sset_y = L:Subset('even')
+else error ("bad mdwf_parity=%d\n", mdwf_opt.parity) end
+
+mdwf  = qcd.MDWF.generic(gauge_u, ferm_bc, 
+            mdwf_L5, mdwf_M5, mdwf_mf,
+            mdwf_b5, mdwf_c5, mdwf_opt)
+mdwf_eigcg_df = mdwf:eig_deflator(eigcg_vmax, eigcg_nev, eigcg_tol, l_nev)
+
+cur_timer = timer("evecs_random")
+mdwf_eigcg_df:start_load()
+for i = 1, l_nev do 
+  local x = latvec.fromfunction({mdwf_L5}, 
+      function()return S:gaussian_DiracFermion()end)
+  sset_y:where(latvec.set_zero, x)
+  local xnorm = math.sqrt(latvec.norm2(x))
+--  printf('|v[%4d]|=%e\n', i-1, xnorm)
+  x = latvec.scal_left(1./xnorm, x)
+  mdwf_eigcg_df:add_vector(x)
+  x = nil
+  force_gc()
+end
+mdwf_eigcg_df:stop_load()
+mdwf_eigcg_df:stop()
+cur_timer("done")
+
+--ama = { approx    = 'exact'}
+--ama = { approx    = 'sloppy',  ncg       = 150}
+for i_ama, ama in pairs(ama_list) do
+  print_obj(ama, 'ama')
+  local solver_func = make_solver(mdwf_eigcg_df, gauge_u, ferm_bc, ama)
+  local y = S:gaussian_DiracFermion()
+--  local y = S:gaussian_DiracPropagator()
+  cur_timer = timer("solve dp")
+  local x = solver_func(y)
+  cur_timer("done")
+  print_obj(qcd.memory_usage())
+  solver_func = nil
+  x = nil
+  y = nil
+  force_gc()
+end
+
+tot_timer("done")
+printf("QLUA_RUN_SUCCESS\n")
+-- vim : syn=lua

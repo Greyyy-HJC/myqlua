@@ -1,0 +1,263 @@
+-- compute c2pt and bb with background CEDM in quark propagator to 1st order,
+--    prop_q = z - i * eps_q * solver(GammaCedm * z) , z = solver(src_q)
+--    GammaCedm = G_{\mu\nu} \sigma_{\mu\nu} \gamma_5 
+-- which is <=1st order expn of propagator with Dirac op. (Dslash + i*eps_q*GammaCedm)^{-1}
+-- corresponding to S_f = \bar{q} (Dslash + i*eps_q*GammaCedm) q 
+-- XXX note that GammaCedm does not have (i) factor; it is implemented in 
+--    cedm_seqsrc_edm(z, gf_clov)
+-- XXX does not save propagators; all edm-modified correlators must be discriminated by ama tag
+
+
+package.path = './?.qlua;./qlib-lhpc/?.qlua;./qlib/?.qlua;' .. package.path
+require "strict"    -- catch all undefined (nil) variables
+require "stdlib"    -- standard printf, etc
+require "lhpc-std"  -- make_source, etc
+require "ape-smear" -- gauge smear
+require "gauge"
+require "qdpc_io"
+require "setup_util"
+require "latvec"
+
+require 'wuppertal-smear'
+require "cedm-seq"  -- sequential sources
+require "hadspec"
+require "hex-smear"
+require "madwf_sns"
+require "bb"
+require "hadron/baryon_corr"  -- for cedm_save_bb
+
+------------------------------------------------------------------------------
+-- INITIALIZATION
+------------------------------------------------------------------------------
+tot_timer = timer("total")
+L = qcd.lattice(latsize, {network=network_geom})
+S = rnd_init(L, rnd_seed)
+
+
+------------------------------------------------------------------------------
+-- function to sample c2pt and bb only (for insertion testing), 
+-- with different solvers for u and d
+------------------------------------------------------------------------------
+function sample_c23pt(
+        L, cfg_key, csrc, ama,
+        c2pt_psnk_list, c3pt_psnk_list, c3pt_qext_list, tsep_list,
+        S2, S1, Tpol_list, flav_list,
+        gf_lpath, 
+        smear_func, solver_func_flav, bkw_solver_func_flav)
+  -- parameters
+  --  L               lattice object
+  --  cfg_key          gauge cfg "key" : string
+  --  csrc            forward source position for the sample
+  --  ama             AMA modes that also encode the type of the propagator
+  --  c2pt_psnk_list  sink momentum for c2pt, c2pt_volcedm
+  --  c3pt_psnk_list  sink momentum for c3pt, c2pt_cpbar
+  --  c3pt_qext_list  list of momenta for insertions
+  --  tsep_list       source-sink separation list
+  --  S2, S1          sink and source diquark spin structures
+  --  Tpol_list
+  --                  list of nucleon polarization matrices for 0- and 1-st order in CEDM insertions
+  --  flav_list       flavors for cedm and current insertions
+  --  gf_lpath        gauge field for link paths in building blocks
+  --  smear_func      source smearing function x_smeared = smear_func(x_point)
+  --  solver_func_flav fermion solver x = solver_func[flav](y) <-> Dslash[flav].x = y
+  --  bkw_solver_func_flav
+  --                  backward propagator solver \gamma_5\Dlshash^\dag\gamma_5).x=y
+
+  -- also requires global functions for propagator storage
+  --  get_frwprop_file            F
+  --  get_hadspec_file
+  --  get_c2pt_volcedm_file
+  --  get_cedmseqprop_file
+  -- and variables
+
+  -- XXX envs : 
+  --    latsize
+  --    hadspec_baryon_list, hadspec_meson_list 
+  --    bb_link_min, bb_link_max,
+  --    bb_volcedm_link_min, bb_volcedm_link_max,
+  --    t_axis
+  --    ferm_bc
+  local tt    -- timer
+  local bc_quark_t  = ferm_bc[1+t_axis]
+  local bc_baryon_t = bc_quark_t^3
+  
+  local prop_F = {}
+  local prop_F_sm = {}
+  for _,flav in pairs({'U', 'D'}) do
+    local tt = timer("CALC prop_F")
+    local src_F = smear_func(make_source_point(L, csrc))  ; tt("src")
+    prop_F[flav]  = solver_func_flav[flav](src_F)         ; tt("prop")
+    prop_F_sm[flav]  = smear_func(prop_F[flav])
+    tt("done")
+  end
+
+  do -- contractc2pt
+    -- c2pt (protons with all tpol)
+    local tt = timer("save_c2pt")
+    local c2pt = {} -- [kpath]
+    local c2pt_sm = {} -- [kpath]
+    for tpol_tag, tpol in pairs(Tpol_list) do
+      local k_cc = string.format('proton_%s', tpol_tag)
+      c2pt[k_cc] = cedm_baryon_sigma(prop_F.U, prop_F.D, S2, S1, tpol)
+      c2pt_sm[k_cc] = cedm_baryon_sigma(prop_F_sm.U, prop_F_sm.D, S2, S1, tpol)
+    end -- tpol
+    local c2pt_file = get_c2pt_file(cfg_key, csrc, ama)
+    printf("[save_c2pt] %s\n", c2pt_file)
+    local c2pt_aff  = qcd.aff.Writer(c2pt_file)
+    save_2pt_list(L, c2pt_aff, '/c2pt/SP/',
+              c2pt, csrc, c2pt_psnk_list, t_axis, bc_baryon_t)
+    save_2pt_list(L, c2pt_aff, '/c2pt/SS/',
+              c2pt_sm, csrc, c2pt_psnk_list, t_axis, bc_baryon_t)
+    c2pt_aff:close()
+    tt('done')
+  end
+  
+
+  for i_tsep, tsep in pairs(tsep_list) do
+    local tsrc = csrc[1+t_axis]
+    local tsnk = (tsrc + tsep) % latsize[1+t_axis]
+    for i_psnk, psnk in pairs(c3pt_psnk_list) do
+
+      -- compute prop_B, save CP-even c3pt
+      for tpol_tag, tpol in pairs(Tpol_list) do
+        for i_flav_cur, flav_cur in pairs(flav_list) do
+          local tt = timer("CALC prop_B")
+          local p1, p2
+          if     'U' == flav_cur then p1, p2 = prop_F_sm.U, prop_F_sm.D 
+          elseif 'D' == flav_cur then p1, p2 = prop_F_sm.U, prop_F_sm.U 
+          else error(string.format("unknown flav='%s'", flav_cur)) end
+          local src_B_adj = gamma{n=15} * smear_func(cedm_seqsrc_sink(
+                          flav_cur, p1, p2, 
+                          csrc, psnk, tsnk, S2, S1, tpol):adjoin())     ; tt("src")
+          local prop_B = bkw_solver_func_flav[flav_cur](src_B_adj):adjoin() * gamma{n=15}  ; tt("prop")
+          local prop_B_g5adj = gamma{n=15} * prop_B:adjoin() * gamma{n=15}
+          tt("done")
+
+          do -- contract bb(t=tcur, tsnk=const, flav=flav_cur)
+            local tt = timer("save_bb")
+            local bb_file = get_bb_file(cfg_key, csrc, psnk, tsnk,
+                tpol_tag, flav_cur, ama)
+            printf("[save_bb] %s\n", bb_file)
+            local bb_aff = qcd.aff.Writer(bb_file)
+            calc_bb(L, bb_aff, string.format("/bb/SS/proton_%s/%s", tpol_tag, flav_cur),
+                bb_link_min, bb_link_max,
+                prop_F[flav_cur], prop_B_g5adj, gf_lpath, 
+                csrc, tsnk, psnk, t_axis, c3pt_qext_list, 
+                false,    -- no time reversal
+                bc_quark_t, bc_baryon_t)
+            bb_aff:close()
+            tt("done")
+          end
+        end -- flav_cur
+      end -- tpol
+      force_gc("sample_cedm_2pt:prop_B")
+    end -- psnk
+  end -- tsep
+end
+
+
+
+
+------------------------------------------------------------------------------
+-- MAIN
+------------------------------------------------------------------------------
+
+cur_timer = timer("gauge_read")
+printf("read gauge '%s'\n", get_gauge_file(cfg_key))
+gauge_u = qcd.nersc.read_gauge(L, get_gauge_file(cfg_key))
+cur_timer("done")
+
+-- gauge field for source construction
+wup_gauge_u = APE_smear(gauge_u, ape_alpha, ape_N, ape_accu, ape_maxiter, t_axis)
+
+-- calc gauge_clover term
+function gauge_clover_cedm(gauge_u)
+  -- calc clover G_{mu nu} with color trace subtracted
+  local L = latvec.lattice(gauge_u)
+  local cm_1 = L:ColorMatrix(1.)
+  local gauge_clover = {}
+  for i = 0, #L-1 do
+    gauge_clover[1+i] = {}
+    gauge_clover[1+i][1+i] = false
+    for j = 0, i - 1 do
+      local c = clover_term(gauge_u, i, j)
+      c = c - (c:trace() / c:colors()) * cm_1
+      gauge_clover[1+i][1+j]  =  c
+      gauge_clover[1+j][1+i]  = -c
+    end
+  end
+  return gauge_clover
+end
+gf_clov_orig  = gauge_clover_cedm(gauge_u)
+
+-------------------------------------------------------------------------------
+-- initialize mdwf object 
+-- LOAD EIGENVECTORS
+-------------------------------------------------------------------------------
+mdwf  = qcd.MDWF.generic(gauge_u, ferm_bc, 
+            mdwf_L5, mdwf_M5, mdwf_mf,
+            mdwf_b5, mdwf_c5)
+mdwf_eigcg_df = mdwf:eig_deflator(eigcg_vmax, eigcg_nev, eigcg_tol, l_nev)
+do
+  local evecs_perm = mdwf_evec_file(cfg_key, l_nev)
+  local evecs_scratch = mdwf_evec_file_scratch(cfg_key, l_nev)
+
+  if evecs_scratch ~= evecs_perm then
+    cur_timer = timer("evecs_rawdump_sync")
+    printf("evecs_rawdump_sync: '%s' -> '%s'\n", evecs_perm, evecs_scratch)
+    evecs_rawdump_sync(evecs_perm, evecs_scratch, evec_rawdump_stride)
+    cur_timer("done")
+  end
+
+  cur_timer = timer("evecs_rawload")
+  printf("[evec_read] %s\n", evecs_scratch)
+  mdwf_eigcg_df:evecs_rawload(evecs_scratch, l_nev, 
+                {rank_stride=evec_rawdump_stride})
+  mdwf_eigcg_df:stop()
+  cur_timer("done")
+end
+
+function make_solver_expn1_volcedm(solver_func, eps_q, gf_clov)
+  return function(y, is_relaxed, is_verbose)
+    local z = solver_func(y, is_relaxed, is_verbose)
+    local z2  = z:norm2()
+    local q = cedm_seqsrc_edm(z, gf_clov)
+    local q2 = q:norm2()
+    local r = solver_func(cedm_seqsrc_edm(z, gf_clov), is_relaxed, is_verbose)
+    local r2 = r:norm2()
+    printf('|z|2=%e  |q|2=%e  |r|2=%e  |q|/|z|=%e  |r|/|z|=%e\n', 
+          z2, q2, r2, math.sqrt(q2 / z2), math.sqrt(r2 / z2))
+    return (z - complex(0, eps_q) * r)
+  end
+end
+
+for i_ama, ama in pairs(ama_list) do
+  local function smear_func_wup(x) 
+    -- reqiures global wup_a, wup_n, wup_gauge_u, t_axis
+    return wuppertal_smear(wup_gauge_u, wup_alpha, wup_N, x, t_axis)
+  end
+  local solver_func_eps0 = make_solver(mdwf_eigcg_df, gauge_u, ferm_bc, ama)
+  local solver_func_flav = {}
+  local bkw_solver_func_flav = {}
+  for flav, eps_flav in pairs(ama.cedm_eps) do
+    solver_func_flav[flav] = make_solver_expn1_volcedm(
+            solver_func_eps0, eps_flav, gf_clov_orig)
+    bkw_solver_func_flav[flav] = make_solver_expn1_volcedm(
+            solver_func_eps0, -eps_flav, gf_clov_orig)
+  end
+  for i_csrc, csrc in pairs(ama['csrc_list']) do 
+    sample_c23pt(L, cfg_key, csrc, ama,
+              c2pt_psnk_list, c3pt_psnk_list, c3pt_qext_list, c3pt_tsep_list,
+              cedm_S2, cedm_S1, cedm_Tpol_list, flav_list,
+              gauge_u,
+              smear_func_wup, solver_func_flav, bkw_solver_func_flav
+              )
+  end
+  solver_func = nil
+  force_gc()
+  print_obj(qcd.memory_usage())
+end
+
+tot_timer("done")
+printf("QLUA_RUN_SUCCESS\n")
+-- vim : syn=lua

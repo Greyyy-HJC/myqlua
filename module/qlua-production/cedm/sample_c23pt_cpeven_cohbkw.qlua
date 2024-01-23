@@ -1,0 +1,178 @@
+require 'cedm/cedm_get_prop'
+
+------------------------------------------------------------------------------
+-- sample cpeven c2,c3 (coherent)
+------------------------------------------------------------------------------
+function sample_c23pt_cpeven_cohbkw(
+        L, cfg_key, csrcgrp, hslab_len_t, bbspace_len_t, ama,
+        c2pt_psnk_list, c3pt_psnk_list, c3pt_qext_list, tsep_list,
+        S2, S1, 
+        Tpol_list_c3pt,
+        flav_list,
+        gf_lpath, 
+        smear_func, solver_func, 
+        t_axis, ferm_bc,
+        redo_contract)
+  -- parameters
+  --  L               lattice object
+  --  cfg_key          gauge cfg "key" : string
+  --  csrcgrp         group of coherent sources for the coh.sample
+  --  ama             AMA parameter for saving files
+  --  c2pt_psnk_list  sink momentum for c2pt, c2pt_volcedm
+  --  c3pt_psnk_list  sink momentum for c3pt, c2pt_cpbar
+  --  c3pt_qext_list  list of momenta for insertions
+  --  tsep_list       source-sink separation list
+  --  S2, S1          sink and source diquark spin structures
+  --  Tpol_list
+  --                  list of nucleon polarization matrices for 0- and 1-st order in CEDM insertions
+  --  flav_list       flavors for cedm and current insertions
+  --  gf_lpath        gauge field for link paths in building blocks
+  --  smear_func      source smearing function x_smeared = smear_func(x_point)
+  --  solver_func     fermion solver x = solver_func(y) <-> Dslash.x = y
+  --  redo_contract   { hadspec=false, c2pt=false,
+  --                    bb=true, bbspace=true}
+
+  -- also requires global functions for propagator storage
+  --  get_frwprop_file            F
+  --  get_hadspec_file
+  -- and variables
+
+  -- XXX envs : 
+  --    latsize
+  --    hadspec_baryon_list, hadspec_meson_list 
+  --    bb_link_min, bb_link_max,
+  --    bb_volcedm_link_min, bb_volcedm_link_max,
+  --    t_axis
+  --    ferm_bc
+  local timer_1srcgrp = timer(string.format('1srcgrp[%d] c23pt_cpeven_cohbkw', #csrcgrp))
+  local csrcgrp_key = csrcgrp_str(csrcgrp)
+  redo_contract = redo_contract or {}
+  local tt    -- timer
+  local bc_quark_t  = ferm_bc[1+t_axis]
+  local bc_baryon_t = bc_quark_t^3
+  local bc_quark_tpos = table_copy(ferm_bc)
+  bc_quark_tpos[1+t_axis] = 1   -- for baryon_save_bb
+  local lt          = L[t_axis]           -- time extent
+
+  assert(0 < #csrcgrp)
+  local csrc_coh0 = csrcgrp[1]
+  local csrc0_str  = string.format("x%d_y%d_z%d_t%d", 
+            csrc_coh0[1],csrc_coh0[2],csrc_coh0[3],csrc_coh0[4])
+  local tsrc_coh0 = csrc_coh0[1+t_axis]
+  local tsnk_full = (lt + tsrc_coh0 - 1) % lt -- full Lt tsnk for saving BB
+  local tsep_full = lt - 1 -- full-Lt tsep for saving BB
+
+  -- build hyperslab subsets for constructing frwprop_grp, bbspace
+  local csrc_hslab = hyperslab_subset_grp(L, csrcgrp, hslab_len_t, t_axis,
+          {verbose=true})
+  local bbspace_hslab_map, bbspace_L = hyperslab_subvol_scatter_grp(L, csrcgrp, 
+          bbspace_len_t, t_axis, {shift_space=true})
+
+  -- XXX F-props are stored separately (need full Lt extent for volume insertions) 
+  local prop_F_list = {}    -- FIXME rearrange to compute F&C together, drop list to save RAM
+  local propgrp_F = L:DiracPropagator()
+  local is_new_F_grp = false
+  for i_csrc, csrc in pairs(csrcgrp) do
+    local prop_F, is_new_F = get_prop_F(L, cfg_key, csrc, ama, smear_func, solver_func)
+    is_new_F_grp = is_new_F_grp or is_new_F
+    prop_F_list[i_csrc]   = prop_F
+    csrc_hslab[i_csrc]:where(function()propgrp_F:set(prop_F)end)
+  end -- csrc
+  if do_save_prop.Fg then
+    local prop_Fg_file = get_frwprop_grp_file(cfg_key, csrcgrp, ama)
+    prop_save_func(prop_Fg_file, propgrp_F, 'prop_Fg', ama['prop_prec'])
+  end
+  tt  = timer('smear_prop_F')
+  local propgrp_F_sm  = smear_func(propgrp_F)
+  tt('done')
+
+  if is_new_F_grp or redo_contract.c2pt then
+    -- c2pt (protons with all tpol)
+    tt  = timer("save_c2pt") 
+
+    local c2pt_file = get_c2pt_file(cfg_key, csrc_coh0, ama)
+    printf("[save_c2pt] %s\n", c2pt_file)
+    os.mkdir_path(dirname(c2pt_file))
+    local c2pt_aff  = qcd.aff.Writer(c2pt_file)
+
+    local opt = { result = false, backend = contract_backend(),
+                  save = { file=c2pt_aff, fkey='proton_Tg', mkey='P' },
+                  momproj = { csrc=csrc_coh0, mom_list=c2pt_psnk_list,  
+                              t_axis=t_axis, ft_sign=-1, bc_t=bc_baryon_t } }
+
+    opt.save.kpath = string.format('/c2pt/SP/%s/', csrcgrp_key)
+    qcd.contract_('baryon_sigma_UUS', 
+        { propgrp_F, propgrp_F, propgrp_F, S2, S1 }, opt)
+
+    opt.save.kpath = string.format('/c2pt/SS/%s/', csrcgrp_key)
+    qcd.contract_('baryon_sigma_UUS', 
+        { propgrp_F_sm, propgrp_F_sm, propgrp_F_sm, S2, S1 }, opt)
+
+    c2pt_aff:close()
+    tt('done')
+  end -- is_new_F_grp
+  
+  for i_tsep, tsep in pairs(tsep_list) do
+    for i_psnk, psnk in pairs(c3pt_psnk_list) do
+      local psnk_str = string.format("PX%d_PY%d_PZ%d", psnk[1], psnk[2], psnk[3])
+      -- compute prop_B, save CP-even c3pt
+      for tpol_tag, tpol in pairs(Tpol_list_c3pt) do
+        for i_flav_cur, flav_cur in pairs(flav_list) do
+          local propgrp_B, is_new_B_grp = get_propgrp_B(
+              L, cfg_key, csrcgrp, ama, psnk, tsep, 
+              S2, S1, tpol, tpol_tag, flav_cur, 
+              propgrp_F_sm,
+              smear_func, solver_func)
+          if is_new_B_grp or redo_contract.bb then -- contract c3pt(t=tcur, tsnk=const, flav=flav_cur)
+            tt = timer("save_bb")
+            local bb_file = get_bb_file(cfg_key, csrc_coh0, psnk, tsep,
+                tpol_tag, flav_cur, ama)
+            printf("[save_bb] %s\n", bb_file)
+            os.mkdir_path(dirname(bb_file))
+            local bb_aff = qcd.aff.Writer(bb_file)
+            general_save_bb(bb_aff, 
+                string.format("/bb/SS/proton_%s/%s/%s/%s_dt%d", tpol_tag, flav_cur, 
+                              csrcgrp_key, psnk_str, tsep),
+                propgrp_F, propgrp_B, gf_lpath, 
+                csrc_coh0, lt - 1, bb_link_min, bb_link_max,
+                c3pt_qext_list, t_axis, ferm_bc)
+            bb_aff:close()
+            tt("done")
+          end
+          if is_new_B_grp or redo_contract.bbspace then -- contract c3pt_space(t=tcur, tsnk=const, flav=flav_cur)
+            tt = timer("save_bbspace")
+            local bbspace_file = get_bbspace_file(cfg_key, csrc_coh0, psnk, tsep,
+                tpol_tag, flav_cur, ama)
+            printf("[save_bbspace] %s\n", bbspace_file)
+            os.mkdir_path(dirname(bbspace_file))
+            local kpath = string.format("/bbspace/SS/proton_%s/%s/%s/%s_dt%d", 
+                tpol_tag, flav_cur, csrcgrp_key, psnk_str, tsep)
+            if 'hdf5' == bbspace_opt.fmt then 
+              os.rm(bbspace_file, {wait=true, nofail=true, verbose=true})
+              local h5_w = qcd.hdf5.Writer(bbspace_file, bbspace_opt.h5param)
+              save_qbarq_space_h5(h5_w, kpath,
+                  bbspace_hslab_map(propgrp_F), bbspace_hslab_map(propgrp_B), 
+                  bbspace_gamma_ins, { precision=bbspace_opt.prec })
+            h5_w:close()
+            elseif 'qio' == bbspace_opt.fmt then
+              local qio_w = open_qdpc_write(bbspace_L, bbspace_file, '', 
+                  bbspace_opt.volfmt, bbspace_opt.qioparam)
+              save_qbarq_space_qio(qio_w, kpath,
+                  bbspace_hslab_map(propgrp_F), bbspace_hslab_map(propgrp_B), 
+                  bbspace_gamma_ins, { precision=bbspace_opt.prec })
+              qio_w:close()
+            else error(string.format("unknown fmt='%s'", bbspace.fmt)) end
+            tt("done")
+          end
+        end -- flav_cur
+      end -- tpol
+      force_gc("sample_cedm_2pt:prop_B")
+
+    end -- psnk
+  end -- tsep
+
+  force_gc("sample_c23pt")
+  timer_1srcgrp('done')
+end
+
+

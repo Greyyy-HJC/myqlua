@@ -1,0 +1,67 @@
+require 'stdlib'
+
+strkey = rawget(_G, 'strkey') or {}
+
+--print_obj(_G, "_G{m}", {depth=-1})
+function strkey.csrc_str_f(csrc)
+  return string.format("x%dy%dz%dt%d", csrc[1], csrc[2], csrc[3], csrc[4])
+end
+function strkey.csrc_str_k(csrc)
+  return string.format("x%d_y%d_z%d_t%d", csrc[1], csrc[2], csrc[3], csrc[4])
+end
+strkey.csrc_str = strkey.csrc_str_f
+
+function strkey.csrcgrp_str_f(csrcgrp)
+  local csrc_str_list = {}
+  for i_csrc, csrc in ipairs(csrcgrp) do
+    csrc_str_list[i_csrc] = strkey.csrc_str_f(csrc)
+  end
+  return table.concat(csrc_str_list, '_')
+end
+strkey.csrcgrp_str_k  = strkey.csrcgrp_str_f
+strkey.csrcgrp_str    = strkey.csrcgrp_str_f
+
+function strkey.psnk_str_f(psnk)
+  return string.format("PX%dPY%dPZ%d", psnk[1], psnk[2], psnk[3])
+end
+function strkey.psnk_str_k(psnk)
+  return string.format("PX%d_PY%d_PZ%d", psnk[1], psnk[2], psnk[3])
+end
+strkey.psnk_str       = strkey.psnk_str_f
+
+function strkey.snk_str_old(psnk, tsnk)
+  return string.format("%sT%d", strkey.psnk_str(psnk), tsnk)
+end
+function strkey.snk_str_f(psnk, tsep)
+  return string.format("%sdt%d", strkey.psnk_str(psnk), tsep)
+end
+function strkey.snk_str_k(psnk, tsep)
+  return string.format("%s_dt%d", strkey.psnk_str_k(psnk), tsep)
+end
+strkey.snk_str        = strkey.snk_str_f
+
+function strkey.ama_str(ama)
+  if 'exact' == ama['approx'] then
+    return string.format("ex")
+  elseif 'sloppy' == ama['approx'] then
+    return string.format("sl")
+  else
+    error(string.format('unknown ama="%s"', ama['approx']))
+  end
+end
+
+-- legacy names TODO put deprwarn on them
+csrc_str              = depr_warn(strkey.csrc_str)
+csrc_str_f            = depr_warn(strkey.csrc_str_f)
+csrc_str_k            = depr_warn(strkey.csrc_str_k)
+csrcgrp_str           = depr_warn(strkey.csrcgrp_str)
+csrcgrp_str_f         = depr_warn(strkey.csrcgrp_str_f)
+csrcgrp_str_k         = depr_warn(strkey.csrcgrp_str_k)
+psnk_str              = depr_warn(strkey.psnk_str)
+psnk_str_f            = depr_warn(strkey.psnk_str_f)
+psnk_str_k            = depr_warn(strkey.psnk_str_k)
+snk_str               = depr_warn(strkey.snk_str)
+snk_str_f             = depr_warn(strkey.snk_str_f)
+snk_str_k             = depr_warn(strkey.snk_str_k)
+ama_str               = depr_warn(strkey.ama_str)
+
