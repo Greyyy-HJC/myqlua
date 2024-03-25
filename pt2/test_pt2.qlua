@@ -6,7 +6,7 @@ require "mygfix"
 require "gauge"
 
 -- Set up
-L = qcd.lattice {48, 48, 48, 64}
+L = qcd.lattice {8, 8, 8, 32}
 volume = 1
 for i = 0, #L - 1 do
     volume = volume * L[i]
@@ -75,7 +75,7 @@ qq = qcd.dot(a_prop, gamma({n=0}) * q_prop * gamma({n=0}))
 
 -- Output the result list
 for t = 0, L[3] - 1 do
-    printf("t = %d, qq = %f\n", t, qq[{0,0,0,t}]:real())
+    printf("t = %d, qq = %f\n", t, qq[{0,0,0,t}]:real() * 1e9)
 end
 
 
@@ -83,7 +83,7 @@ end
 Nd = #L
 Nc = U[1]:colors()
 
-gf_accu = 1e-6
+gf_accu = 1e-10
 tol_switch_fletcher = 1e-6 -- switch to Fletcher-Reeves if tol < tol_switch_fletcher
 gf_maxiter = 1000
 
@@ -130,5 +130,5 @@ qq = qcd.dot(a_prop, gamma({n=0}) * q_prop * gamma({n=0}))
 
 -- Output the result list
 for t = 0, L[3] - 1 do
-    printf("t = %d, qq = %f\n", t, qq[{0,0,0,t}]:real())
+    printf("t = %d, qq = %f\n", t, qq[{0,0,0,t}]:real() * 1e9)
 end

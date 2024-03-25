@@ -1,0 +1,121 @@
+r.x  =   3257884111
+r.f  =   3539466248
+r[0] =     90973168
+r[1] =   1405185980
+r[2] =   1209914589
+r[3] =   1151554534
+plaqutte = 0.612026
+CLOVER mixedCG solver: status = 0, c = 0, d = 0, eps = 7.8847e-26, iters = 277, time = 0.554 sec, perf = 32277.57 MFlops/sec
+CLOVER mixedCG solver: status = 0, c = 0, d = 1, eps = 9.0751e-26, iters = 281, time = 0.632 sec, perf = 28655.97 MFlops/sec
+CLOVER mixedCG solver: status = 0, c = 0, d = 2, eps = 9.3656e-26, iters = 281, time = 0.494 sec, perf = 36651.60 MFlops/sec
+CLOVER mixedCG solver: status = 0, c = 0, d = 3, eps = 9.0551e-26, iters = 296, time = 0.458 sec, perf = 41666.57 MFlops/sec
+CLOVER mixedCG solver: status = 0, c = 1, d = 0, eps = 8.4957e-26, iters = 281, time = 0.426 sec, perf = 42529.93 MFlops/sec
+CLOVER mixedCG solver: status = 0, c = 1, d = 1, eps = 7.4265e-26, iters = 289, time = 0.444 sec, perf = 41910.13 MFlops/sec
+CLOVER mixedCG solver: status = 0, c = 1, d = 2, eps = 8.3661e-26, iters = 296, time = 0.640 sec, perf = 29784.18 MFlops/sec
+CLOVER mixedCG solver: status = 0, c = 1, d = 3, eps = 9.6841e-26, iters = 280, time = 0.605 sec, perf = 29847.02 MFlops/sec
+CLOVER mixedCG solver: status = 0, c = 2, d = 0, eps = 9.1244e-26, iters = 288, time = 0.436 sec, perf = 42573.55 MFlops/sec
+CLOVER mixedCG solver: status = 0, c = 2, d = 1, eps = 9.4082e-26, iters = 280, time = 0.434 sec, perf = 41640.03 MFlops/sec
+CLOVER mixedCG solver: status = 0, c = 2, d = 2, eps = 8.3926e-26, iters = 279, time = 0.645 sec, perf = 27905.43 MFlops/sec
+CLOVER mixedCG solver: status = 0, c = 2, d = 3, eps = 9.8266e-26, iters = 290, time = 0.448 sec, perf = 41681.28 MFlops/sec
+t = 0, qq = 10543270069.712585
+t = 1, qq = -230733082.183982
+t = 2, qq = -30636478.702546
+t = 3, qq = -4660541.920649
+t = 4, qq = -950237.908267
+t = 5, qq = -333838.461397
+t = 6, qq = -148273.770617
+t = 7, qq = -107560.416737
+t = 8, qq = -90029.497489
+t = 9, qq = -76757.981166
+t = 10, qq = -77871.555444
+t = 11, qq = -74037.302454
+t = 12, qq = -73705.237600
+t = 13, qq = -77847.906737
+t = 14, qq = -70922.111087
+t = 15, qq = -64663.401354
+t = 16, qq = -65834.090135
+t = 17, qq = -68367.507088
+t = 18, qq = -76098.465527
+t = 19, qq = -65726.237497
+t = 20, qq = -70031.437807
+t = 21, qq = -66351.308571
+t = 22, qq = -71288.520706
+t = 23, qq = -69634.352708
+t = 24, qq = -87528.762627
+t = 25, qq = -99494.363330
+t = 26, qq = -143191.608119
+t = 27, qq = -281426.515369
+t = 28, qq = -790663.020835
+t = 29, qq = -3362980.546502
+t = 30, qq = -25559264.055444
+t = 31, qq = -222085064.629579
+# [0]	1.000000e+00	8.841582e-01
+# [1]	1.000000e+00	8.841977e-01
+# [2]	1.000000e+00	8.840159e-01
+# [3]	1.000000e+00	8.840984e-01
+Iter: 1, FuncVal: 6.901370e-01, GradNorm: 2.293437e+00
+Iter: 2, FuncVal: 6.922320e-01, Convergence: 3.026409e-03, GradNorm: 1.552345e-01
+Iter: 3, FuncVal: 6.925084e-01, Convergence: 3.991593e-04, GradNorm: 2.618361e-02
+Iter: 4, FuncVal: 6.925833e-01, Convergence: 1.081116e-04, GradNorm: 4.923934e-03
+Iter: 5, FuncVal: 6.926035e-01, Convergence: 2.915528e-05, GradNorm: 1.393849e-03
+Iter: 6, FuncVal: 6.926104e-01, Convergence: 1.001437e-05, GradNorm: 5.440728e-04
+Iter: 7, FuncVal: 6.926127e-01, Convergence: 3.254935e-06, GradNorm: 1.471655e-04
+Iter: 8, FuncVal: 6.926133e-01, Convergence: 8.907367e-07, GradNorm: 4.411556e-05
+Iter: 9, FuncVal: 6.926135e-01, Convergence: 2.661264e-07, GradNorm: 1.378414e-05
+Iter: 10, FuncVal: 6.926135e-01, Convergence: 5.524282e-08, GradNorm: 3.350016e-06
+Iter: 11, FuncVal: 6.926135e-01, Convergence: 1.780246e-08, GradNorm: 8.180417e-07
+Iter: 12, FuncVal: 6.926136e-01, Convergence: 7.162494e-09, GradNorm: 3.399728e-07
+Iter: 13, FuncVal: 6.926136e-01, Convergence: 3.494624e-09, GradNorm: 1.421977e-07
+Iter: 14, FuncVal: 6.926136e-01, Convergence: 1.595052e-09, GradNorm: 6.364910e-08
+Iter: 15, FuncVal: 6.926136e-01, Convergence: 6.868546e-10, GradNorm: 2.606285e-08
+Iter: 16, FuncVal: 6.926136e-01, Convergence: 3.107142e-10, GradNorm: 1.169925e-08
+Iter: 17, FuncVal: 6.926136e-01, Convergence: 1.307309e-10, GradNorm: 4.833367e-09
+Iter: 18, FuncVal: 6.926136e-01, Convergence: 5.607947e-11, GradNorm: 2.088136e-09
+Iter: 19, FuncVal: 6.926136e-01, Convergence: 2.185718e-11, GradNorm: 8.281128e-10
+Iter: 20, FuncVal: 6.926136e-01, Convergence: 8.503753e-12, GradNorm: 3.337935e-10
+Iter: 21, FuncVal: 6.926136e-01, Convergence: 3.775424e-12, GradNorm: 1.468248e-10
+Iter: 22, FuncVal: 6.926136e-01, Convergence: 1.565081e-12, GradNorm: 6.123337e-11
+CLOVER mixedCG solver: status = 0, c = 0, d = 0, eps = 9.1853e-26, iters = 288, time = 0.438 sec, perf = 42402.17 MFlops/sec
+CLOVER mixedCG solver: status = 0, c = 0, d = 1, eps = 7.2005e-26, iters = 296, time = 0.453 sec, perf = 42058.84 MFlops/sec
+CLOVER mixedCG solver: status = 0, c = 0, d = 2, eps = 9.8826e-26, iters = 280, time = 0.428 sec, perf = 42172.40 MFlops/sec
+CLOVER mixedCG solver: status = 0, c = 0, d = 3, eps = 8.8218e-26, iters = 290, time = 0.443 sec, perf = 42213.69 MFlops/sec
+CLOVER mixedCG solver: status = 0, c = 1, d = 0, eps = 8.9364e-26, iters = 281, time = 0.643 sec, perf = 28196.39 MFlops/sec
+CLOVER mixedCG solver: status = 0, c = 1, d = 1, eps = 7.7750e-26, iters = 289, time = 0.613 sec, perf = 30390.56 MFlops/sec
+CLOVER mixedCG solver: status = 0, c = 1, d = 2, eps = 9.6797e-26, iters = 293, time = 0.448 sec, perf = 42094.80 MFlops/sec
+CLOVER mixedCG solver: status = 0, c = 1, d = 3, eps = 8.4770e-26, iters = 278, time = 0.426 sec, perf = 42056.11 MFlops/sec
+CLOVER mixedCG solver: status = 0, c = 2, d = 0, eps = 6.7956e-26, iters = 288, time = 0.477 sec, perf = 38923.29 MFlops/sec
+CLOVER mixedCG solver: status = 0, c = 2, d = 1, eps = 7.8094e-26, iters = 280, time = 0.431 sec, perf = 41928.17 MFlops/sec
+CLOVER mixedCG solver: status = 0, c = 2, d = 2, eps = 8.9030e-26, iters = 278, time = 0.633 sec, perf = 28340.84 MFlops/sec
+CLOVER mixedCG solver: status = 0, c = 2, d = 3, eps = 6.9567e-26, iters = 296, time = 0.547 sec, perf = 34837.07 MFlops/sec
+t = 0, qq = 10543270069.712433
+t = 1, qq = -230733082.183853
+t = 2, qq = -30636478.702507
+t = 3, qq = -4660541.920633
+t = 4, qq = -950237.908261
+t = 5, qq = -333838.461393
+t = 6, qq = -148273.770615
+t = 7, qq = -107560.416734
+t = 8, qq = -90029.497486
+t = 9, qq = -76757.981163
+t = 10, qq = -77871.555442
+t = 11, qq = -74037.302453
+t = 12, qq = -73705.237599
+t = 13, qq = -77847.906737
+t = 14, qq = -70922.111088
+t = 15, qq = -64663.401355
+t = 16, qq = -65834.090135
+t = 17, qq = -68367.507090
+t = 18, qq = -76098.465529
+t = 19, qq = -65726.237498
+t = 20, qq = -70031.437808
+t = 21, qq = -66351.308572
+t = 22, qq = -71288.520707
+t = 23, qq = -69634.352710
+t = 24, qq = -87528.762629
+t = 25, qq = -99494.363332
+t = 26, qq = -143191.608120
+t = 27, qq = -281426.515372
+t = 28, qq = -790663.020838
+t = 29, qq = -3362980.546511
+t = 30, qq = -25559264.055464
+t = 31, qq = -222085064.629666
