@@ -10,6 +10,9 @@ _rcParam.la = {backend = 'gpu-cublas'} -- use GPU
 latsize = {4, 4, 4, 8}
 gauge_file = 'gauge_disord_4c8.NERSC'
 
+-- latsize = {48, 48, 48, 64}
+-- gauge_file = '/root/test/conf/conf.1008.coulomb.1e-08'
+
 L = qcd.lattice(latsize)
 Nd = #L
 u = qcd.nersc.read_gauge(L, gauge_file)
