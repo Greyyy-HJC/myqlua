@@ -1,4 +1,6 @@
 -- created by Jinchen on 2024-01-23
+-- modified by Jinchen on 2024-06-04: use "deriv" as the criterion and para for optimization, instead of "grad"
+
 package.path = package.path ..
                    ';../module/qlib/?.qlua;../module/lhpc/?.qlua;../module/qlua-production/?.qlua'
 require "stdlib"
@@ -169,11 +171,11 @@ gaugefix_facg = function(u, gf_func, grad_func, tol, maxiter, verbose,
 
     -- Calculate the initial gradient and its norm
     local deriv0 = grad_func(u)
-    local deriv0_n2 = deriv0:norm2()
+    local deriv0_n2 = deriv0:norm2() --todo: we should use deriv0_n2 as the gradient criterion instead of grad0_n2 
     local grad0 = field_fa(deriv0, fa_coeff)
     local grad0_n2 = grad0:norm2()
     -- Initialize the search direction
-    local s0 = grad0
+    local s0 = deriv0
     -- Apply the exponential map to the initial search direction with the initial step size
     local gcur = m_exp(s0 * complex(0, alpha0))
     -- Evaluate the gauge fixing functional
@@ -188,11 +190,11 @@ gaugefix_facg = function(u, gf_func, grad_func, tol, maxiter, verbose,
     -- Print initial verbose output if required
     if verbose then
         printf("Iter: %d, FuncVal: %e, GradNorm: %e\n", cnt, f0 / vol / Nd / Nc,
-               grad0_n2 / vol / Nadj)
+        deriv0_n2 / vol / Nadj)
     end
 
     -- Optimization loop: continue until gradient norm is below tolerance or maximum iterations reached
-    while tol < grad0_n2 / vol / Nadj and cnt < maxiter do
+    while tol < deriv0_n2 / vol / Nadj and cnt < maxiter do
         -- Update the gauge field using the current gauge transformation
         u_g = gauge_transform_U(gcur, u)
         -- Compute the new gradient and its norm
@@ -206,16 +208,16 @@ gaugefix_facg = function(u, gf_func, grad_func, tol, maxiter, verbose,
         -- Compute the conjugate gradient beta parameter
         if lin_search then
             -- Use Polak-Ribière formula to calculate beta
-            beta1 = qcd.dot(grad1, grad1 - grad0):sum():real() / grad0_n2
+            beta1 = qcd.dot(deriv1, deriv1 - deriv0):sum():real() / deriv0_n2
             -- Reset beta to zero if it is negative
             if beta1 < 0 then beta1 = 0. end
         else
             -- Use Fletcher-Reeves formula to calculate beta
-            beta1 = grad1_n2 / grad0_n2
+            beta1 = deriv1_n2 / deriv0_n2
         end
 
         -- Update the search direction
-        s1 = grad1 + beta1 * s0
+        s1 = deriv1 + beta1 * s0
         -- Compute directional derivative along s1
         local f0p = qcd.dot(s1, deriv1):sum():real()
 
@@ -242,6 +244,7 @@ gaugefix_facg = function(u, gf_func, grad_func, tol, maxiter, verbose,
         -- Prepare for the next iteration
         f0 = f0_new
         deriv0 = deriv1
+        deriv0_n2 = deriv1_n2
         grad0 = grad1
         grad0_n2 = grad1_n2
         s0 = s1
@@ -250,10 +253,10 @@ gaugefix_facg = function(u, gf_func, grad_func, tol, maxiter, verbose,
         -- Print verbose output if required
         if verbose then
             printf("Iter: %d, FuncVal: %e, Convergence: %e, GradNorm: %e\n",
-                   cnt, f0 / vol / Nd / Nc, conver, grad0_n2 / vol / Nadj)
+                   cnt, f0 / vol / Nd / Nc, conver, deriv0_n2 / vol / Nadj)
         end
     end
 
     -- Return the final gauge transformation, number of iterations, and normalized gradient norm
-    return gcur, cnt, grad0_n2 / vol / Nadj
+    return gcur, cnt, deriv0_n2 / vol / Nadj
 end
