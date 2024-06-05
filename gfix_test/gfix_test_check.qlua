@@ -7,11 +7,11 @@ require "mygfix"
 
 _rcParam.la = {backend = 'gpu-cublas'} -- use GPU
 
-latsize = {4, 4, 4, 8}
-gauge_file = 'gauge_disord_4c8.NERSC'
+-- latsize = {4, 4, 4, 8}
+-- gauge_file = 'gauge_disord_4c8.NERSC'
 
--- latsize = {48, 48, 48, 64}
--- gauge_file = '/root/test/conf/conf.1008.coulomb.1e-08'
+latsize = {48, 48, 48, 64}
+gauge_file = '/root/test/conf/conf.1008.coulomb.1e-08'
 
 L = qcd.lattice(latsize)
 Nd = #L
@@ -28,7 +28,7 @@ for mu = 0, Nd - 1 do
            u[1 + mu]:trace():real():sum() / (Nc * vol))
 end
 
-gfix_func, gfix_grad = gfix_func_and_grad(u, "landau")
+gfix_func, gfix_grad = gfix_func_and_grad(u, "coulomb")
 
 -- Fourier-accelerated (nonlinear) CG
 verbose = true
